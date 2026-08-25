@@ -38,7 +38,7 @@ audit (20 defects: 3 BROKEN, 9 DEGRADED, 8 COSMETIC) and a text-accuracy audit
 | A4 | "highlight every planet in your plan" | "see which of your planets carry it" (matches the popup that exists). |
 | A5 | Planner "can plan" fuel blocks/nanite paste/deployables | Reworded: reference prices only; this build's planner plans the PI chain P1–P4. |
 | A6 | "Every template the tool can generate" | Reworded: generated layouts plus 199 community templates, credited. |
-| A7 | Footer: marks owned by "Fenris Creations (formerly CCP Games)" | **Changed to "CCP hf" — FLAGGED FOR RYAN**: this line was carried verbatim from the live v8.3 footer; no source supports the rename, but if it was deliberate wordplay, revert this one edit. |
+| A7 | Footer: marks owned by "Fenris Creations (formerly CCP Games)" | Flagged, then **REVERTED on owner instruction** — Ryan confirmed the wording is deliberate and correct. The original text stands. |
 | A8 | Quickstart implied per-character program length | Reworded: one program length for the whole operation. |
 | A9 | Price History "highs and lows" | "average prices" (the chart plots daily averages). |
 | A11/B4 | "most profit" mode ambiguity | Mode label and help now say "most output of your chosen product (then priced honestly — a loss shows as a loss)"; compare-all is the profit ranking. |

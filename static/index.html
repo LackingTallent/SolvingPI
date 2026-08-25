@@ -232,7 +232,7 @@
   <div class="sec-body" id="sec0Body"></div>
 </section>
 
-<section class="card" id="sec1">
+<section class="card collapsed" id="sec1">
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">2. Your Systems &amp; Planets</span><span class="sec-summary" id="sec1Summary"></span></h2>
     <div class="sec-controls">
@@ -240,6 +240,26 @@
     </div>
   </div>
   <div class="sec-body" id="sec1Body">
+    <div class="quickrate-panel" id="sysSearchPanel">
+      <div class="qr-head">
+        <b>&#128269; Add a solar system</b>
+        <span class="qr-sub">Type a system name and pick it from the list. Planet names and
+          types load straight from <b>ESI</b>, CCP&rsquo;s own API &mdash; facts, not guesses. Every planet
+          of a given type carries the same fixed set of raw resources, so those load too; what ESI
+          does <b>not</b> publish is density &mdash; enter each scan value yourself or use the
+          screenshot batch import below.</span>
+      </div>
+      <div class="qr-row">
+        <label for="sysSearch">System</label>
+        <input type="text" id="sysSearch" list="sysSearchList" class="v9-text"
+               placeholder="e.g. Jita" autocomplete="off"
+               aria-label="Solar system name">
+        <datalist id="sysSearchList"></datalist>
+        <button class="btn small" id="sysAddBtn" type="button">Load its planets</button>
+      </div>
+      <div class="qr-status" id="sysSearchStatus"></div>
+    </div>
+
     <details class="explain-all">
       <summary>&#9635; EXPLAIN EVERY DETAIL</summary>
       <div class="explain-body">
@@ -290,7 +310,7 @@
   </div>
 </section>
 
-<section class="card" id="sec2">
+<section class="card collapsed" id="sec2">
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">3. Costs &amp; Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
     <div class="sec-controls">
@@ -300,7 +320,7 @@
   <div class="sec-body" id="sec2Body"></div>
 </section>
 
-<section class="card" id="sec3">
+<section class="card collapsed" id="sec3">
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">4. Your Goal</span><span class="sec-summary" id="sec3Summary"></span></h2>
     <div class="sec-controls">
@@ -310,7 +330,7 @@
   <div class="sec-body" id="sec3Body"></div>
 </section>
 
-<section class="card" id="sec4">
+<section class="card collapsed" id="sec4">
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">5. Results</span><span class="sec-summary" id="sec4Summary"></span></h2>
     <div class="sec-controls">
@@ -554,7 +574,7 @@
         </svg>
         <span>Open source on GitHub</span>
       </a>
-      <p class="footer-legal-text">Created for the EVE Online community by <b>Admiral Leyton</b> &mdash; aka Lacking Tallent, aka Ryan Allen. Free to use, built on live EVE ESI market data. If it saved you time or ISK and you would like to chip in toward hosting, it is genuinely appreciated but never expected. <span class="footer-fineprint">EVE Online and all related marks are the property of CCP hf. Unofficial fan tool, not affiliated with or endorsed by them.</span> <span class="ai-disclosure">This tool was created using Claude Code, Opus 5 and Sonnet 5 &mdash; AI content isn&rsquo;t slop, but everyone who accuses it of being so is certainly sloppy. Fly safe, live dangerously, and remember that resistance is futile.</span></p>
+      <p class="footer-legal-text">Created for the EVE Online community by <b>Admiral Leyton</b> &mdash; aka Lacking Tallent, aka Ryan Allen. Free to use, built on live EVE ESI market data. If it saved you time or ISK and you would like to chip in toward hosting, it is genuinely appreciated but never expected. <span class="footer-fineprint">EVE Online and all related marks are the property of Fenris Creations (formerly CCP Games). Unofficial fan tool, not affiliated with or endorsed by them.</span> <span class="ai-disclosure">This tool was created using Claude Code, Opus 5 and Sonnet 5 &mdash; AI content isn&rsquo;t slop, but everyone who accuses it of being so is certainly sloppy. Fly safe, live dangerously, and remember that resistance is futile.</span></p>
       <div class="footer-contact">
         <a class="report-btn" id="reportFooter" href="#"
            title="Report a bug or contact the developer">&#9993; Contact the developer / Report a bug</a>

@@ -74,6 +74,8 @@ const checks = [
   ['template count populated', /id="tplCount"[^>]*>[^<]+</.test(dom)],
   ['version stamped (no literal build token)', !dom.includes('@build:version')],
   ['batch import panel present', dom.includes('batchInput')],
+  ['system search rendered', dom.includes('sysSearch') && dom.includes('Load its planets')],
+  ['only section 1 starts expanded', /id="sec1" [^>]*class="card collapsed"|class="card collapsed" id="sec1"/.test(dom) && !/class="card collapsed" id="sec0"/.test(dom)],
   ['no uncaught page errors in console', jsErrors.length === 0],
 ];
 let failed = false;

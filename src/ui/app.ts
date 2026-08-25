@@ -17,6 +17,7 @@ import { oreOf, p1InputsOf, type Sourcing } from '../engine/chain.js';
 import { analyze, bottleneckReport, optimalityInsight, runwayInsight, type Insight } from '../engine/analytics.js';
 import { idRegistry } from '../data/ids.js';
 import { fetchPrices } from '../data/prices.js';
+import { defaultEsiJson, importSystem, loadSystemIndex, searchSystems, type SystemIndex } from './esi-universe.js';
 
 // ---------------------------------------------------------------------------
 // Tiny DOM helper
@@ -213,14 +214,21 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
         return o;
       })),
       el('input', {
-        class: 'v9-num', type: 'number', value: String(r.w), min: '1', step: 'any',
+        class: 'v9-num', type: 'number', value: r.w > 0 ? String(r.w) : '', min: '0', step: 'any',
+        placeholder: 'scan value',
         title: 'raw qty_per_cycle from the survey window',
-        change: (ev) => { r.w = Number((ev.target as HTMLInputElement).value); persist(); rerender(); },
+        change: (ev) => {
+          const v = Number((ev.target as HTMLInputElement).value);
+          r.w = Number.isFinite(v) && v > 0 ? v : 0;
+          persist(); rerender();
+        },
       }),
-      el('span', { class: 'v9-muted' }, `= ${fmt1(densityPctFromW(Math.max(r.w, 1)))}%`),
+      el('span', { class: r.w > 0 ? 'v9-muted' : 'v9-scan-tag' },
+        r.w > 0 ? `= ${fmt1(densityPctFromW(r.w))}%` : 'awaiting scan — excluded from plans until set'),
       el('button', { class: 'btn small', click: () => { p.resources.splice(ri, 1); persist(); rerender(); } }, '✕'),
     ),
   );
+  const unscanned = p.resources.filter((r) => !(r.w > 0)).length;
   return el('div', { class: 'v9-planet' },
     el('div', { class: 'v9-row' },
       el('input', {
@@ -228,7 +236,9 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
         change: (ev) => { p.name = (ev.target as HTMLInputElement).value; persist(); rerender(); },
       }),
       typeSel,
+      p.system ? el('span', { class: 'v9-muted' }, p.system) : null,
       p.scannedAt ? el('span', { class: 'v9-scan-tag', title: `Screenshot capture time: ${p.scannedAt}` }, `📷 ${p.scannedAt.slice(0, 10)}`) : null,
+      unscanned > 0 ? el('span', { class: 'v9-scan-tag' }, `${unscanned} awaiting scan`) : null,
       el('button', { class: 'btn small', click: () => { state.planets.splice(i, 1); persist(); rerender(); } }, 'remove planet'),
     ),
     ...resRows,
@@ -629,6 +639,8 @@ function wireShell(): void {
     if (confirm('Reset everything to defaults?')) { state = defaultState(); persist(); rerender(); }
   });
 
+  wireSystemSearch();
+
   document.getElementById('applyFlatRate')?.addEventListener('click', () => {
     const pct = Number((document.getElementById('flatRate') as HTMLInputElement | null)?.value ?? 65);
     if (!Number.isFinite(pct) || pct <= 0) return;
@@ -647,6 +659,88 @@ function wireShell(): void {
     if (st) st.textContent = 'Restored the densities you had before the flat rate.';
     persist(); rerender();
   });
+}
+
+// ---------------------------------------------------------------------------
+// System search: name index loads lazily on first focus (never at page load —
+// functional-audit #8); planets import with ESI names/types and the planet
+// type's full resource set awaiting scan values.
+// ---------------------------------------------------------------------------
+
+let systemIndex: SystemIndex | null = null;
+let systemIndexLoading: Promise<SystemIndex> | null = null;
+
+function ensureSystemIndex(status: HTMLElement | null): Promise<SystemIndex> {
+  if (systemIndex !== null) return Promise.resolve(systemIndex);
+  if (systemIndexLoading === null) {
+    if (status) status.textContent = 'Loading the system list from ESI…';
+    systemIndexLoading = loadSystemIndex(defaultEsiJson(), (done, total) => {
+      if (status) status.textContent = `Loading the system list from ESI… ${done}/${total}`;
+    }).then((idx) => {
+      systemIndex = idx;
+      if (status) status.textContent = `${idx.count.toLocaleString('en-US')} systems loaded — type a name.`;
+      return idx;
+    }).catch((e: Error) => {
+      systemIndexLoading = null;
+      if (status) status.textContent = `System list failed to load: ${e.message} — add planets by hand or retry.`;
+      throw e;
+    });
+  }
+  return systemIndexLoading;
+}
+
+function wireSystemSearch(): void {
+  const input = document.getElementById('sysSearch') as HTMLInputElement | null;
+  const list = document.getElementById('sysSearchList') as HTMLDataListElement | null;
+  const btn = document.getElementById('sysAddBtn');
+  const status = document.getElementById('sysSearchStatus');
+  if (input === null || list === null || btn === null) return;
+
+  input.addEventListener('focus', () => { void ensureSystemIndex(status).catch(() => { /* shown in status */ }); });
+  input.addEventListener('input', () => {
+    if (systemIndex === null) return;
+    list.replaceChildren(...searchSystems(systemIndex, input.value).map((name) => el('option', { value: name })));
+  });
+
+  const runImport = async (): Promise<void> => {
+    const idx = await ensureSystemIndex(status);
+    const entry = idx.byName.get(input.value.trim().toLowerCase());
+    if (entry === undefined) {
+      if (status) status.textContent = `"${input.value.trim()}" is not a known system — pick one from the list.`;
+      return;
+    }
+    if (status) status.textContent = `Loading planets of ${entry.name}…`;
+    try {
+      const imported = await importSystem(defaultEsiJson(), entry.id);
+      let added = 0, skipped = 0;
+      for (const p of imported.planets) {
+        if (state.planets.some((x) => x.name.toLowerCase() === p.name.toLowerCase())) { skipped++; continue; }
+        state.planets.push({
+          name: p.name,
+          type: p.type,
+          system: imported.system,
+          // Game truth (library 11): the resource SET is fixed by planet type;
+          // only densities vary, and those exist only in your scan view.
+          resources: resourcesOf(p.type).map((p0) => ({ p0, w: 0 })),
+        });
+        added++;
+      }
+      persist(); rerender();
+      const sec1 = document.getElementById('sec1');
+      if (sec1) sec1.classList.remove('collapsed');
+      if (status) {
+        status.textContent = `${imported.system}: ${added} planet${added === 1 ? '' : 's'} added` +
+          (skipped > 0 ? `, ${skipped} already present` : '') +
+          '. Names and types are ESI facts; now enter each scan value (or use the batch import).';
+      }
+      announce(`${imported.system}: ${added} planets loaded from ESI.`);
+      input.value = '';
+    } catch (e) {
+      if (status) status.textContent = `Import failed: ${(e as Error).message}`;
+    }
+  };
+  btn.addEventListener('click', () => { void runImport(); });
+  input.addEventListener('keydown', (ev) => { if ((ev as KeyboardEvent).key === 'Enter') void runImport(); });
 }
 
 // ---------------------------------------------------------------------------
