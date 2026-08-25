@@ -51,7 +51,7 @@ npm run gate1      # typecheck + all tests — must be green before Phase 2 work
 
 - [x] Phase 0 — verification foundation (formula verdicts in docs/library/03)
 - [x] Phase 1 — world model (this commit; Gate 1 green)
-- [ ] Phase 2 — universal math core (flow network + one ledger)
+- [x] Phase 2 — universal math core (flow network + one ledger; Gate 2 green)
 - [ ] Phase 3 — feasibility judge
 - [ ] Phase 4 — solvers (exact for small worlds, bounded-greedy for large)
 - [ ] Phase 5 — analytics
