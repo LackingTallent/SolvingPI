@@ -23,7 +23,7 @@ function baseline(): OperationPlan {
     },
     colonies: [
       {
-        id: 'c1', characterName: 'main', planetName: 'Y-1918 III', planetType: 'Barren', ccLevel: 4,
+        id: 'c1', characterName: 'main', planetName: 'PLANET-A', planetType: 'Barren', ccLevel: 4,
         layout: { ecus: 1, headsPerEcu: [10], basic: 8, advanced: 0, hightech: 0, storage: 0, launchpads: 1, links: links(10) },
         plan: {
           extractors: [{ resource: 'Aqueous Liquids', w: 13277.2694, programHours: 6 }],
@@ -32,7 +32,7 @@ function baseline(): OperationPlan {
         },
       },
       {
-        id: 'c2', characterName: 'main', planetName: 'Y-1918 IV', planetType: 'Temperate', ccLevel: 5,
+        id: 'c2', characterName: 'main', planetName: 'PLANET-B', planetType: 'Temperate', ccLevel: 5,
         layout: { ecus: 0, headsPerEcu: [], basic: 0, advanced: 0, hightech: 16, storage: 1, launchpads: 1, links: links(18) },
         plan: {
           extractors: [],
@@ -45,7 +45,7 @@ function baseline(): OperationPlan {
         },
       },
       {
-        id: 'c3', characterName: 'alt', planetName: 'Y-1918 III', planetType: 'Barren', ccLevel: 2,
+        id: 'c3', characterName: 'alt', planetName: 'PLANET-A', planetType: 'Barren', ccLevel: 2,
         layout: { ecus: 1, headsPerEcu: [5], basic: 2, advanced: 0, hightech: 0, storage: 0, launchpads: 1, links: links(5) },
         plan: {
           extractors: [{ resource: 'Carbon Compounds', w: 5000, programHours: 24 }],
@@ -119,7 +119,7 @@ test('char-unknown: a colony owned by nobody in the operation', () => {
 
 test('char-duplicate-planet: same character, same planet, two colonies', () => {
   const p = clone(baseline());
-  (p.colonies[1] as { planetName: string }).planetName = 'Y-1918 III';
+  (p.colonies[1] as { planetName: string }).planetName = 'PLANET-A';
   expectRule(p, 'char-duplicate-planet', /one colony per character per planet/);
 });
 
@@ -127,7 +127,7 @@ test('char-capacity: the [6,1,1]-class bug is caught by name (v8 dealer regressi
   const p = clone(baseline());
   const extra = clone(p.colonies[2]!);
   (extra as { id: string }).id = 'c4';
-  (extra as { planetName: string }).planetName = 'Y-1918 V';
+  (extra as { planetName: string }).planetName = 'PLANET-C';
   (p as unknown as { colonies: unknown[] }).colonies = [...p.colonies, extra];
   expectRule(p, 'char-capacity', /Interplanetary Consolidation 0 allows 1/);
 });
@@ -238,7 +238,7 @@ test('material-balance accepts internal sourcing: another colony\'s surplus back
   const links = (n: number) => Array.from({ length: n }, () => ({ lengthKm: 0, level: 0 }));
   const p = clone(baseline());
   (p.colonies as unknown[]).push({
-    id: 'c5', characterName: 'main', planetName: 'Y-1918 VI', planetType: 'Storm', ccLevel: 3,
+    id: 'c5', characterName: 'main', planetName: 'PLANET-CI', planetType: 'Storm', ccLevel: 3,
     layout: { ecus: 0, headsPerEcu: [], basic: 0, advanced: 4, hightech: 0, storage: 0, launchpads: 1, links: links(5) },
     plan: {
       extractors: [],

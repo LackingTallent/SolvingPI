@@ -217,7 +217,7 @@ test('maxProfit and qol: ranked frontier with named exclusions; QOL respects the
 
 test('SCALE SWEEP: 1..50 characters, heterogeneous skills, all legal, all fast', () => {
   const start = Date.now();
-  for (const n of [1, 2, 5, 10, 28, 50]) {
+  for (const n of [1, 2, 5, 10, 25, 50]) {
     // Heterogeneous: 3-6 planets each; CCU 5/4/3 cycling starting at 5 so every
     // world has at least one character able to host a full advanced colony.
     const chars = Array.from({ length: n }, (_, i) => chr(`c${i}`, 2 + (i % 4), 5 - (i % 3)));

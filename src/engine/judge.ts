@@ -25,7 +25,7 @@ import { colonyPlan, steadyState, type ColonyPlan } from './flow.js';
 export interface PlannedColony {
   readonly id: string;
   readonly characterName: string;
-  readonly planetName: string; // e.g. "1IX-C0 III" — identity for one-colony-per-char-per-planet
+  readonly planetName: string; // e.g. "Example III" — identity for one-colony-per-char-per-planet
   readonly planetType: PlanetType;
   readonly ccLevel: number;
   readonly layout: Layout;

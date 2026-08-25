@@ -131,6 +131,13 @@ export interface SolveResult {
 
 /** Threshold: estimated exhaustive tuples above this fall back to greedy. */
 export const EXHAUSTIVE_TUPLE_LIMIT = 250_000;
+/**
+ * Exhaustive search is for SMALL worlds (where v8's greedy gap was worst and
+ * enumeration is cheap). Above this many slots, per-tuple placement+matching
+ * cost makes enumeration wall-clock-hostile even when the tuple count fits —
+ * a 25-character world once slipped under the tuple limit and hung CI.
+ */
+export const EXHAUSTIVE_SLOT_LIMIT = 24;
 
 function checkWorld(world: SolveWorld): void {
   const unknown = Object.keys(world).filter((k) => !(WORLD_KEYS as ReadonlyArray<string>).includes(k));
@@ -519,7 +526,7 @@ export function solveMax(
   let best: { counts: RoleCounts; rate: number } | null = null;
   let method: 'exhaustive' | 'greedy';
 
-  if (tupleEstimate <= EXHAUSTIVE_TUPLE_LIMIT && classKeys.length > 0) {
+  if (slots <= EXHAUSTIVE_SLOT_LIMIT && tupleEstimate <= EXHAUSTIVE_TUPLE_LIMIT && classKeys.length > 0) {
     method = 'exhaustive';
     const current: number[] = new Array(classKeys.length).fill(0);
     const rec = (idx: number, left: number): void => {

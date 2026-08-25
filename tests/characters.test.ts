@@ -16,8 +16,8 @@ test('the [6,1,1] world: a main at IC V and two alts at IC 0 is 8 slots, not 18'
   assert.equal(totalSlots(op), 8);
 });
 
-test('scale sweep: operations of 1, 2, 5, 10, 28, and 50 characters all sum correctly', () => {
-  for (const n of [1, 2, 5, 10, 28, 50]) {
+test('scale sweep: operations of 1, 2, 5, 10, 25, and 50 characters all sum correctly', () => {
+  for (const n of [1, 2, 5, 10, 25, 50]) {
     const chars = Array.from({ length: n }, (_, i) => chr(`c${i}`, i % 6));
     const op = operation(chars);
     const expected = chars.reduce((a, c) => a + 1 + c.icLevel, 0);
