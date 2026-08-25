@@ -1,0 +1,135 @@
+#!/usr/bin/env node
+/**
+ * Generates src/data/generated-ids.ts from OFFICIAL sources. Run in an
+ * environment with network access (Ryan's machine or CI):
+ *
+ *   node tools/gen-sde.mjs
+ *
+ * Sources:
+ *   1. ESI POST /universe/ids  — commodity names -> typeIDs (official, no SDE
+ *      download needed)
+ *   2. Fuzzwork SDE mirror     — planetSchematics.csv (schematic_id -> name)
+ *      and invTypes-derived pin type ids per planet-structure group:
+ *        groupID 1027 Command Centers, 1063 Extractor Control Units,
+ *        1028 Processors (basic/advanced/high-tech), 1029 Storage,
+ *        1030 Spaceports (launchpads)
+ *   3. ESI GET /universe/types/{id} — spot-verification of volumes for one
+ *      commodity per tier against src/spec/constants.ts values
+ *
+ * The script REFUSES to write a partial file: any unresolved name aborts with
+ * the list of failures. User-Agent identifies the tool per ESI citizenship.
+ */
+import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ESI = 'https://esi.evetech.net/latest';
+const UA = 'SolvingPI-v9 gen-sde (https://solvingpi.com; contact via site)';
+const FUZZWORK = 'https://www.fuzzwork.co.uk/dump/latest';
+
+// Keep this import lightweight: read the commodity list from the spec.
+const { P0_SPAWNS, SCHEMATICS } = await import('../src/spec/schematics.ts')
+  .catch(() => import('../dist/spec/schematics.js'));
+
+const names = [...Object.keys(P0_SPAWNS), ...SCHEMATICS.keys()];
+
+async function esiJson(path, init) {
+  const res = await fetch(`${ESI}${path}`, {
+    ...init,
+    headers: { 'User-Agent': UA, 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  });
+  if (!res.ok) throw new Error(`ESI ${path}: HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fuzzworkCsv(file) {
+  const res = await fetch(`${FUZZWORK}/${file}`, { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new Error(`Fuzzwork ${file}: HTTP ${res.status}`);
+  const text = await res.text();
+  const [header, ...rows] = text.trim().split('\n');
+  const cols = header.split(',');
+  return rows.map((r) => Object.fromEntries(r.split(',').map((v, i) => [cols[i], v])));
+}
+
+console.log(`Resolving ${names.length} commodity names via ESI /universe/ids ...`);
+const idsResp = await esiJson('/universe/ids/', { method: 'POST', body: JSON.stringify(names) });
+const commodities = {};
+for (const t of idsResp.inventory_types ?? []) commodities[t.name] = t.id;
+const missing = names.filter((n) => !(n in commodities));
+if (missing.length > 0) {
+  console.error(`ABORT: unresolved names (no partial writes): ${missing.join(', ')}`);
+  process.exit(1);
+}
+
+console.log('Fetching planetSchematics.csv ...');
+const schematicRows = await fuzzworkCsv('planetSchematics.csv');
+const byId = Object.fromEntries(Object.entries(commodities).map(([n, id]) => [id, n]));
+const schematics = {};
+for (const row of schematicRows) {
+  // schematicID,schematicName,cycleTime — name matches the output commodity
+  schematics[row.schematicID] = row.schematicName;
+  if (!Object.values(byId).includes(row.schematicName)) {
+    console.warn(`  note: schematic "${row.schematicName}" not in commodity set (check spelling drift)`);
+  }
+}
+
+console.log('Fetching invTypes for pin classification (planet-structure groups) ...');
+const invTypes = await fuzzworkCsv('invTypes.csv');
+const invGroups = await fuzzworkCsv('invGroups.csv');
+const groupCat = Object.fromEntries(invGroups.map((g) => [g.groupID, g]));
+const PIN_GROUPS = {
+  1027: 'commandCenter', // Command Centers
+  1063: 'ecu',           // Extractor Control Units
+  1028: null,            // Processors: split by name below
+  1029: 'storage',
+  1030: 'launchpad',     // Spaceports
+};
+const pinKinds = {};
+for (const t of invTypes) {
+  const mapped = PIN_GROUPS[t.groupID];
+  if (mapped === undefined) continue;
+  if (mapped !== null) { pinKinds[t.typeID] = mapped; continue; }
+  const n = (t.typeName ?? '').toLowerCase();
+  if (n.includes('high-tech')) pinKinds[t.typeID] = 'hightech';
+  else if (n.includes('advanced')) pinKinds[t.typeID] = 'advanced';
+  else if (n.includes('basic')) pinKinds[t.typeID] = 'basic';
+  else console.warn(`  note: unclassified processor type ${t.typeID} "${t.typeName}"`);
+}
+if (groupCat['1063'] === undefined) console.warn('  note: group 1063 missing from invGroups — verify ECU group id');
+
+console.log('Spot-verifying per-tier volumes against ESI ...');
+const spot = [['Aqueous Liquids', 0.005], ['Water', 0.19], ['Coolant', 0.75], ['Broadcast Node', 50]];
+for (const [name, expected] of spot) {
+  const t = await esiJson(`/universe/types/${commodities[name]}/`);
+  if (Math.abs(t.volume - expected) > 1e-9) {
+    console.error(`ABORT: ${name} volume ${t.volume} != spec ${expected} — update src/spec/constants.ts FIRST`);
+    process.exit(1);
+  }
+}
+
+const out = `/**
+ * GENERATED by tools/gen-sde.mjs — DO NOT EDIT BY HAND. Regenerate instead.
+ */
+import type { FacilityKind } from '../spec/constants.js';
+
+export interface GeneratedIds {
+  readonly meta: {
+    readonly status: 'partial' | 'generated';
+    readonly generatedAt: string | null;
+    readonly source: string;
+  };
+  readonly commodities: Readonly<Record<string, number>>;
+  readonly schematics: Readonly<Record<string, string>>;
+  readonly pinKinds: Readonly<Record<string, FacilityKind>>;
+}
+
+export const GENERATED: GeneratedIds = ${JSON.stringify({
+  meta: { status: 'generated', generatedAt: new Date().toISOString(), source: 'ESI /universe/ids + Fuzzwork SDE mirror' },
+  commodities,
+  schematics,
+  pinKinds,
+}, null, 2)};
+`;
+const target = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'data', 'generated-ids.ts');
+writeFileSync(target, out);
+console.log(`Wrote ${target}: ${Object.keys(commodities).length} commodities, ${Object.keys(schematics).length} schematics, ${Object.keys(pinKinds).length} pin types.`);

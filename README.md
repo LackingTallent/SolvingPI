@@ -55,5 +55,5 @@ npm run gate1      # typecheck + all tests — must be green before Phase 2 work
 - [x] Phase 3 — feasibility judge (Gate 3 adversarial suite green, 26 named rules, 100% rule coverage)
 - [x] Phase 4 — solvers (Gate 4 green: hybrid exhaustive/greedy + fractional UB certificates, exact matching dealer, four modes)
 - [x] Phase 5 — analytics (Gate 5 green: marginal, buy-vs-make, saturation, cadence, baseline, bottleneck/runway — all re-solved, all cited)
-- [ ] Phase 6 — data layer (SDE pipeline, ESI prices, PKCE SSO importer)
+- [x] Phase 6 — data layer (Gate 6 green: id registry + generator, order-book price service, PKCE SSO with JWT validation, ESI colony importer)
 - [ ] Phase 7 — UI + prototype deploy

@@ -7,6 +7,7 @@
   "scripts": {
     "test": "tsx --test tests/*.test.ts",
     "gate2": "npm run gate1",
+    "gen-sde": "node tools/gen-sde.mjs",
     "typecheck": "tsc --noEmit",
     "gate1": "npm run typecheck && npm run test"
   },
