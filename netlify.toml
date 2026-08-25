@@ -1,0 +1,9 @@
+# Netlify build config: link this repo to the prototype-solvingpi site and
+# every push deploys. The build emits native ES modules and verifies the page's
+# module graph (tools/build.mjs); the browser smoke test runs locally/CI only.
+[build]
+  command = "npm install && node tools/build.mjs"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
