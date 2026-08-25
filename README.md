@@ -52,7 +52,7 @@ npm run gate1      # typecheck + all tests — must be green before Phase 2 work
 - [x] Phase 0 — verification foundation (formula verdicts in docs/library/03)
 - [x] Phase 1 — world model (this commit; Gate 1 green)
 - [x] Phase 2 — universal math core (flow network + one ledger; Gate 2 green)
-- [ ] Phase 3 — feasibility judge
+- [x] Phase 3 — feasibility judge (Gate 3 adversarial suite green, 26 named rules, 100% rule coverage)
 - [ ] Phase 4 — solvers (exact for small worlds, bounded-greedy for large)
 - [ ] Phase 5 — analytics
 - [ ] Phase 6 — data layer (SDE pipeline, ESI prices, PKCE SSO importer)
