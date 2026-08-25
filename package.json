@@ -1,0 +1,17 @@
+{
+  "name": "solving-pi-v9",
+  "version": "0.1.0",
+  "description": "Solving PI v9 — EVE Online Planetary Industry planner. Ground-up rebuild: verified game physics, one universal ledger, judge-validated plans.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "gate1": "npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
