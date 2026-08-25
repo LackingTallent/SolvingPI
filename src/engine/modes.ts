@@ -15,7 +15,13 @@ import type { Sourcing } from './chain.js';
 import { p1InputsOf, oreOf } from './chain.js';
 import { HOURS_PER_WEEK } from './flow.js';
 
-export interface Quote { readonly bid: number; readonly ask: number }
+export interface Quote {
+  readonly bid: number;
+  readonly ask: number;
+  /** Regional units traded per day (ESI market history). Optional — saturation
+   * analytics report "unavailable" by name when absent, never guess. */
+  readonly dailyVolume?: number;
+}
 export type PriceSet = Readonly<Record<string, Quote>>;
 
 export interface MarketContext {

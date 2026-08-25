@@ -424,7 +424,14 @@ function buildPlan(
     for (const [schem, fac] of d.factories) {
       const s = SCHEMATICS.get(schem)!;
       const cyclesPerHour = 3600 / s.cycleSeconds;
-      const u = d.role === 'extract' || d.role === 'refine' ? 1 : utilization(schem);
+      // Refineries throttle to the realized chain need — importing ore at full
+      // capacity beyond the purchases that back it is a material-balance
+      // violation the judge rejects (proven in Gate 5 development).
+      const refineCap = (counts.refine[schem] ?? 0) * REFINERY_BASICS * P1_PER_BASIC_PER_WEEK;
+      const u = d.role === 'extract' ? 1
+        : d.role === 'refine'
+          ? Math.min(1, ((unit.refineP1PerWeek[schem] ?? 0) * realized) / (refineCap || 1))
+          : utilization(schem);
       producedHere.set(schem, (producedHere.get(schem) ?? 0) + u * fac * s.outQty * cyclesPerHour);
       for (const [input, perCycle] of Object.entries(s.inputs)) {
         requiredHere.set(input, (requiredHere.get(input) ?? 0) + u * fac * perCycle * cyclesPerHour);
