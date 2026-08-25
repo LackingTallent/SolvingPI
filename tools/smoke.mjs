@@ -52,7 +52,12 @@ const checks = [
   ['module graph executed', dom.includes('data-smoke="ok"')],
   ['end-to-end self-test solve passed', dom.includes('data-selftest="pass"')],
   ['UI rendered (Solve button present)', dom.includes('>Solve<')],
-  ['operation section rendered', dom.includes('1 · Operation')],
+  ['operation section rendered by v9', dom.includes('Add character')],
+  ['v8 skin hero present', dom.includes('The All-In-One PI Tool')],
+  ['legacy market grid rendered without crashing', dom.includes('legend-col') || dom.includes('pt-name') || dom.includes('legendGrid')],
+  ['templates library rendered', /tplCount[^>]*>[^<]*template/i.test(dom) || dom.includes('tpl-table') || dom.includes('tplTables')],
+  ['version stamped (no literal build token)', !dom.includes('@build:version')],
+  ['batch import panel present', dom.includes('batchInput')],
 ];
 let failed = false;
 for (const [name, ok] of checks) {

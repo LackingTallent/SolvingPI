@@ -1,56 +1,620 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="en" data-theme="carbon">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Solving PI — v9 prototype</title>
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<style>
-:root {
-  --bg: #0b0f14; --panel: #121924; --edge: #1f2b3a; --ink: #d8e2ee;
-  --muted: #8296ab; --accent: #38bdf8; --good: #4ade80; --bad: #f87171; --warnbg: #3a1f1f;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
-main { max-width: 1080px; margin: 0 auto; padding: 1rem 1.25rem 4rem; }
-header h1 { margin: .6rem 0 0; font-size: 1.7rem; letter-spacing: .02em; }
-h2 { margin: 2rem 0 .6rem; font-size: 1.15rem; border-bottom: 1px solid var(--edge); padding-bottom: .3rem; }
-h3 { margin: 1.2rem 0 .5rem; font-size: 1rem; }
-h4 { margin: 0 0 .3rem; font-size: .9rem; color: var(--accent); }
-section { margin-bottom: .5rem; }
-table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
-th, td { text-align: left; padding: .25rem .5rem; border-bottom: 1px solid var(--edge); font-size: .9rem; }
-input, select, button, textarea {
-  background: var(--panel); color: var(--ink); border: 1px solid var(--edge);
-  border-radius: 6px; padding: .3rem .5rem; font: inherit;
-}
-input[type=number] { width: 5.5rem; }
-input[type=text] { width: 9rem; }
-button { cursor: pointer; }
-button:hover { border-color: var(--accent); }
-button.solve { background: var(--accent); color: #04141f; font-weight: 700; padding: .55rem 1.6rem; font-size: 1.05rem; }
-button.small { padding: .15rem .5rem; font-size: .8rem; }
-label { margin-right: .9rem; }
-label.mode { display: block; margin: .2rem 0; }
-.muted { color: var(--muted); font-size: .85rem; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .7rem; margin: .7rem 0; }
-.card { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: .7rem .9rem; }
-.card .big { font-size: 1.25rem; font-weight: 700; margin: .1rem 0; }
-.card.planet { margin: .6rem 0; }
-.card.insight p { margin: .2rem 0; font-size: .88rem; }
-.resrow { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
-.warn { background: var(--warnbg); border: 1px solid var(--bad); border-radius: 8px; padding: .6rem .9rem; margin: .7rem 0; white-space: pre-wrap; }
-.ledger td.neg { color: var(--bad); text-align: right; }
-.ledger td.pos { color: var(--good); text-align: right; }
-.ledger tr.total td { font-weight: 700; border-top: 2px solid var(--edge); }
-textarea.template { width: 100%; font: 12px/1.45 ui-monospace, monospace; white-space: pre; }
-details { margin: .6rem 0; }
-summary { cursor: pointer; color: var(--accent); }
-a { color: var(--accent); }
-</style>
+<meta charset="UTF-8">
+<!-- Starts as a normal responsive viewport, then widens itself on small
+     screens only (phones get the desktop layout, scaled — same trade as v8.3,
+     stated plainly: small text until the reader zooms; pinch zoom stays ON). -->
+<meta name="viewport" id="viewportMeta" content="width=device-width, initial-scale=1">
+<script>
+(function(){
+  try {
+    var small = Math.min(screen.width, screen.height) < 820;
+    if (small) {
+      document.getElementById('viewportMeta').setAttribute('content', 'width=1280');
+    }
+  } catch (e) { /* leave the responsive default in place */ }
+})();
+</script>
+<title>Solving PI - The All-In-One PI Tool</title>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="apple-touch-icon" href="./favicon.svg">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="stylesheet" href="./css/01-tokens.css">
+<link rel="stylesheet" href="./css/02-app.css">
+<link rel="stylesheet" href="./css/03-v9.css">
 </head>
 <body>
-<main id="app"><noscript>Solving PI needs JavaScript.</noscript></main>
+<a class="skip-link" href="#main">Skip to the planner</a>
+<a class="skip-link" href="#sec1">Skip to planner</a>
+
+<!-- TOP-RIGHT STATUS CLUSTER: build badge, theme switch, EVE clock, report-bug -->
+<div class="top-cluster" role="group" aria-label="Tools and information">
+  <div class="tc-row">
+    <span class="tc-label">Build</span>
+    <button class="tc-value tc-build" id="buildBadge" type="button"
+            title="Build version — click to copy">@build:version</button>
+  </div>
+  <div class="tc-row">
+    <span class="tc-label">Theme</span>
+    <div class="tc-value theme-switch">
+      <button class="theme-btn" data-set-theme="carbon"
+              title="Dark theme — deep black with vivid neon accents">&#9679; Carbon</button>
+      <button class="theme-btn" data-set-theme="daylight"
+              title="Light theme — soft white with rich saturated ink">&#9675; Daylight</button>
+    </div>
+  </div>
+  <div class="tc-row">
+    <span class="tc-label">EVE time</span>
+    <div class="tc-value eve-clock" id="eveClock"
+         title="EVE time — the server clock, which is UTC">
+      <span class="eve-clock-time" id="eveClockTime">--:--:--</span>
+    </div>
+  </div>
+  <div class="tc-row">
+    <span class="tc-label">Problem?</span>
+    <a class="tc-value report-btn" id="reportTop" href="#"
+       title="Report a bug or contact the developer">&#9993; Contact / Report a Bug</a>
+  </div>
+</div>
+
+<div class="hexbg"></div>
+<div id="tooltip"></div>
+<div id="selectorPopup"></div>
+
+<header class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="hero-top">
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 160 160" role="img" aria-label="Solving PI: a ringed world with layered resource strata and extractor arrays">
+<defs><radialGradient id="lg-sphere" cx="34%" cy="30%" r="78%">
+<stop offset="0" stop-color="#ffffff" stop-opacity=".30"/>
+<stop offset="42%" stop-color="#ffffff" stop-opacity=".05"/>
+<stop offset="100%" stop-color="#000000" stop-opacity=".55"/>
+</radialGradient><radialGradient id="lg-limb" cx="50%" cy="50%" r="50%">
+<stop offset="78%" stop-color="var(--cyan)" stop-opacity="0"/>
+<stop offset="97%" stop-color="var(--cyan)" stop-opacity=".55"/>
+<stop offset="100%" stop-color="var(--cyan)" stop-opacity="0"/>
+</radialGradient><radialGradient id="lg-halo" cx="50%" cy="50%" r="50%">
+<stop offset="55%" stop-color="var(--cyan)" stop-opacity="0"/>
+<stop offset="100%" stop-color="var(--cyan)" stop-opacity=".22"/>
+</radialGradient></defs>
+<circle cx="80" cy="80" r="74" fill="url(#lg-halo)"/>
+<ellipse cx="80" cy="80" rx="72" ry="27" fill="none" stroke="var(--amber)" stroke-width="6" opacity="0.62" transform="rotate(-30 80 80)" stroke-dasharray="8 6"/>
+<circle cx="80" cy="80" r="43" fill="var(--panel)"/>
+<path d="M81.13 37.01 A43 43 0 0 1 108.49 112.21 L103.85 106.96 A36 36 0 0 0 80.94 44.01 Z" fill="var(--cyan)" opacity="0.92"/>
+<path d="M106.77 113.65 A43 43 0 0 1 39.99 95.76 L46.50 93.19 A36 36 0 0 0 102.41 108.17 Z" fill="var(--magenta)" opacity="0.82"/>
+<path d="M39.22 93.64 A43 43 0 0 1 78.87 37.01 L79.06 44.01 A36 36 0 0 0 45.86 91.42 Z" fill="var(--amber)" opacity="0.86"/>
+<path d="M97.76 51.01 A34 34 0 0 1 83.85 113.78 L83.17 107.82 A28 28 0 0 0 94.63 56.13 Z" fill="var(--green)" opacity="0.85"/>
+<path d="M82.08 113.94 A34 34 0 0 1 50.12 63.78 L55.39 66.64 A28 28 0 0 0 81.71 107.95 Z" fill="var(--cyan)" opacity="0.78"/>
+<path d="M51.01 62.24 A34 34 0 0 1 96.22 50.12 L93.36 55.39 A28 28 0 0 0 56.13 65.37 Z" fill="var(--amber)" opacity="0.74"/>
+<path d="M80.68 54.01 A26 26 0 1 1 76.16 105.71 L76.78 101.56 A21.8 21.8 0 1 0 80.57 58.21 Z" fill="var(--magenta)" opacity="0.72"/>
+<path d="M74.82 105.48 A26 26 0 0 1 79.32 54.01 L79.43 58.21 A21.8 21.8 0 0 0 75.65 101.36 Z" fill="var(--green)" opacity="0.7"/>
+<circle cx="80" cy="80" r="43" fill="url(#lg-sphere)"/><circle cx="80" cy="80" r="43" fill="url(#lg-limb)"/>
+<circle cx="80" cy="80" r="18.8" fill="var(--void)"/>
+<text x="80" y="91.90" text-anchor="middle" font-family="Georgia,serif" font-size="34" fill="var(--cyan)" opacity="0.12">&#960;</text>
+<circle cx="80" cy="80" r="18.8" fill="none" stroke="var(--cyan)" stroke-width="1.3" opacity=".5"/>
+<text x="80" y="88.64" dx="-0.5" text-anchor="middle" font-family="var(--font-display),Rajdhani,system-ui" font-size="24" font-weight="700" letter-spacing="1.0" fill="var(--text-strong)">PI</text>
+<line x1="87.81" y1="35.68" x2="91.98" y2="12.05" stroke="var(--amber)" stroke-width="1.9" opacity=".92" stroke-linecap="round"/>
+<circle cx="91.98" cy="12.05" r="3.6" fill="var(--amber)"/>
+<circle cx="91.98" cy="12.05" r="6.5" fill="none" stroke="var(--amber)" stroke-width="1" opacity=".45"/>
+<line x1="122.29" y1="64.61" x2="134.50" y2="60.16" stroke="var(--amber)" stroke-width="1.9" opacity=".92" stroke-linecap="round"/>
+<circle cx="134.50" cy="60.16" r="2.8" fill="var(--amber)"/>
+<line x1="114.47" y1="108.93" x2="132.86" y2="124.35" stroke="var(--amber)" stroke-width="1.9" opacity=".92" stroke-linecap="round"/>
+<circle cx="132.86" cy="124.35" r="3.6" fill="var(--amber)"/>
+<circle cx="132.86" cy="124.35" r="6.5" fill="none" stroke="var(--amber)" stroke-width="1" opacity=".45"/>
+<line x1="72.19" y1="124.32" x2="70.28" y2="135.15" stroke="var(--amber)" stroke-width="1.9" opacity=".92" stroke-linecap="round"/>
+<circle cx="70.28" cy="135.15" r="2.6" fill="var(--amber)"/>
+<line x1="37.71" y1="95.39" x2="15.16" y2="103.60" stroke="var(--amber)" stroke-width="1.9" opacity=".92" stroke-linecap="round"/>
+<circle cx="15.16" cy="103.60" r="3.6" fill="var(--amber)"/>
+<circle cx="15.16" cy="103.60" r="6.5" fill="none" stroke="var(--amber)" stroke-width="1" opacity=".45"/>
+<line x1="45.53" y1="51.07" x2="34.04" y2="41.43" stroke="var(--amber)" stroke-width="1.9" opacity=".92" stroke-linecap="round"/>
+<circle cx="34.04" cy="41.43" r="2.8" fill="var(--amber)"/>
+<line x1="108.93" y1="45.53" x2="114.07" y2="39.40" stroke="var(--amber)" stroke-width="1.2" opacity=".92" stroke-linecap="round"/>
+<circle cx="114.07" cy="39.40" r="2" fill="var(--amber)"/>
+<line x1="124.32" y1="87.81" x2="132.19" y2="89.20" stroke="var(--amber)" stroke-width="1.2" opacity=".92" stroke-linecap="round"/>
+<circle cx="132.19" cy="89.20" r="2" fill="var(--amber)"/>
+<line x1="95.39" y1="122.29" x2="98.13" y2="129.80" stroke="var(--amber)" stroke-width="1.2" opacity=".92" stroke-linecap="round"/>
+<circle cx="98.13" cy="129.80" r="2" fill="var(--amber)"/>
+<line x1="51.07" y1="114.47" x2="45.93" y2="120.60" stroke="var(--amber)" stroke-width="1.2" opacity=".92" stroke-linecap="round"/>
+<circle cx="45.93" cy="120.60" r="2" fill="var(--amber)"/>
+<line x1="35.68" y1="72.19" x2="27.81" y2="70.80" stroke="var(--amber)" stroke-width="1.2" opacity=".92" stroke-linecap="round"/>
+<circle cx="27.81" cy="70.80" r="2" fill="var(--amber)"/>
+<line x1="64.61" y1="37.71" x2="61.87" y2="30.20" stroke="var(--amber)" stroke-width="1.2" opacity=".92" stroke-linecap="round"/>
+<circle cx="61.87" cy="30.20" r="2" fill="var(--amber)"/>
+<path d="M8 80 A72 27 0 0 0 152 80" fill="none" stroke="var(--amber)" stroke-width="6" opacity="0.68" transform="rotate(-30 80 80)" stroke-dasharray="8 6"/>
+</svg>
+      <div class="brand-text">
+        <div class="eyebrow">The All-In-One PI Tool</div>
+        <h1>Solving <span>PI</span></h1>
+        <div class="byline">Created for the EVE Online community by <b>Admiral Leyton</b>
+          <span class="byline-alt">aka Lacking Tallent &middot; aka Ryan Allen</span></div>
+      </div>
+    </div>
+    <div class="hero-actions">
+      <button class="btn primary" id="saveDataBtn" title="Download everything you have entered as a file you can reload later">&#11015; Save My Data</button>
+      <button class="btn" id="loadDataBtn" title="Load a previously saved file and pick up exactly where you left off">&#11014; Load Saved File</button>
+      <input type="file" id="loadDataInput" accept=".json,application/json" hidden>
+      <button class="btn" id="resetAllBtn" style="border-color:var(--red); color:var(--red);">&#10227; Reset Everything</button>
+      <button class="btn help-btn" id="helpBtn" type="button" aria-haspopup="dialog">? Help &amp; Full Guide</button>
+    </div>
+    <div class="saveload-status" id="saveLoadStatus" role="status" aria-live="polite"></div>
+    <div class="autosave-status" id="autosaveStatus" role="status" aria-live="polite"></div>
+    <div class="autosave-restore" id="autosaveRestore" hidden>
+      <span id="autosaveRestoreText">Unsaved work from a previous visit was found.</span>
+      <button class="btn" id="autosaveRestoreBtn">Restore it</button>
+      <button class="btn" id="autosaveDiscardBtn" title="Forget the saved copy and start clean">Discard</button>
+    </div>
+  </div>
+  <div class="hero-stats">
+    <button type="button" class="hstat" data-jump="secMarket" title="Jump to the commodity reference table">
+      <svg class="hstat-icon" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="4"  y="24" width="7" height="12" rx="1.6" fill="var(--cyan)"/>
+        <rect x="13" y="18" width="7" height="18" rx="1.6" fill="var(--green)"/>
+        <rect x="22" y="12" width="7" height="24" rx="1.6" fill="var(--amber)"/>
+        <rect x="31" y="5"  width="6" height="31" rx="1.6" fill="var(--magenta)"/>
+        <circle cx="7.5" cy="20" r="2.6" fill="var(--cyan)" opacity=".85"/>
+        <circle cx="16.5" cy="14" r="2.6" fill="var(--green)" opacity=".85"/>
+        <circle cx="25.5" cy="8" r="2.6" fill="var(--amber)" opacity=".85"/>
+      </svg>
+      <b id="heroCommodityCount">101</b><span>Commodities Tracked</span>
+    </button>
+    <button type="button" class="hstat" data-jump="secPrices" title="Jump to live Jita price history">
+      <svg class="hstat-icon" viewBox="0 0 40 40" aria-hidden="true">
+        <line x1="3" y1="35" x2="37" y2="35" stroke="var(--panel-border)" stroke-width="1.6"/>
+        <line x1="3" y1="35" x2="3" y2="4" stroke="var(--panel-border)" stroke-width="1.6"/>
+        <g stroke="var(--green)" stroke-width="2.4" stroke-linecap="round">
+          <line x1="9"  y1="30" x2="9"  y2="20"/><line x1="17" y1="26" x2="17" y2="13"/>
+        </g>
+        <rect x="6.6"  y="22" width="4.8" height="7" rx="1" fill="var(--green)"/>
+        <rect x="14.6" y="15" width="4.8" height="9" rx="1" fill="var(--green)"/>
+        <g stroke="var(--red)" stroke-width="2.4" stroke-linecap="round">
+          <line x1="25" y1="24" x2="25" y2="14"/>
+        </g>
+        <rect x="22.6" y="16" width="4.8" height="6" rx="1" fill="var(--red)"/>
+        <g stroke="var(--amber)" stroke-width="2.4" stroke-linecap="round">
+          <line x1="33" y1="20" x2="33" y2="7"/>
+        </g>
+        <rect x="30.6" y="9" width="4.8" height="9" rx="1" fill="var(--amber)"/>
+        <path d="M6 31 L15 21 L24 24 L34 10" fill="none" stroke="var(--cyan)"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>
+      </svg>
+      <b>Live</b><span>Jita Market Prices</span>
+    </button>
+    <button type="button" class="hstat" data-jump="secStatus" title="Jump to EVE and ESI server status">
+      <svg class="hstat-icon" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="14" fill="none" stroke="var(--amber)" stroke-width="2.6"/>
+        <path d="M20 11 v10 l7 4" fill="none" stroke="var(--amber)" stroke-width="2.6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="32" cy="9" r="4.5" fill="var(--green)"/>
+        <path d="M30 9 l1.6 1.7 L34.2 7.6" fill="none" stroke="var(--void)"
+              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <b>Works</b><span>Most Of The Time</span>
+    </button>
+    <button type="button" class="hstat" data-jump="secTemplates" title="Jump to the full template list">
+      <svg class="hstat-icon" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="7" y="6" width="20" height="26" rx="2.5" fill="none"
+              stroke="var(--cyan)" stroke-width="2.4"/>
+        <g stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" opacity=".8">
+          <line x1="12" y1="13" x2="22" y2="13"/><line x1="12" y1="19" x2="22" y2="19"/>
+          <line x1="12" y1="25" x2="18" y2="25"/>
+        </g>
+        <circle cx="29" cy="27" r="9" fill="var(--void)"/>
+        <circle cx="29" cy="27" r="7.6" fill="var(--magenta)"/>
+        <path d="M29 23.2 v7.6 M25.2 27 h7.6" stroke="var(--void)"
+              stroke-width="2.3" stroke-linecap="round"/>
+      </svg>
+      <b>1-Click</b><span>Import PI Templates</span>
+    </button>
+  </div>
+  <p class="subhead">Enter your characters, your planets, and their scanned resource values — the planner works out the most profitable thing you can actually build with what you've got, using live EVE market prices and the game's real physical limits. Works for any solar system, from 1 to 50 characters.</p>
+  <details class="quickstart">
+    <summary>New here? Read this first (60 seconds)</summary>
+    <div class="quickstart-body">
+      <p><b>What this does:</b> you tell it what planets you can reach and how many characters you have; it tells you what to build, how to split your colonies between extraction and factories, and what you'd actually clear per week after tax, shipping and customs. Every answer says how good it is: small operations get a <b>provably optimal</b> plan; big ones get a measured "within X% of the best possible" bound.</p>
+      <ol>
+        <li><b>Section 1 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V), skills, and your <b>extraction program length</b> — short programs yield much more per week but need more logins.</li>
+        <li><b>Section 2 — Your Systems &amp; Planets.</b> Add planets and enter the survey values from your in-game scan — the raw number, with the familiar percentage shown alongside. Or drop in planet screenshots and let the reader fill them in.</li>
+        <li><b>Section 3 — Costs &amp; Market.</b> Taxes, fees, freight, and live Jita prices — including whether you sell instantly or list orders, which changes real money.</li>
+        <li><b>Sections 4-5 — Goal &amp; Results.</b> Pick a goal (max profit, a quota, a login budget, or compare everything), hit Solve, and get per-character build sheets plus the analytics: what's bottlenecking you, what the next character or skill is worth, and whether each input is better extracted, refined, or bought.</li>
+      </ol>
+      <p class="quickstart-note">Numbers here come from CCP's published formulas and the game's own data, verified — where something can't be known (like another player's POCO tax), you set it and the tool says what it assumed. It never silently guesses.</p>
+    </div>
+  </details>
+</header>
+
+<div id="calcAnnounce" class="sr-only" role="status" aria-live="polite"></div>
+<main id="main" tabindex="-1">
+
+<!-- ============ THE FIVE PLANNER STEPS (v9 engine renders into the .sec-body of each) ============ -->
+
+<section class="card" id="sec0">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">1. Your Operation</span><span class="sec-summary" id="sec0Summary"></span></h2>
+    <div class="sec-controls">
+      <button class="btn collapse-btn" data-target="sec0" title="Collapse or expand this section">&#9660;</button>
+    </div>
+  </div>
+  <div class="sec-body" id="sec0Body"></div>
+</section>
+
+<section class="card" id="sec1">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">2. Your Systems &amp; Planets</span><span class="sec-summary" id="sec1Summary"></span></h2>
+    <div class="sec-controls">
+      <button class="btn collapse-btn" data-target="sec1" title="Collapse or expand this section">&#9660;</button>
+    </div>
+  </div>
+  <div class="sec-body" id="sec1Body">
+    <details class="explain-all">
+      <summary>&#9635; EXPLAIN EVERY DETAIL</summary>
+      <div class="explain-body">
+        <p><b>What this step decides:</b> what your planets can physically produce.</p>
+        <h4>Raw survey values, not just percentages</h4>
+        <p>The engine works in the game's own unit: the <b>per-cycle extraction value</b> your survey window shows (what ESI calls <i>qty_per_cycle</i>). The familiar percentage is shown alongside as a translation — 100% is the value where one extractor roughly feeds 8 basic industry facilities on 6-hour programs.</p>
+        <h4>The physical cap — corrected from earlier versions</h4>
+        <p>An extraction colony produces</p>
+        <p class="ex-math">min( what its facilities can process, extractor supply &divide; 150 )</p>
+        <p>8 basic facilities top out at <b>53,760 P1/week</b> (20 per 30-minute cycle each). A hot planet above 100% does NOT produce beyond that cap — unless the plan adds more basic facilities, which the tool will propose when the surplus is real. Earlier versions scaled linearly past the cap; this one never claims P1 the buildings cannot make.</p>
+        <h4>Why planet type matters</h4>
+        <p>Each type carries a fixed set of raw resources. A Lava planet has no Aqueous Liquids at any density. The tool refuses plans that need a resource the planet does not have — by name — rather than quietly assuming.</p>
+      </div>
+    </details>
+
+    <div class="quickrate-panel">
+      <div class="qr-head">
+        <b>&#9889; Quick estimate</b>
+        <span class="qr-sub">Set every resource on every planet to one flat density.
+          Useful for a fast ballpark before you scan anything &mdash; but the result is
+          an estimate, not your real numbers.</span>
+      </div>
+      <div class="qr-row">
+        <label for="flatRate">Flat density</label>
+        <span class="val-field"><input type="number" id="flatRate" min="1" max="500" step="0.1" value="65"
+               aria-label="Flat density to apply to every planet"><span class="val-unit">%</span></span>
+        <button class="btn small" id="applyFlatRate" type="button">Apply to all planets</button>
+        <button class="btn small" id="clearFlatRate" type="button" title="Restore the densities you had before applying a flat rate">Undo</button>
+      </div>
+      <div class="qr-status" id="flatRateStatus"></div>
+    </div>
+
+    <div class="batch-panel">
+      <div class="batch-head">
+        <b>Batch import</b>
+        <span class="batch-sub">Up to 20 planet screenshots at once, or a .zip of them. Each planet gets the screenshot's own capture time. Everything is read in your browser &mdash; nothing is uploaded anywhere.</span>
+      </div>
+      <div class="batch-row">
+        <label class="upload-label" for="batchInput">&#128193; Choose screenshots or .zip</label>
+        <input type="file" id="batchInput" accept="image/*,.zip,application/zip" multiple hidden>
+        <button class="btn small" id="batchClearBtn" type="button">Clear results</button>
+      </div>
+      <div class="batch-status" id="batchStatus"></div>
+      <div id="batchResults"></div>
+    </div>
+
+    <div id="v9PlanetList"></div>
+  </div>
+</section>
+
+<section class="card" id="sec2">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">3. Costs &amp; Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
+    <div class="sec-controls">
+      <button class="btn collapse-btn" data-target="sec2" title="Collapse or expand this section">&#9660;</button>
+    </div>
+  </div>
+  <div class="sec-body" id="sec2Body"></div>
+</section>
+
+<section class="card" id="sec3">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">4. Your Goal</span><span class="sec-summary" id="sec3Summary"></span></h2>
+    <div class="sec-controls">
+      <button class="btn collapse-btn" data-target="sec3" title="Collapse or expand this section">&#9660;</button>
+    </div>
+  </div>
+  <div class="sec-body" id="sec3Body"></div>
+</section>
+
+<section class="card" id="sec4">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">5. Results</span><span class="sec-summary" id="sec4Summary"></span></h2>
+    <div class="sec-controls">
+      <button class="btn collapse-btn" data-target="sec4" title="Collapse or expand this section">&#9660;</button>
+    </div>
+  </div>
+  <div class="sec-body" id="sec4Body">
+    <div id="resultsPanel" aria-live="polite"></div>
+  </div>
+</section>
+
+<div class="ref-divider">
+  <span class="ref-divider-label">Reference</span>
+  <p class="ref-divider-note">Look anything up, any time. These are not steps &mdash;
+    you never have to open them.</p>
+</div>
+
+<section class="card reference collapsed" id="secMarket">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">Market Reference</span><span class="sec-summary">101 items &middot; live Jita prices</span></h2>
+    <button class="btn collapse-btn" data-target="secMarket" title="Collapse or expand this section">&#9660;</button>
+  </div>
+  <div class="sec-body" id="secMarketBody">
+  <p class="section-sub">Everything the planner prices, with live Jita price trends. Hover one to highlight every planet in your plan that touches it. The first five columns are the PI chain itself (P0 to P4). <b>Built from PI</b> are products the planner can plan for you &mdash; fuel blocks, nanite paste and deployables. <b>Bought inputs</b> are the non-PI materials those need; your planets do not make them, so the planner prices them as a cost and charges freight on them, never treating them as free.<span class="hint">&#9432;<span class="hint-body">Each entry shows its 24H / 7D / 30D Jita price movement and per-unit volume. Volume key: <b>&#10003;</b> means that item&rsquo;s volume was individually confirmed against EVE&rsquo;s own SDE data; <b>*</b> means it uses its tier&rsquo;s confirmed value.</span></span></p>
+  <div class="legend-grid" id="legendGrid"></div>
+  </div>
+</section>
+
+<section class="card reference collapsed" id="secPrices">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">Price History</span><span class="sec-summary">Live Jita data &middot; all 101 items</span></h2>
+    <button class="btn collapse-btn" data-target="secPrices" title="Collapse or expand this section">&#9660;</button>
+  </div>
+  <div class="sec-body">
+    <div class="tab-row" role="tablist">
+      <button class="tab-btn active" data-ptab="history" role="tab">Price over time</button>
+      <button class="tab-btn" data-ptab="depth" role="tab">Supply &amp; demand</button>
+    </div>
+
+    <div class="ptab" data-ptab-panel="history">
+      <p class="section-sub">Daily Jita highs and lows straight from public ESI market history. All
+        101 items are plotted at once &mdash; use the legend or the tier filter to narrow it down.</p>
+      <div class="chart-controls">
+        <button class="btn small" id="phAll" type="button">Select all</button>
+        <button class="btn small" id="phNone" type="button">Select none</button>
+        <span class="chart-filter">Tier:</span>
+        <button class="btn small tier-filter" data-tier="p0" type="button">P0</button>
+        <button class="btn small tier-filter" data-tier="p1" type="button">P1</button>
+        <button class="btn small tier-filter" data-tier="p2" type="button">P2</button>
+        <button class="btn small tier-filter" data-tier="p3" type="button">P3</button>
+        <button class="btn small tier-filter" data-tier="p4" type="button">P4</button>
+        <span class="chart-scale">
+          <label><input type="checkbox" id="phLogScale" checked> Log scale</label>
+        </span>
+      </div>
+      <div class="chart-status" id="phStatus">Expand this section to load price history.</div>
+      <div class="chart-wrap"><svg id="phChart" viewBox="0 0 900 400" role="img"
+        aria-label="Jita price history for every item the planner prices"></svg></div>
+      <div class="chart-legend" id="phLegend"></div>
+    </div>
+
+    <div class="ptab" data-ptab-panel="depth" hidden>
+      <p class="section-sub">The live Jita order book for any one of the 101 items, drawn as cumulative
+        supply and demand. Where the two curves stop is the spread &mdash; the wider it is, the more a
+        bulk sale moves the price against you. The planner's <b>instant vs patient</b> price basis is
+        exactly this spread, made into a setting.</p>
+      <div class="chart-controls">
+        <label class="field-label" for="depthSelect">Commodity</label>
+        <select id="depthSelect"></select>
+        <button class="btn small" id="depthLoad" type="button">Load order book</button>
+      </div>
+      <div class="chart-status" id="depthStatus">Pick a commodity and load its order book.</div>
+      <div class="chart-wrap"><svg id="depthChart" viewBox="0 0 900 400" role="img"
+        aria-label="Cumulative supply and demand curve"></svg></div>
+    </div>
+  </div>
+</section>
+
+<section class="card reference collapsed" id="secTemplates">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">PI Templates</span><span class="sec-summary">One-click copy for every layout</span></h2>
+    <button class="btn collapse-btn" data-target="secTemplates" title="Collapse or expand this section">&#9660;</button>
+  </div>
+  <div class="sec-body">
+    <p class="section-sub">Every template the tool can generate. Copy one, then in EVE open the planet,
+      click <b>Import</b> and paste. Extractor heads still have to be placed by hand afterwards — that is
+      normal EVE behaviour, not a gap in the template.</p>
+    <div class="chart-controls">
+      <input type="text" id="tplFilter" placeholder="Filter by name…" aria-label="Filter templates">
+      <span class="tpl-count" id="tplCount"></span>
+    </div>
+    <div id="tplTables"></div>
+  </div>
+</section>
+
+<section class="card reference collapsed" id="secStatus">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">System Status</span><span class="sec-summary">EVE, ESI, and this tool</span></h2>
+    <button class="btn collapse-btn" data-target="secStatus" title="Collapse or expand this section">&#9660;</button>
+  </div>
+  <div class="sec-body">
+    <p class="section-sub">Live status from EVE's own public status endpoint. If the tool is
+      misbehaving, check here first — it is usually ESI having a moment rather than anything you did.</p>
+    <div class="status-grid" id="statusGrid"></div>
+  </div>
+</section>
+
+<section id="generatedConsoleWrap" style="display:none;"></section>
+
+</main>
+
+<div id="stickyCalc">
+  <span id="stickyCalcInfo"></span>
+  <button class="btn primary" id="stickyCalcBtn">Solve</button>
+</div>
+
+<div class="help-modal" id="helpModal" role="dialog" aria-modal="true"
+     aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <div class="help-head">
+      <h2 id="helpTitle">How to use Solving PI</h2>
+      <button class="btn small" id="helpClose" type="button">&times; Close</button>
+    </div>
+    <div class="help-body">
+      <p class="help-lead">This tool works out what to build on your planets and how much
+        you will make. You enter what you have, it does the arithmetic. Nothing is saved
+        to a server and it never asks for your EVE login.</p>
+
+      <h3>The short version</h3>
+      <ol class="help-steps">
+        <li>Enter your characters — each one individually, with their real skills.</li>
+        <li>Enter your planets and their scanned resource values (or drop in screenshots).</li>
+        <li>Enter your costs &mdash; tax, fees, shipping &mdash; and load live prices.</li>
+        <li>Pick a goal and press Solve.</li>
+        <li>You get a build sheet per character, plus the analytics that explain it.</li>
+      </ol>
+
+      <h3>Step 1 &mdash; Your operation</h3>
+      <p>Every character is modeled individually. One character can run <b>six planets at
+        most</b>, and that needs Interplanetary Consolidation V. If your main runs six and two
+        alts run one each, that is eight colonies, not eighteen — the tool adds up what you
+        tell it. From 1 to 50 characters, and a one-character operation gets the same rigor
+        (in fact small operations get a <i>provably optimal</i> answer, because they can be
+        searched exhaustively).</p>
+      <p><b>Extraction program length</b> is how long you set your extractors to run. Short
+        programs give more per week but need more logins. Six hours is full pace; a day gives
+        about 81% of it; a week about 34%. The Results section can show this trade as ISK per
+        week <i>and</i> ISK per login, so you can pick what fits your life.</p>
+
+      <h3>Step 2 &mdash; Your systems &amp; planets</h3>
+      <p><b>Resource values come from your in-game planet scan.</b> Enter the raw per-cycle
+        value the survey shows; the familiar percentage appears alongside. Values above 100%
+        are real and the tool never caps them &mdash; but it also never claims output your
+        buildings cannot physically process. When a hot planet outruns its factories, the
+        tool says so and proposes a bigger layout instead of inventing units.</p>
+      <p>The screenshot reader fills planets in from survey screenshots, entirely in your
+        browser. Check its work &mdash; it is a convenience, not a data source.</p>
+
+      <h3>Step 3 &mdash; Costs &amp; market</h3>
+      <ul>
+        <li><b>Customs tax</b> &mdash; what your POCO or skyhook charges. The game taxes fixed
+          base values per tier, not market price &mdash; the tool gets this right.</li>
+        <li><b>Sales tax and broker fee</b> &mdash; what the market takes when you sell.</li>
+        <li><b>Price basis</b> &mdash; <i>instant</i> hits existing orders (no broker fee, worse
+          price); <i>patient</i> lists orders (broker fee, better price, if they fill). This is
+          real money and the tool prices both honestly.</li>
+        <li><b>Shipping</b> &mdash; ISK per cubic metre, charged on real cargo volume.</li>
+      </ul>
+      <p><b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
+        <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
+        the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
+        The analytics re-solve all three per input and tell you what your current choice is
+        leaving on the table.</p>
+
+      <h3>Steps 4-5 &mdash; Goal &amp; results</h3>
+      <p>Four ways to define &ldquo;best&rdquo;: <b>most profit</b>, <b>a quota</b> (minimum
+        colonies to hit a weekly amount), <b>a login budget</b> (best net within your sessions
+        per week), or <b>compare everything</b> (a ranked list of every product your operation
+        could make).</p>
+      <p>Every result names its <b>bottleneck</b> (add capacity there first), its
+        <b>answer quality</b> (exact, or within a measured percentage of the best possible),
+        and reconciles every ISK to one ledger you can open and read line by line. A plan
+        that loses money says so with a minus sign &mdash; losses are never hidden.</p>
+
+      <h3>The reference sections</h3>
+      <ul>
+        <li><b>Market Reference</b> &mdash; live Jita prices for all 101 items with trends.</li>
+        <li><b>Price History</b> &mdash; the same data charted, plus live order-book depth.</li>
+        <li><b>PI Templates</b> &mdash; ready-made colony layouts. Copy, paste in game, done.</li>
+        <li><b>System Status</b> &mdash; whether EVE and its API are up.</li>
+      </ul>
+
+      <h3>Saving your work</h3>
+      <p>The tool <b>autosaves to your browser</b> as you type. <b>Save My Data</b> downloads
+        a file; use it to move between computers or keep a backup.</p>
+
+      <h3>Things worth knowing</h3>
+      <ul>
+        <li><b>It will not click the buttons for you.</b> It works out what to build and
+          where. You still build it.</li>
+        <li><b>Nothing touches your account.</b> No login, no password. Only public data.</li>
+        <li><b>Screenshots stay on your computer.</b> The image reading happens in your browser.</li>
+        <li><b>Prices move.</b> Recalculate before committing to something large.</li>
+      </ul>
+
+      <h3>If something looks wrong</h3>
+      <p>Use the <b>Contact / Report a Bug</b> button. It opens an email with your build
+        version already filled in. Tell us what you expected and what happened instead.</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="zelle-modal" id="zelleModal" role="dialog" aria-modal="true"
+         aria-labelledby="zelleTitle" hidden>
+      <div class="zelle-card">
+        <button class="zelle-close" id="zelleClose" type="button" aria-label="Close">&times;</button>
+        <h3 id="zelleTitle">Send with Zelle&reg;</h3>
+        <p>Scan this in your banking app.</p>
+        <img id="zelleQr" width="240" height="240" alt="Zelle payment QR code for Ryan Allen"
+             src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQAAAABRBrPYAAADqElEQVR42u2aTY7jNhCFvzIFyDt6l6V0gxyBPsqcpEVPLjInCaSbUDegFgEkQNbLguqeReanswiQloYb21CBRj2xql69ol1s3rGmC+9av8z+H2ZPMzCKqlhvAZHe7woOntYxmZhe4sALw5du7JADBhflHf9Z/DNwaSbn8Go3njeK81TMgSfEwJ+RhFQxuBbi4HHo3M0YtPsHTrD1nyIRInYHnjcHM2s4qxvuZc8jL8wps+D6stWSwtMfNlulHZp3WvdDdUT2awfSKhZPSYQAZzezG0NVTkzq3NH2op2aQrXWCUjP+5y5cAWi//fgTgH3d7f6T7bSv3jTTCAg9dYbNzYT9YT5PckAZNoAXoIk4qV+hEU4JpNycDBApSkpBa52biMsEN0MnKYUoKXEIQFAOcQPopExnknqn3EhrLUUpUzxNZymUfpBbfeJRLbfGVE131uXGw6rF7t3z6lN3JuZQMbUYU5AuXjwAwtPn38GtDAa3bOcCxKcWJ4Y/gTHaUmHurysCCGL57XBUyn5m1qma7I5m6DanPqx1BluBB3Ue41EKZSMVZlhnwKln5xB1AvCpOx1zMBUopGjKoZcy3c4cZn+QQvlvAAGfCpUSLu/8qZBtzV7xbIB0AGFzMzvBKAx7rVMQ9SvBOABpTCUMtj05ZHDF/bp4fKxYmOz+maVRtNX3gJdtbmoHe9qtib8U2u/EQjkheOkNt505HCc5IKWirnQrPnW2eslJKmmwoz5QA9XEzSlh+qqY15luc0Vf9im8z9P7UXrnBC43va1vYgJ1boSbmx7N/nzqSgc+hc3NPnUm9bjZS28c6WyAKLG53PQvRVNZfR8kpW5zSkHuQKRxCtFWP9yhzo1ZRXjIrC0Dibhc+W6h3MrHfLxXb8pga53pXvuFRttbcohnUxql1ad9UGVrYQNNxO0zynM1UBemFtzYDqVfeFaAlEfZ4hNdVUY0ZwLED1GVT/yxXAHceB/sCqhaWliuPh2mUO5SuzR7aXMZXjlEAmqdMTlI6rsVr1jEhPmtX1ihiedKDq9XXD475VFb6Z0mK9nyQb0Pbdf37VaK65ePHTKSctO/uH2IF/oiPO0n5Ejc8mEVAEvTg8vDXTMMJqXBqjr/c7f269f+sJpDcMuVRm4XE1IHS5BYPsBY/z8xGzZgjKoIoh5btueV10pyLrlpTw7dLk149W4GNuoU4lrrINOKXXWn6W0vlPsFhggQonubYn/8V19uwnz6sZn9ut97OLO/AQctmckxfHO4AAAAAElFTkSuQmCC">
+        <p class="zelle-name">RYAN ALLEN</p>
+        <a class="btn small" href="https://enroll.zellepay.com/qr-codes?data=eyJuYW1lIjoiUllBTiIsICJhY3Rpb24iOiJQYXltZW50IiwgInRva2VuIjoiYWxsZW4uci5nQGdtYWlsLmNvbSJ9"
+           target="_blank" rel="noopener noreferrer">Open Zelle link instead</a>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <a class="oss-link" href="https://github.com/LackingTallent/SolvingPI" target="_blank" rel="noopener noreferrer"
+         title="View the source or contribute on GitHub">
+        <svg viewBox="0 0 16 16" width="19" height="19" aria-hidden="true" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+            0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01
+            1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95
+            0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27
+            2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82
+            2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0
+            .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>Open source on GitHub</span>
+      </a>
+      <p class="footer-legal-text">Created for the EVE Online community by <b>Admiral Leyton</b> &mdash; aka Lacking Tallent, aka Ryan Allen. Free to use, built on live EVE ESI market data. If it saved you time or ISK and you would like to chip in toward hosting, it is genuinely appreciated but never expected. <span class="footer-fineprint">EVE Online and all related marks are the property of Fenris Creations (formerly CCP Games). Unofficial fan tool, not affiliated with or endorsed by them.</span> <span class="ai-disclosure">This tool was created using Claude Code, Opus 5 and Sonnet 5 &mdash; AI content isn&rsquo;t slop, but everyone who accuses it of being so is certainly sloppy. Fly safe, live dangerously, and remember that resistance is futile.</span></p>
+      <div class="footer-contact">
+        <a class="report-btn" id="reportFooter" href="#"
+           title="Report a bug or contact the developer">&#9993; Contact the developer / Report a bug</a>
+        <span class="footer-contact-note">Goes to admin@solvingpi.com with your build version
+          attached, so a report can actually be traced.</span>
+      </div>
+      <div class="donate-row">
+        <a class="donate-btn" href="https://www.paypal.me/allenrga" target="_blank" rel="noopener noreferrer"
+           data-donate="paypal" title="Open PayPal.Me in a new tab">
+          <svg class="donate-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#009cde" d="M9.6 21.4H6.1c-.3 0-.5-.3-.4-.6l.6-3.6h3.6c2.9 0 5.3-1.5 6.1-4.6.3-1.1.3-2 0-2.7 1.6.8 2.2 2.4 1.7 4.6-.8 3.9-3.5 5.4-7 5.4H9.9l-.3 1.5z"/>
+            <path fill="#003087" d="M8.2 15.7H4.7c-.3 0-.5-.3-.4-.6l2-12.3c.1-.3.3-.5.6-.5h5.3c3 0 4.9 1.3 4.4 4.3-.6 3.4-3 4.9-6.2 4.9H8.6l-.4 4.2z"/>
+          </svg>
+          <span>PayPal</span>
+        </a>
+        <a class="donate-btn" href="https://cash.app/$LackingTallent" target="_blank" rel="noopener noreferrer"
+           data-donate="cashapp" title="Open Cash App in a new tab">
+          <svg class="donate-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <rect width="24" height="24" rx="6" fill="#00d54b"/>
+            <path fill="#fff" d="M15.4 9.3c.2.2.5.2.7 0l.9-.9c.2-.2.2-.5 0-.7-.6-.6-1.4-1-2.3-1.2l.2-1c.1-.3-.1-.6-.4-.6h-1.2c-.3 0-.5.2-.5.4l-.2.9c-2 .1-3.6 1.2-3.6 3.1 0 1.7 1.3 2.4 2.8 2.9 1.4.5 2.1.7 2.1 1.4 0 .7-.7 1.1-1.7 1.1-.9 0-1.8-.3-2.5-.9-.2-.2-.5-.2-.7 0l-.9.9c-.2.2-.2.5 0 .7.7.7 1.6 1.1 2.6 1.3l-.2 1c-.1.3.1.6.4.6h1.2c.2 0 .5-.2.5-.4l.2-1c2.3-.1 3.8-1.4 3.8-3.3 0-1.7-1.3-2.4-2.9-3-1.3-.5-2-.7-2-1.3 0-.6.6-.9 1.4-.9.8 0 1.6.3 2.3.9z"/>
+          </svg>
+          <span>Cash App</span>
+        </a>
+        <button class="donate-btn" type="button" id="zelleBtn"
+                data-donate="zelle" title="Show the Zelle QR code to scan in your banking app">
+          <svg class="donate-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <rect width="24" height="24" rx="6" fill="#6d1ed4"/>
+            <path fill="#fff" d="M12.9 3.2h-1.8c-.2 0-.4.2-.4.4v1.7H7.6c-.2 0-.4.2-.4.4v1.8c0 .2.2.4.4.4h3.9l-4.4 6.6c-.1.1-.1.2-.1.3v1.9c0 .2.2.4.4.4h3.3v1.7c0 .2.2.4.4.4h1.8c.2 0 .4-.2.4-.4v-1.7h3.1c.2 0 .4-.2.4-.4v-1.8c0-.2-.2-.4-.4-.4h-3.7l4.4-6.6c.1-.1.1-.2.1-.3V5.7c0-.2-.2-.4-.4-.4h-3.5V3.6c0-.2-.2-.4-.4-.4z"/>
+          </svg>
+          <span>Zelle</span>
+        </button>
+        <a class="donate-btn is-primary" href="https://gofund.me/6b1d43f62" target="_blank" rel="noopener noreferrer"
+           data-donate="gofundme" title="Support the project on GoFundMe">
+          <svg class="donate-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#02a95c" d="M12 20.5s-7.3-4.4-7.3-9.4a4.1 4.1 0 0 1 7.3-2.6 4.1 4.1 0 0 1 7.3 2.6c0 5-7.3 9.4-7.3 9.4z"/>
+            <path fill="#fff" d="M12 12.6c-1 0-1.9-.8-1.9-1.9S11 8.9 12 8.9s1.9.8 1.9 1.8-.9 1.9-1.9 1.9z"/>
+          </svg>
+          <span>GoFundMe</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+<script src="./legacy/00-shims.js"></script>
+<script src="./legacy/01-data.js"></script>
+<script src="./legacy/02-composites.js"></script>
+<script src="./legacy/10-shell.js"></script>
+<script src="./legacy/19-market-grid.js"></script>
+<script src="./legacy/20b-imported-templates.js"></script>
+<script src="./legacy/21-templates.js"></script>
+<script src="./legacy/22-price-history.js"></script>
+<script src="./legacy/23-screenshot.js"></script>
+<script src="./legacy/24-status.js"></script>
 <script type="module" src="./js/ui/app.js"></script>
 </body>
 </html>

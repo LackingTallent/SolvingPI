@@ -21,6 +21,8 @@ export interface UiPlanet {
   name: string;
   type: PlanetType;
   resources: UiResource[];
+  /** ISO capture time when the values came from a screenshot import. */
+  scannedAt?: string;
 }
 
 export interface UiQuote { bid: number; ask: number; dailyVolume?: number }

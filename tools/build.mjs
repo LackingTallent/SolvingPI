@@ -23,6 +23,24 @@ execFileSync('tsc', ['-p', 'tsconfig.build.json'], { cwd: root, stdio: 'inherit'
 console.log('copy: static shell …');
 cpSync(join(root, 'static'), dist, { recursive: true });
 
+// --- version stamping (the skin's #buildBadge and the ESI User-Agent) ------
+import { writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+let sha = 'dev';
+try { sha = execSync('git rev-parse --short HEAD', { cwd: root }).toString().trim(); } catch { /* no git */ }
+const today = new Date().toISOString().slice(0, 10);
+const VERSION = `v9.0.0-proto · ${sha} · ${today}`;
+const UA_VERSION = '9.0.0-proto';
+for (const rel of ['index.html', 'legacy/01-data.js']) {
+  const p = join(dist, rel);
+  if (!existsSync(p)) continue;
+  const src = readFileSync(p, 'utf8')
+    .replaceAll('@build:version', VERSION)
+    .replaceAll('@build:uaversion', UA_VERSION);
+  writeFileSync(p, src);
+}
+console.log(`version: stamped "${VERSION}"`);
+
 // --- module graph verification -------------------------------------------
 const entryMatch = /src="\.\/(js\/[^"]+)"/.exec(readFileSync(join(dist, 'index.html'), 'utf8'));
 if (entryMatch === null) throw new Error('build-check: index.html has no module entry script');

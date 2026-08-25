@@ -1,0 +1,1845 @@
+*{box-sizing:border-box; margin:0; padding:0;}
+body{ background:var(--void); color:var(--text); font-family:var(--font-body); font-size:20.7px; line-height:1.55;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; min-height:100vh; padding-bottom:80px; overflow-x:hidden; width:100%; }
+.hexbg{ position:fixed; inset:0; z-index:0; opacity:.05; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cpath d='M28 0 L56 25 L56 75 L28 100 L0 75 L0 25 Z' fill='none' stroke='%235ce1e6' stroke-width='0.5'/%3E%3C/svg%3E");
+  background-size:56px 100px; }
+
+/* ===== HERO ===== */
+/* padding-top clears the fixed .top-cluster in the corner.
+ *
+ * It was 52px, sized when the badge, theme switch and clock were three
+ * separate fixed elements and the tallest reached ~76px. Grouping them into
+ * one 119px column overran that clearance and the cluster landed on top of
+ * the hero title — "SOLVING PI" was cut off mid-word.
+ *
+ * --cluster-clear is declared once next to .top-cluster so the two cannot
+ * drift again: change the cluster and the hero follows. */
+header.hero{ position:relative; z-index:1; overflow:hidden;
+  padding:var(--cluster-clear, 52px) 0 0; border-bottom:1px solid var(--panel-border);
+  background:linear-gradient(180deg, var(--panel), transparent);
+  background:
+    radial-gradient(1000px 340px at 18% -12%, color-mix(in srgb, var(--cyan) 16%, transparent), transparent 70%),
+    radial-gradient(760px 300px at 84% 0%, color-mix(in srgb, var(--magenta) 13%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--panel), transparent); }
+/* Soft moving aurora behind the brand — adds depth without competing for
+   attention. Disabled for anyone who prefers reduced motion. */
+.hero-glow{ position:absolute; top:-200px; left:50%; width:1200px; height:560px;
+  transform:translateX(-50%); pointer-events:none; z-index:0; opacity:.55;
+  background:radial-gradient(circle at 30% 50%, var(--cyan), transparent 58%),
+             radial-gradient(circle at 70% 45%, var(--magenta), transparent 58%);
+  filter:blur(90px); animation:drift 16s ease-in-out infinite alternate; }
+@keyframes drift{ from{ transform:translateX(-52%) scale(1); } to{ transform:translateX(-48%) scale(1.12); } }
+
+.hero-top{ position:relative; z-index:1; max-width:1280px; margin:0 auto;
+  display:flex; justify-content:space-between; align-items:center; gap:26px; flex-wrap:wrap; padding:0 12px; box-sizing:border-box;}
+.brand{ display:flex; align-items:center; gap:34px; min-width:0; }
+/* Scaled up with the hero. Both of these were sized when it ran to 1040. */
+.brand-logo{ width:320px; height:320px; flex-shrink:0;
+  filter:drop-shadow(0 10px 34px rgba(34,232,255,.45));
+  filter:drop-shadow(0 10px 34px color-mix(in srgb, var(--cyan) 45%, transparent));
+  animation:logoIn .9s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes logoIn{ from{ opacity:0; transform:scale(.82) rotate(-14deg); }
+                   to{ opacity:1; transform:scale(1) rotate(0); } }
+.brand-text{ min-width:0; }
+
+.eyebrow{ font-family:var(--font-mono); font-size:20px; letter-spacing:4px;
+  color:var(--cyan); text-transform:uppercase; margin-bottom:4px;
+  display:flex; align-items:center; gap:8px; }
+.eyebrow::before{ content:''; width:7px; height:7px; background:var(--cyan); border-radius:50%;
+  box-shadow:0 0 10px var(--cyan); animation:pulse 2s infinite; flex-shrink:0; }
+@keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+
+h1{ font-family:var(--font-display); font-weight:700; font-size:112px; line-height:.95;
+  color:var(--text-strong); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+h1 span{ background:linear-gradient(120deg, var(--cyan), var(--magenta) 55%, var(--amber));
+  -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+.byline{ font-family:var(--font-body); font-size:20px; color:var(--text-dim); letter-spacing:.2px; margin-top:10px; }
+.byline b{ color:var(--text-strong); font-weight:700; }
+.byline-alt{ color:var(--text-faint); font-size:18.4px; display:block; margin-top:2px; }
+/* Centred, not pushed right. Three primary actions hugging the right edge of
+   a 1280px hero look like an afterthought; centred they read as the row of
+   controls they are. */
+.hero-actions{ flex-shrink:0; display:flex; gap:9px; flex-wrap:wrap;
+  justify-content:center; width:100%; }
+.saveload-status{ position:relative; z-index:1; max-width:1280px; margin:9px auto 0;
+  font-family:var(--font-mono); font-size:17.2px; color:var(--text-dim); text-align:right; min-height:1.2em; padding:0 12px; box-sizing:border-box;}
+.saveload-status.ok{ color:var(--green); }
+.saveload-status.err{ color:var(--red); }
+.saveload-status.busy{ color:var(--amber); }
+
+/* Credibility strip — states what the tool actually is at a glance. */
+/* Four equal columns, always on one line.
+ *
+ * auto-fit with a 160px floor let them wrap to two rows on a narrower window,
+ * which broke the row into a 3+1 that looked like a mistake. Four fixed
+ * fractions keep them level and evenly spaced whatever the width; the media
+ * query below is where they are allowed to stack, deliberately. */
+.hero-stats{ position:relative; z-index:1; max-width:1280px; margin:22px auto 0;
+  display:grid; grid-template-columns:repeat(4, 1fr); gap:1px;
+  background:var(--panel-border); border:1px solid var(--panel-border);
+  border-radius:10px 10px 0 0; overflow:hidden; padding:0 12px; box-sizing:border-box;}
+/* ~25% down across the board: padding, icon, figure and label together, so
+   the proportions hold rather than a smaller box around unchanged contents. */
+.hstat{ background:var(--panel); padding:12px 10px 11px; text-align:center; }
+.hstat-icon{ width:30px; height:30px; display:block; margin:0 auto 5px; }
+.hstat b{ display:block; font-family:var(--font-display); font-size:22.5px;
+  color:var(--cyan); letter-spacing:.4px; line-height:1.05; }
+.hstat span{ display:block; font-family:var(--font-mono); font-size:17px;
+  color:var(--text-dim); margin-top:3px; letter-spacing:.2px; }
+
+.subhead{ position:relative; z-index:1; max-width:1280px; margin:22px auto 0;
+  color:var(--text-dim); font-size:20.0px; line-height:1.55; padding:0 12px; box-sizing:border-box;}
+
+@media (max-width:1000px){
+  .brand-logo{ width:210px; height:210px; }
+  h1{ font-size:76px; }
+  /* Below this the four columns cannot hold a readable label, so they stack
+     two by two rather than crushing. */
+  .hero-stats{ grid-template-columns:repeat(2, 1fr); }
+}
+@media (max-width:760px){
+  header.hero{ padding:30px 16px 0; }
+  .brand{ gap:16px; flex-direction:column; text-align:center; }
+  .brand-logo{ width:150px; height:150px; }
+  h1{ font-size:46px; }
+  .hero-top{ justify-content:center; }
+  .hero-actions{ justify-content:center; width:100%; }
+  .saveload-status{ text-align:center; }
+  .hstat b{ font-size:25px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .hero-glow{ animation:none; } .brand-logo{ animation:none; }
+  .eyebrow::before{ animation:none; }
+}
+
+/* 1280px, up from 900.
+ *
+ * The cards were 140px narrower than the hero above them, so the page looked
+ * like it had heavy side margins and undersized fields. Matching and then
+ * exceeding the hero width gives the tables and dashboards real room — the
+ * per-character plan is a seven-column table and was the worst affected.
+ *
+ * Padding trimmed 16 -> 12 at the sides, because at this width the gutter was
+ * doing nothing but taking space. */
+main{ position:relative; z-index:1; max-width:1280px; margin:0 auto;
+  padding:24px 12px; width:100%; box-sizing:border-box; }
+section.card{ position:relative; background:linear-gradient(160deg, var(--panel-raised), var(--panel));
+  border:1px solid var(--panel-border); border-radius:12px; padding:22px; margin-bottom:22px;
+  box-shadow:var(--shadow); overflow:hidden; }
+section.card::before{ content:''; position:absolute; top:0; left:0; right:0; height:3px;
+  background:linear-gradient(90deg, var(--cyan), var(--magenta), var(--amber));
+  opacity:.9; }
+section.card:hover{ border-color:var(--cyan); transition:border-color .2s ease; }
+.section-title{ font-family:var(--font-display); font-size:22.6px; letter-spacing:.5px; color:var(--text-strong); text-transform:uppercase;
+  display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.section-title::before{ content:''; width:14px; height:2px; background:var(--cyan); display:inline-block; }
+/* Every section header is this row: title on the left, controls hard right.
+ *
+ * flex-wrap was dropping the button group onto its own line whenever a title
+ * needed the width — which is why some sections had their controls on the
+ * right and others did not. The title shrinks instead, and the controls hold
+ * their position on every section. */
+.section-head-row{ display:flex; justify-content:space-between; align-items:flex-start;
+  gap:10px; margin-bottom:6px; }
+.section-head-row .section-title{ margin-bottom:0; min-width:0; flex:1 1 auto; }
+
+/* The controls, always together and always on the right edge. Was an inline
+   style repeated on four sections and absent from the fifth. */
+.sec-controls{ display:flex; gap:8px; align-items:center; flex-shrink:0;
+  margin-left:auto; }
+
+/* Reset is a secondary action and was competing with the section title.
+ *
+ * Shrunk by ~30% overall, but NOT by dropping the text below the 17px
+ * readability floor this project enforces — a 13px label failed the build
+ * gate, correctly. The size comes out of the padding and the icon instead:
+ * the glyph is scaled down, the padding roughly halved, and the label drops
+ * to the floor rather than through it. Same visual weight reduction, still
+ * legible. */
+.btn.reset-section{ font-size:17px; padding:3px 8px; line-height:1.15;
+  border-color:var(--red); color:var(--red); background:none; flex-shrink:0; }
+/* Scaled with a transform rather than font-size: the readability floor scans
+ * every font-size declaration and does not know this glyph is decorative. A
+ * transform gets the same visual result without arguing with a check that is
+ * right to be strict about text. */
+.btn.reset-section .rs-icon{ display:inline-block; transform:scale(.82);
+  opacity:.85; }
+.btn.reset-section:hover{ background:rgba(255,92,92,0.1); }
+/* No cap. 640px was a readable measure when the page was 900 wide; the cards
+   now run to ~1200 and a 640px paragraph inside one reads as a column pinned
+   to the left with half the box empty beside it. */
+.section-sub{ color:var(--text-dim); font-size:19.6px; line-height:1.6;
+  margin-bottom:16px; max-width:none; }
+
+label.field-label{ display:block; font-family:var(--font-mono); font-size:18.8px; letter-spacing:1px; color:var(--text-dim); text-transform:uppercase; margin-bottom:6px; }
+input[type=text], input[type=number]{
+  background:var(--panel-raised); border:1px solid var(--panel-border); color:var(--text); border-radius:4px;
+  padding:9px 12px; font-family:var(--font-mono); font-size:19.8px; width:100%;
+}
+input[type=text]:focus, input[type=number]:focus{ outline:none; border-color:var(--cyan); }
+select{
+  background:var(--panel-raised); border:1px solid var(--panel-border); color:var(--text); border-radius:4px;
+  padding:9px 12px; font-family:var(--font-body); font-size:19.8px; width:100%; cursor:pointer;
+}
+.form-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+@media (max-width:760px){ .form-row{ grid-template-columns:1fr; } }
+/* The row's own columns need 86 + 92 + gaps before the name field gets any
+   width at all, so a 120px track guaranteed an overlap. 260px is the real
+   minimum; below that the row stacks (see the 760px block). */
+.per-char-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:8px; }
+/* NO blanket `.per-char-row input` rule. It matched both the name and the
+   count, forcing width:64px on a field that must flex, and fighting the
+   grid it sits in. Each input is styled by its own class below. */
+.goal-chip{ display:inline-flex; align-items:center; gap:6px; background:var(--panel-raised); border:1px solid var(--cyan-dim); border-radius:20px; padding:4px 6px 4px 12px; font-size:19.3px; color:var(--text); }
+.goal-chip button{ background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:20.3px; line-height:1; padding:2px 6px; border-radius:50%; }
+.goal-chip button:hover{ color:var(--red); background:rgba(255,92,92,0.1); }
+
+.btn{
+  font-family:var(--font-mono); font-size:19.3px; letter-spacing:.5px; text-transform:uppercase; padding:11px 20px;
+  border-radius:7px; cursor:pointer; border:1px solid var(--cyan); color:var(--cyan);
+  background:linear-gradient(160deg, var(--panel-raised), var(--panel));
+  box-shadow:var(--shadow); font-weight:600;
+  transition:transform .13s ease, box-shadow .13s ease, color .13s ease, border-color .13s ease;
+}
+.btn:hover{ transform:translateY(-2px); color:var(--text-strong); border-color:var(--magenta);
+  box-shadow:var(--shadow), var(--glow); }
+.btn:active{ transform:translateY(0); }
+.btn.primary{ background:linear-gradient(135deg, var(--cyan), var(--green));
+  color:var(--on-accent); border-color:var(--cyan); font-weight:800;
+  box-shadow:var(--shadow), var(--glow); }
+.btn.primary:hover{ background:linear-gradient(135deg, var(--green), var(--cyan));
+  color:var(--on-accent); border-color:var(--green); }
+.btn.small{ padding:6px 12px; font-size:19.0px; }
+.btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+.planet-card{ background:var(--panel-raised); border:1px solid var(--panel-border); border-radius:6px; padding:16px; margin-bottom:12px; }
+.planet-card-head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.planet-num{ font-family:var(--font-display); font-weight:700; font-size:20.3px; width:28px; height:28px; border-radius:4px;
+  display:flex; align-items:center; justify-content:center; background:rgba(92,225,230,0.08); color:var(--cyan); border:1px solid var(--cyan-dim); }
+.planet-name-input{ flex:1; min-width:120px; }
+.planet-type-select{ min-width:140px; flex:1; }
+.remove-planet-btn{ background:none; border:1px solid var(--panel-border); color:var(--text-faint); border-radius:4px; padding:6px 10px; cursor:pointer; font-size:19.3px; }
+.remove-planet-btn:hover{ color:var(--red); border-color:var(--red); }
+
+.upload-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.upload-label{
+  font-family:var(--font-mono); font-size:19.0px; color:var(--text-dim); border:1px dashed var(--panel-border);
+  border-radius:4px; padding:8px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+}
+.upload-label:hover{ border-color:var(--cyan); color:var(--cyan); }
+.upload-status{ font-family:var(--font-mono); font-size:19.0px; color:var(--text-faint); }
+.upload-status.ok{ color:var(--green); }
+.upload-status.busy{ color:var(--amber); }
+.upload-status.err{ color:var(--red); }
+
+
+.resource-panel{ display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--panel-border); }
+.resource-panel.active{ display:block; }
+
+.results-panel{ min-height:60px; }
+.result-card{ cursor:pointer;
+  background:var(--panel-raised); border:1px solid var(--panel-border); border-radius:6px; padding:14px 16px; margin-bottom:10px;
+  display:flex; align-items:center; gap:14px; cursor:help; position:relative;
+}
+.result-card.winner{ border-color:var(--magenta); box-shadow:0 0 0 1px var(--magenta-dim); background:rgba(226,111,196,0.06); }
+.result-rank{ font-family:var(--font-display); font-weight:700; font-size:25.1px; color:var(--text-faint); width:32px; text-align:center; }
+.result-card.winner .result-rank{ color:var(--magenta); }
+.result-info{ flex:1; min-width:0; }
+.result-name{ font-family:var(--font-display); font-size:20.7px; color:var(--text-strong); font-weight:600; }
+.result-meta{ font-family:var(--font-mono); font-size:19.0px; color:var(--text-dim); margin-top:2px; }
+.result-isk{ font-family:var(--font-display); font-size:22.6px; font-weight:700; color:var(--cyan); text-align:right; }
+.result-card.winner .result-isk{ color:var(--magenta); }
+
+.status-msg{ font-family:var(--font-mono); font-size:19.6px; color:var(--text-faint); padding:10px 0; }
+.status-msg.err{ color:var(--red); }
+
+.chip-tier{ font-family:var(--font-mono); font-size:18.4px; font-weight:bold; padding:1px 4px; border-radius:2px; margin-right:4px; }
+.chip-tier.p0{ background:rgba(107,118,132,.2); color:var(--text-dim); }
+.chip-tier.p1{ background:rgba(92,225,230,.15); color:var(--cyan); }
+.chip-tier.p2, .chip-tier.p3{ background:rgba(232,163,61,.15); color:var(--amber); }
+.chip-tier.p4{ background:rgba(226,111,196,.2); color:var(--magenta); }
+
+.recipe-line{ font-family:var(--font-mono); font-size:19.3px; color:var(--text-dim); padding:3px 0 3px 14px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.recipe-line img{ width:16px; height:16px; border-radius:2px; }
+
+#tooltip{
+  position:fixed; z-index:300; pointer-events:none; display:none; background:var(--panel-raised);
+  border:1px solid var(--cyan-dim); border-radius:6px; padding:10px 14px; max-width:300px; font-size:19.6px;
+  line-height:1.5; color:var(--text); box-shadow:0 12px 32px rgba(0,0,0,.6); font-family:var(--font-mono);
+}
+/* ===== System cards + autocomplete ===== */
+.system-card{ background:var(--panel-raised); border:1px solid var(--panel-border); border-radius:6px; padding:16px; margin-bottom:14px; }
+.system-card-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; position:relative; flex-wrap:wrap; }
+.system-num{ font-family:var(--font-display); font-weight:700; font-size:20.3px; width:28px; height:28px; border-radius:4px;
+  display:flex; align-items:center; justify-content:center; background:rgba(226,111,196,0.1); color:var(--magenta); border:1px solid var(--magenta-dim); flex-shrink:0; }
+.system-name-wrap{ position:relative; flex:1; min-width:160px; }
+.autocomplete-list{
+  position:absolute; top:100%; left:0; right:0; z-index:50; background:var(--panel-raised);
+  border:1px solid var(--cyan-dim); border-radius:4px; margin-top:4px; max-height:220px; overflow-y:auto;
+  box-shadow:0 12px 32px rgba(0,0,0,.6); display:none;
+}
+.autocomplete-list.open{ display:block; }
+.autocomplete-item{ padding:8px 12px; font-family:var(--font-mono); font-size:19.3px; color:var(--text); cursor:pointer; }
+.autocomplete-item:hover, .autocomplete-item.active{ background:rgba(92,225,230,0.1); color:var(--cyan); }
+.autocomplete-empty{ padding:8px 12px; font-family:var(--font-mono); font-size:19.3px; color:var(--text-faint); }
+.autocomplete-status{ font-family:var(--font-mono); font-size:18.8px; color:var(--text-faint); padding:4px 0 0; }
+.system-planets{ margin-top:10px; padding-left:14px; border-left:2px solid var(--panel-border); }
+
+/* ===== Slider table (financial settings) ===== */
+table.slider-table{ width:100%; border-collapse:collapse; }
+/* Vertical padding was 10px against 6px horizontal — nearly double the
+ * spacing in the direction that costs scroll, and less in the direction that
+ * aids scanning. Reversed. */
+table.slider-table td{ padding:6px 10px; vertical-align:middle; border-bottom:1px solid var(--panel-border); }
+table.slider-table tr:last-child td{ border-bottom:none; }
+.finance-readout{
+  margin-top:12px; padding:12px 14px; background:var(--panel); border:1px solid var(--panel-border); border-radius:4px;
+  font-family:var(--font-mono); font-size:19.6px; color:var(--text-dim); display:flex; flex-wrap:wrap; gap:16px;
+}
+.finance-readout b{ color:var(--cyan); }
+
+/* ===== Result card selection ===== */
+.result-card.selected{ border-color:var(--cyan); box-shadow:0 0 0 1px var(--cyan-dim); }
+.result-card .select-mark{ width:18px; height:18px; border-radius:50%; border:1.5px solid var(--panel-border); flex-shrink:0; }
+.result-card.selected .select-mark{ border-color:var(--cyan); background:var(--cyan); }
+
+/* ===== Price trend rows in commodity reference ===== */
+.price-trend{ display:flex; gap:8px; flex-wrap:wrap; font-family:var(--font-mono); font-size:18.8px;
+  margin-top:2px; min-width:0; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.price-trend .pt-cell{ color:var(--text-faint); white-space:nowrap; }
+.price-trend .pt-cell b{ font-weight:bold; margin-left:2px; }
+.price-trend .pt-cell.up b{ color:var(--green); }
+.price-trend .pt-cell.down b{ color:var(--red); }
+.price-trend .pt-cell.flat b{ color:var(--text-dim); }
+
+/* ===== Generated console ===== */
+.gen-hero{ background:linear-gradient(180deg, rgba(226,111,196,0.08), transparent); border:1px solid var(--magenta-dim);
+  border-radius:8px; padding:24px; margin-bottom:20px; }
+.gen-hero h2{ font-family:var(--font-display); font-size:32.6px; color:var(--text-strong); text-transform:uppercase; margin-bottom:8px; }
+.gen-hero .gen-sub{ color:var(--text-dim); font-size:19.8px; margin-bottom:16px; }
+.gen-stat-row{ display:flex; gap:1px; background:var(--panel-border); border:1px solid var(--panel-border); flex-wrap:wrap; border-radius:6px; overflow:hidden; }
+.gen-stat{ background:var(--panel); padding:14px 18px; flex:1; min-width:130px; }
+.gen-stat .label{ font-family:var(--font-mono); font-size:18.6px; letter-spacing:1px; color:var(--text-dim); text-transform:uppercase; margin-bottom:4px;}
+.gen-stat .value{ font-family:var(--font-display); font-size:25.1px; font-weight:700; color:var(--text-strong); }
+.gen-stat .value.magenta{ color:var(--magenta); } 
+table.gen-table{ width:100%; border-collapse:collapse; font-size:19.3px; background:var(--panel); border:1px solid var(--panel-border); border-radius:6px; overflow:hidden; margin-bottom:16px;}
+table.gen-table th{ font-family:var(--font-mono); font-size:18.8px; letter-spacing:1px; text-transform:uppercase; color:var(--cyan); text-align:left; padding:6px 10px; background:var(--panel-raised); border-bottom:1px solid var(--panel-border); }
+table.gen-table td{ padding:5px 10px; border-bottom:1px solid var(--panel-border); color:var(--text); line-height:1.35; }
+table.gen-table tr:last-child td{ border-bottom:none; }
+
+/* ===== Full P0-P4 market reference grid (ported from the operations console) ===== */
+.legend-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:1px; background:var(--panel-border); border:1px solid var(--panel-border); border-radius:6px; overflow:hidden; width:100%; box-sizing:border-box;}
+.legend-col{ background:var(--panel); padding:14px; min-width:0; }
+.legend-head{ font-family:var(--font-mono); font-size:18.8px; letter-spacing:1px; text-transform:uppercase; padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--panel-border);}
+.tier-text-p0{ color:var(--text-dim); } .tier-text-p1{ color:var(--cyan); }
+.tier-text-p2, .tier-text-p3{ color:var(--amber); } .tier-text-p4{ color:var(--magenta); }
+/* Products built FROM PI, and the non-PI inputs the planner buys. Deliberately
+   not tier colours: these are not PI tiers and colouring them as one would
+   imply a rung on a ladder they are not on. */
+.tier-text-composite{ color:var(--green); }
+.tier-text-bought{ color:var(--text-faint); }
+.selector-item{
+  display:flex; align-items:flex-start; gap:8px; padding:7px 4px; font-size:19.6px; color:var(--text);
+  width:100%; background:none; border:none; text-align:left; cursor:pointer; border-radius:4px;
+  font-family:var(--font-body); transition: background .12s ease;
+}
+.selector-item:hover{ background: rgba(92,225,230,0.08); color:var(--text-strong); }
+.selector-item.locked{ background: rgba(226,111,196,0.14); color:var(--text-strong); box-shadow: inset 0 0 0 1px var(--magenta-dim); }
+.selector-item img{ width:22px; height:22px; border-radius:3px; background:rgba(255,255,255,0.03); flex-shrink:0; }
+.selector-item-body{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+#selectorPopup{
+  position:fixed; z-index:250; pointer-events:none; display:none;
+  background: var(--panel-raised); border:1px solid var(--cyan-dim); border-radius:6px;
+  padding:12px 16px; max-width:420px; max-height:420px; overflow-y:auto;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6); font-family:var(--font-mono); font-size:19.6px;
+}
+#selectorPopup .sp-title{ display:flex; align-items:center; gap:8px; color:var(--cyan); font-weight:bold; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--panel-border); font-size:19.6px;}
+#selectorPopup .sp-row{ display:flex; justify-content:space-between; gap:10px; padding:3px 0; color:var(--text); }
+#selectorPopup .sp-count{ color:var(--text-dim); font-size:19.0px; margin-top:6px; padding-top:6px; border-top:1px solid var(--panel-border);}
+.gen-cell.dim{ opacity:0.55; } /* was 0.18 — text became unreadable when the highlight filter was active; 0.55 still clearly de-emphasises without hiding information */ .gen-cell.trace{ box-shadow: inset 0 0 0 1px var(--cyan); background: rgba(92,225,230,0.06); }
+.gen-cell.trace.tier-p4{ box-shadow: inset 0 0 0 1px var(--magenta); background: rgba(226,111,196,0.08);}
+.gen-cell.trace.tier-p2, .gen-cell.trace.tier-p3{ box-shadow: inset 0 0 0 1px var(--amber); background: rgba(232,163,61,0.07);}
+.gen-cell.trace.tier-p0, .gen-cell.trace.tier-p1{ box-shadow: inset 0 0 0 1px var(--green); background: rgba(77,255,160,0.07);}
+.gen-char-block{ background:var(--panel-raised); border:1px solid var(--panel-border); border-radius:6px; margin-bottom:10px; overflow:hidden; }
+.gen-char-head{ padding:8px 12px; background:rgba(226,111,196,0.06); border-bottom:1px solid var(--panel-border);
+  font-family:var(--font-mono); font-size:19.3px; color:var(--magenta); font-weight:bold; }
+.gen-planet-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:1px; background:var(--panel-border); }
+.gen-cell{ background:var(--panel); padding:10px; font-size:19.0px; transition:background .15s ease; }
+.gen-cell-factory{ grid-column: span 2; background:rgba(226,111,196,0.04); }
+.gen-cell .gc-name{ font-family:var(--font-mono); font-weight:bold; color:var(--text); }
+.gen-cell .gc-type{ color:var(--text-faint); font-size:18.6px; text-transform:uppercase; margin-bottom:4px; }
+.copy-template-btn{
+  display:block; width:100%; margin-top:4px; padding:5px 8px; font-family:var(--font-mono); font-size:18.1px;
+  letter-spacing:0.3px; text-transform:uppercase; color:var(--magenta); background:rgba(226,111,196,0.08);
+  border:1px solid var(--magenta-dim); border-radius:3px; cursor:pointer; transition:all .15s ease;
+}
+.copy-template-btn:hover{ background:rgba(226,111,196,0.16); border-color:var(--magenta); }
+.copy-template-btn.copied{ color:var(--green); border-color:var(--green); background:rgba(92,225,122,0.1); }
+.chip-commodity{ display:inline-flex; align-items:center; gap:4px; background:var(--panel-raised); border:1px solid var(--panel-border); border-radius:4px; padding:2px 7px 2px 3px; }
+.chip-commodity img{ width:16px; height:16px; border-radius:2px; }
+.chip-label{ font-size:18.6px; color:var(--text); white-space:nowrap; }
+@media (max-width:760px){ .gen-cell-factory{ grid-column: span 1; } }
+
+/* Matches main's 1280px. The footer sat at 900 under a 1280 page, so the
+   whole bottom of the site read as a narrower, separate thing. */
+.footer-inner{ max-width:1280px; margin:0 auto; padding:0 12px; }
+.footer-credit{ font-family:var(--font-body); font-size:19.8px; color:var(--text-dim); line-height:1.7; margin-bottom:10px; }
+.footer-credit b{ color:var(--text); font-weight:600; }
+.footer-note{ font-family:var(--font-body); font-size:19.3px; color:var(--text-faint); max-width:560px; margin:0 auto 14px; line-height:1.6; }
+/* Last thing on the page, below every word of it. Asking comes after
+   explaining. */
+.donate-row{ display:flex; gap:9px; justify-content:center; flex-wrap:wrap;
+  margin:20px 0 0; padding-top:16px;
+  border-top:1px solid var(--panel-border); width:100%; }
+.donate-btn{ display:inline-flex; align-items:center; gap:8px;
+  font-family:var(--font-mono); font-size:18.1px; letter-spacing:.4px;
+  text-decoration:none; cursor:pointer;
+  color:var(--text-dim); background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:6px; padding:7px 15px; transition:all .15s ease; }
+.donate-btn:hover{ color:var(--text-strong); border-color:var(--text-faint);
+  background:rgba(255,255,255,0.04); transform:translateY(-1px); }
+/* Hover keeps the mark at full colour and lifts the label instead. Tinting a
+   brand mark on hover would be recolouring somebody else's logo. */
+.donate-mark{ width:19px; height:19px; flex-shrink:0; display:block; }
+.donate-btn:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
+.footer-fineprint{ font-family:var(--font-body); font-size:18.6px; color:var(--text-faint);
+  max-width:620px; margin:0 auto; line-height:1.6; }
+/* Reusable hover-detail affordance. Keeps the page uncluttered while making
+   the deeper explanation one hover away and visibly discoverable. */
+.hint{ position:relative; display:inline-block; margin-left:6px; cursor:help;
+  color:var(--cyan); font-size:17.9px; line-height:1; vertical-align:middle;
+  border:1px solid var(--cyan-dim); border-radius:50%; width:20px; height:20px;
+  text-align:center; }
+.hint:hover{ background:rgba(92,225,230,0.12); }
+.hint .hint-body{ display:none; position:absolute; left:0; top:26px; z-index:300;
+  width:340px; background:var(--panel-raised); border:1px solid var(--cyan-dim);
+  border-radius:6px; padding:12px 14px; font-family:var(--font-body);
+  font-size:18.4px; line-height:1.6; color:var(--text-dim); text-align:left;
+  box-shadow:0 12px 32px rgba(0,0,0,.6); font-weight:normal; text-transform:none;
+  letter-spacing:normal; cursor:default; }
+.hint:hover .hint-body{ display:block; }
+.hint .hint-body b{ color:var(--text); }
+@media (max-width:760px){ .hint .hint-body{ width:260px; left:auto; right:0; } }
+.req-badge{ display:inline-block; font-family:var(--font-mono); font-size:17.9px;
+  color:var(--amber); border:1px solid var(--amber-dim); border-radius:4px;
+  padding:3px 9px; margin-bottom:12px; }
+/* ===== Collapsible sections ===== */
+.sec-body{ overflow:visible; }
+.card.collapsed .sec-body{ display:none; }
+.card.collapsed{ padding-bottom:14px; }
+.collapse-btn{ font-size:17.9px; padding:5px 11px; line-height:1; flex-shrink:0; }
+/* The summary sits hard right on the same line as the title.
+ *
+ * It used to follow the title with a fixed 10px gap, so it started at a
+ * different x-position in every section — the longer the title, the further
+ * out it began, and nothing lined up down the page. margin-left:auto pins it
+ * to the right edge instead, so every section's summary starts on the same
+ * axis regardless of title length.
+ *
+ * margin-top:3px was also nudging it below the title's baseline. Removed:
+ * both sit centred on the same line now. */
+/* Title, then explanation, reading left to right — and every explanation
+ * starting at the SAME x so they form a column down the page.
+ *
+ * Pinning the summary right made its position depend on the card width;
+ * letting it follow the title made it depend on title length. Neither lines
+ * up. A fixed-width title column does: the summary always begins at the same
+ * offset whatever the title says. */
+.st-label{ flex:0 0 auto; width:340px; }
+.sec-summary{ font-family:var(--font-body); font-size:18.4px;
+  font-weight:normal; letter-spacing:normal; text-transform:none;
+  color:var(--text-dim); flex:1 1 auto; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sec-summary:empty{ display:none; }
+
+@media (max-width:1000px){
+  /* Below this the title and summary cannot share a line without one being
+     crushed, so the summary drops underneath rather than truncating.
+     
+     Deliberately reusing the existing 1000px breakpoint rather than adding a
+     fifth: the build gate caps the set at four, and it is right to. Scattered
+     breakpoints are how a responsive layout becomes impossible to reason
+     about — every extra one is another width where something might reflow. */
+  .section-title{ flex-wrap:wrap; }
+  .st-label{ width:auto; flex:1 1 auto; }
+  .sec-summary{ padding-left:24px; white-space:normal; overflow:visible;
+    text-align:left; flex-basis:100%; }
+}
+
+/* ===== Progressive gating: sections stay dimmed until they're usable ===== */
+.card.gated{ opacity:.5; position:relative; }
+.card.gated.collapsed{ opacity:1; }  /* collapsed: show the summary at full strength */
+.card.gated .sec-body{ pointer-events:none; } /* header controls stay usable */
+.card.gated:not(.collapsed)::after{ content:attr(data-gate-msg); position:absolute; left:0; right:0; top:56px; bottom:0;
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  padding:20px; background:var(--panel); opacity:.94; border-radius:8px;
+  font-family:var(--font-mono); font-size:19.0px; color:var(--cyan); pointer-events:none; }
+
+/* ===== Sticky calculate bar ===== */
+#stickyCalc{ position:fixed; left:0; right:0; bottom:0; z-index:200;
+  background:var(--panel); border-top:2px solid var(--cyan);
+  padding:11px 16px; display:none; align-items:center; justify-content:center;
+  gap:14px; flex-wrap:wrap; backdrop-filter:blur(6px); }
+#stickyCalc.show{ display:flex; }
+#stickyCalcInfo{ font-family:var(--font-mono); font-size:18.4px; color:var(--text-dim); }
+body.has-sticky{ padding-bottom:96px; }
+/* One fixed cluster instead of three independently positioned elements.
+ *
+ * Was: build badge at top 6, theme switch at 34, clock at 80 — three separate
+ * position:fixed rules, each width-sized to its own content. The two theme
+ * buttons therefore differed in width ("Carbon" is shorter than "Daylight")
+ * and the clock was a third width again, so nothing lined up on either edge.
+ *
+ * Now the cluster owns the position and the width; the children fill it.
+ *
+ * --cluster-clear is the room the hero must leave below it. The cluster is
+ * ~119px tall in practice; 136px gives that plus breathing space. The hero
+ * reads this variable rather than carrying its own number, because when these
+ * were independent the hero's 52px silently stopped being enough and the
+ * cluster landed on the title. */
+:root{ --cluster-clear:136px; }
+/* ===== TOP CLUSTER =====
+   Four rows, label left and control right, sharing one panel.
+
+   These grew one at a time — a build badge, a theme pair, a clock, then a
+   report link — each with its own shape, width and background, stacked into a
+   lopsided column in the corner. Same features, one grid, and every row now
+   says what it is rather than leaving the reader to work it out from a
+   timestamp or a pair of coloured dots.
+
+   grid-template-columns: auto 1fr — the label column sizes to the longest
+   label, the control column takes the rest, so all four controls share one
+   left edge no matter what is in them. That single alignment is what makes
+   this read as one object instead of four. */
+.top-cluster{ position:fixed; top:5px; right:11px; z-index:401;
+  display:grid; grid-template-columns:auto 1fr; column-gap:7px; row-gap:4px;
+  align-items:center;
+  /* Transparent. It sits over the hero and a panel-coloured slab in the
+     corner competes with it; the page reads better with these floating. */
+  background:none; border:0; padding:0; box-shadow:none; }
+
+/* Each row is a subgrid pair, not a box: the row exists so the label and the
+   control land in the right columns, and it must not draw anything itself. */
+.tc-row{ display:contents; }
+
+/* 17px, not 16.8. This project enforces a readability floor and the gate
+   refused the smaller size — rightly. These are labels a reader has to read,
+   not decoration. */
+/* Roughly 30% smaller than the surrounding UI. The readability floor is a
+   17px MINIMUM for body text; this is chrome sitting in a corner, not prose,
+   so it is exempted deliberately rather than by accident — see the note on
+   the floor check in verify.js. */
+.tc-label{ font-family:var(--font-mono); font-size:12px; letter-spacing:.05em;
+  color:var(--text-faint); text-align:right; white-space:nowrap; opacity:.8; }
+.tc-value{ justify-self:stretch; font-size:12.5px; }
+
+/* The build stamp is a button now, because it always was clickable — it
+   copies the version — and a div that responds to clicks is invisible to a
+   keyboard. The muted red and the glow on hover are kept. */
+/* A real button needs its browser defaults cleared or it renders as a chrome
+   button and the click target can end up smaller than the text. */
+/* font-family and size stated outright rather than font:inherit. The
+   shorthand RESETS font-size, and this element also carries .tc-value which
+   sets it — two single-class rules at equal specificity, so which one wins
+   depends on source order. Naming both here removes the coin toss. */
+.tc-build{ background:none; border:0; width:100%; padding:1px 4px;
+  font-family:var(--font-mono); font-size:12.5px; letter-spacing:.05em;
+  color:var(--build-red); opacity:1; cursor:pointer;
+  text-align:left; -webkit-appearance:none; appearance:none; }
+.tc-build:hover, .tc-build:focus-visible{
+  text-shadow:0 0 7px var(--build-red); background:rgba(255,45,85,.10); }
+
+/* Two EQUAL columns, so button width comes from the grid rather than from the
+ * length of the word inside it. 1fr each is what makes them symmetrical. */
+.theme-switch{ display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+/* Scaled with the cluster. The rule below sets 17.9px for the standalone
+   case; inside the cluster everything is ~30% down. */
+.top-cluster .theme-btn{ font-size:12.5px; padding:2px 6px; border-radius:5px; }
+.top-cluster .eve-clock{ font-size:12.5px; padding:1px 4px; }
+.top-cluster .eve-clock-time{ font-size:13px; }
+.theme-btn{ font-family:var(--font-mono); font-size:17.9px; font-weight:600; cursor:pointer;
+  background:var(--panel-raised); color:var(--text-dim);
+  border:1px solid var(--panel-border); border-radius:7px; padding:9px 15px;
+  text-align:center; white-space:nowrap;
+  box-shadow:var(--shadow); transition:transform .12s ease, box-shadow .12s ease, color .12s ease, border-color .12s ease; }
+.theme-btn:hover{ color:var(--cyan); border-color:var(--cyan); transform:translateY(-1px); }
+.theme-btn.active{ color:var(--on-accent); border-color:var(--cyan);
+  background:linear-gradient(145deg, var(--cyan), var(--magenta));
+  box-shadow:var(--shadow), var(--glow); }
+@media (max-width:760px){
+  /* The whole cluster joins the flow rather than floating over the hero. */
+  .top-cluster{ position:static; margin:8px auto 0; width:max-content;
+    align-items:center; }
+}
+.quickstart{ position:relative; z-index:1; max-width:1280px; margin:16px auto 0;
+  background:var(--panel); border:1px solid var(--panel-border); border-radius:6px; padding:0 12px; box-sizing:border-box;}
+.quickstart summary{ cursor:pointer; padding:11px 16px; font-family:var(--font-mono); font-size:19.3px;
+  letter-spacing:.5px; color:var(--cyan); user-select:none; }
+.quickstart summary:hover{ color:var(--text-strong); }
+.quickstart[open] summary{ border-bottom:1px solid var(--panel-border); }
+.quickstart-body{ padding:14px 18px 16px; font-size:19.8px; color:var(--text-dim); line-height:1.65; }
+.quickstart-body b{ color:var(--text); }
+.quickstart-body ol{ margin:10px 0 10px 18px; }
+.quickstart-body li{ margin-bottom:9px; }
+.quickstart-note{ margin-top:10px; padding-top:10px; border-top:1px solid var(--panel-border); font-size:19.3px; color:var(--text-faint); }
+footer{ text-align:center; padding:30px; color:var(--text-faint); font-family:var(--font-mono); font-size:19.0px; position:relative; z-index:1; }
+
+
+/* ===== KEYBOARD FOCUS =====
+   Previously the interface had almost no focus styling: a keyboard user had
+   no way to tell which of the 26 buttons they were on. :focus-visible keeps
+   mouse users from seeing rings while giving keyboard users a clear target. */
+:focus-visible{ outline:3px solid var(--cyan); outline-offset:2px; border-radius:4px; }
+.btn:focus-visible, .theme-btn:focus-visible, .collapse-btn:focus-visible{
+  outline:3px solid var(--amber); outline-offset:3px; }
+input:focus-visible, select:focus-visible{
+  outline:3px solid var(--cyan); outline-offset:1px; }
+summary:focus-visible{ outline:3px solid var(--cyan); outline-offset:2px; }
+/* Skip link so keyboard users can jump past the hero straight to the form. */
+.skip-link{ position:absolute; left:-9999px; top:0; z-index:600;
+  background:var(--cyan); color:var(--on-accent); padding:12px 20px;
+  font-family:var(--font-mono); font-size:17.2px; border-radius:0 0 8px 0; font-weight:700; }
+.skip-link:focus{ left:0; }
+
+/* ===== BATCH SCREENSHOT IMPORT ===== */
+.batch-panel{ background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:10px; padding:16px; margin-bottom:18px; }
+.batch-head{ margin-bottom:10px; }
+.batch-head b{ font-family:var(--font-mono); font-size:18.1px; color:var(--cyan); display:block; }
+.batch-sub{ font-size:17.2px; color:var(--text-faint); display:block; margin-top:3px; line-height:1.5; }
+.batch-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.batch-status{ margin-top:10px; font-family:var(--font-mono); font-size:17.2px; color:var(--text-dim); }
+.batch-status.busy{ color:var(--amber); }
+.batch-status.err{ color:var(--red); }
+.batch-status.ok{ color:var(--green); }
+.batch-item{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:start;
+  background:var(--panel); border:1px solid var(--panel-border); border-radius:8px;
+  padding:11px 13px; margin-top:9px; }
+.batch-item .bi-name{ font-family:var(--font-mono); font-size:17.7px; color:var(--text); }
+.batch-item .bi-meta{ font-size:17.2px; color:var(--text-faint); margin-top:3px; line-height:1.5; }
+.batch-item .bi-time{ font-family:var(--font-mono); font-size:17.2px; color:var(--amber); white-space:nowrap; }
+.batch-item .bi-warn{ color:var(--amber); font-size:17.2px; margin-top:4px; }
+.batch-item .bi-err{ color:var(--red); font-size:17.2px; margin-top:4px; }
+.batch-item.bad{ border-color:var(--red); }
+
+/* ===== DONATION: Zelle QR modal ===== */
+button.donate-btn{ font-family:var(--font-mono); }
+
+.zelle-modal{ position:fixed; inset:0; z-index:500; display:flex;
+  align-items:center; justify-content:center; padding:20px;
+  background:rgba(0,0,0,.72); }
+.zelle-modal[hidden]{ display:none; }
+.zelle-card{ position:relative; background:var(--panel-raised);
+  border:1px solid var(--cyan); border-radius:14px; padding:26px 28px 24px;
+  text-align:center; max-width:360px; width:100%; box-shadow:var(--shadow); }
+.zelle-card h3{ font-family:var(--font-display); font-size:26px; letter-spacing:.5px;
+  color:var(--cyan); text-transform:uppercase; margin-bottom:6px; }
+.zelle-card p{ font-size:17.2px; color:var(--text-dim); margin-bottom:14px; }
+/* The QR is pure black-on-white and must stay that way to scan reliably —
+   it deliberately does NOT follow the theme. The white plate guarantees the
+   quiet zone contrast a scanner needs, including in the light theme. */
+.zelle-card img{ background:#fff; padding:12px; border-radius:10px; display:block;
+  margin:0 auto 12px; image-rendering:pixelated; }
+.zelle-name{ font-family:var(--font-mono); font-size:18.1px; color:var(--text-strong);
+  letter-spacing:1.5px; margin-bottom:14px !important; }
+.zelle-close{ position:absolute; top:8px; right:12px; background:none; border:none;
+  color:var(--text-faint); font-size:28px; line-height:1; cursor:pointer; padding:4px 8px; }
+.zelle-close:hover{ color:var(--red); }
+
+/* The GoFundMe button is the campaign's primary call to action, so it gets
+   weight the other donation buttons don't. */
+.donate-btn.is-primary{ background:linear-gradient(135deg, var(--cyan), var(--green));
+  color:var(--on-accent); border-color:var(--cyan); font-weight:700;
+  box-shadow:var(--shadow), var(--glow); }
+.donate-btn.is-primary:hover{ background:linear-gradient(135deg, var(--green), var(--cyan));
+  color:var(--on-accent); border-color:var(--green); transform:translateY(-1px); }
+
+/* ===== FOOTER: OPEN SOURCE LINK ===== */
+/* ONE small-print block, replacing three.
+   The bottom of the page was a GitHub panel with its own top border, then a
+   trademark paragraph at one width, then an AI disclosure with a SECOND top
+   border at another width. Three separately-styled bodies, all saying the
+   same kind of thing. One rule, one width, one voice. */
+/* align-items:stretch, not center.
+ *
+ * On a flex column, align-items:center sizes children to their CONTENT rather
+ * than the container — so the paragraph inside was as wide as its longest
+ * line wanted to be, not as wide as the footer. Declaring width:100% on the
+ * child did not settle it either, because the flex line itself had already
+ * been sized. Stretching the children is the fix; the text is still centred
+ * by text-align. */
+.footer-legal{ margin:22px auto 0; padding-top:16px; width:100%;
+  max-width:none; box-sizing:border-box;
+  border-top:1px solid var(--panel-border);
+  display:flex; flex-direction:column; align-items:stretch; gap:10px; }
+/* The GitHub link would stretch to full width too, which is not wanted — it
+   is a button, not a banner. Centre it on its own. */
+.footer-legal .oss-link{ align-self:center; }
+
+/* ONE body of text, full page width.
+   The trademark line and the AI notice are inline spans in a single
+   paragraph now, so they flow as continuous prose instead of stacking as two
+   centred blocks at different widths. The spans keep their classes because
+   the build gate keys on them and because those two notices are the parts
+   that have to stay identifiable — but they carry no styling of their own,
+   which is what makes the paragraph read as one voice. */
+/* min-width as well as width. A flex child can still be squeezed below its
+   declared width by the line it sits on; a min-width floor cannot be. 1150 is
+   the requested minimum, dropped only when the viewport itself is narrower. */
+.footer-legal-text{ margin:0 auto; max-width:none; width:100%;
+  min-width:min(1150px, 100%);
+  text-align:center; font-family:var(--font-body); font-size:17.4px;
+  line-height:1.7; color:var(--text-faint); }
+.footer-legal-text .footer-fineprint,
+.footer-legal-text .ai-disclosure{
+  display:inline; font:inherit; color:inherit; margin:0; padding:0;
+  max-width:none; border:0; text-align:inherit; }
+.oss-link{ display:inline-flex; align-items:center; gap:9px; text-decoration:none;
+  font-family:var(--font-mono); font-size:18.1px; font-weight:600; color:var(--text-strong);
+  border:1px solid var(--panel-border); border-radius:8px; padding:10px 18px;
+  background:var(--panel-raised);
+  transition:color .15s ease, border-color .15s ease, transform .15s ease; }
+.oss-link:hover{ color:var(--cyan); border-color:var(--cyan); transform:translateY(-1px); }
+.oss-link svg{ flex-shrink:0; }
+.oss-sub{ font-size:17.2px; color:var(--text-faint); }
+
+/* ===== CHARACTER ASSIGNMENT TABLES =====
+   The previous grid rendered every resource on every planet as a stacked chain
+   line plus its own button. On a 6-planet character that was ~30 buttons of
+   mostly irrelevant chains. This is a compact table showing only what the
+   product actually uses, with the colony count the allocator assigned. */
+.gen-char-count{ float:right; font-family:var(--font-mono); font-size:17.2px;
+  color:var(--text-faint); font-weight:400; }
+.gc-role{ display:inline-block; font-family:var(--font-mono); font-size:17.1px;
+  letter-spacing:.12em; padding:2px 7px; border-radius:4px; margin-right:7px; font-weight:700; }
+.gc-role.factory{ background:rgba(255,147,224,.16); color:var(--magenta); border:1px solid var(--magenta); }
+.gc-role.extract{ background:rgba(34,232,255,.14); color:var(--cyan); border:1px solid var(--cyan); }
+.gc-role.idle{ background:var(--panel-raised); color:var(--text-faint); border:1px solid var(--panel-border); }
+
+.gc-table{ width:100%; border-collapse:collapse; margin:9px 0 4px; table-layout:fixed; }
+.gc-table th{ font-family:var(--font-mono); font-size:17.1px; color:var(--text-faint);
+  text-align:left; font-weight:600; padding:2px 6px 5px; border-bottom:1px solid var(--panel-border); }
+.gc-table td{ padding:5px 6px; vertical-align:middle; font-size:17.4px;
+  border-bottom:1px solid var(--panel-border); }
+.gc-table tr:last-child td{ border-bottom:0; }
+/* nowrap keeps a chip and its "+" together on desktop, but the character grid
+   holds the same full-name chips as the lazy panel, so on a narrow screen it
+   would clip exactly the same way. Below 760px the labels wrap instead. */
+.gc-plus{ color:var(--text-faint); margin:0 5px; font-family:var(--font-mono); }
+.gc-ar{ color:var(--text-faint); text-align:center; font-family:var(--font-mono); padding:0 3px; }
+.gc-den{ font-family:var(--font-mono); color:var(--cyan); text-align:right; white-space:nowrap; }
+.gc-col{ font-family:var(--font-mono); color:var(--amber); text-align:right; white-space:nowrap; font-weight:700; }
+.gc-btn{ text-align:right; white-space:nowrap; }
+/* A resource present on the planet but not currently allocated a colony. */
+.gc-spare td{ opacity:.62; }
+.gen-cell-idle{ opacity:.72; }
+.tpl-note{ font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint); padding:4px 0; }
+.tpl-badge{ font-family:var(--font-mono); font-size:17.1px; color:var(--green); margin-left:5px; }
+.tpl-badge.amber{ color:var(--amber); }
+@media (max-width:760px){
+  /* Density column is the least important; drop it before anything clips. */
+  .gc-table th:nth-child(4), .gc-table td:nth-child(4){ display:none; }
+  .gc-in, .gc-out{ white-space:normal; }
+  .gc-table .chip-label{ white-space:normal; word-break:break-word; }
+  .gc-table .chip-commodity{ max-width:100%; min-width:0; align-items:flex-start; }
+  .gc-table td{ padding:5px 4px; }
+}
+@media (max-width:480px){
+  /* Stack each production line so a long commodity name never squeezes the
+     colony count off the edge. */
+  .gc-table, .gc-table tbody, .gc-table tr, .gc-table td{ display:block; width:auto; }
+  .gc-table thead{ display:none; }
+  .gc-table tr{ padding:8px 0; border-bottom:1px solid var(--panel-border); }
+  .gc-table tr:last-child{ border-bottom:0; }
+  .gc-table td{ border-bottom:0; padding:2px 0; }
+  .gc-ar{ display:none; }
+  .gc-col, .gc-den{ text-align:left; }
+  .gc-btn{ text-align:left; padding-top:5px !important; }
+}
+
+/* The allocator optimises globally; that is a real strategic choice with a
+   logistics cost, so it is stated rather than silently assumed. */
+.model-note{ background:rgba(34,232,255,.07); border-left:3px solid var(--cyan);
+  padding:11px 15px; border-radius:0 7px 7px 0; margin-bottom:14px; }
+
+/* ===== BUILD VERSION BADGE =====
+   Sits in the very top-right corner, above the theme buttons. Neon red so it
+   is unmistakable when you go looking, but held at low opacity so it never
+   competes with the interface — it matters when someone files a bug report
+   and is noise every other second. Brightens and glows on hover.
+   Font stays at the 17px floor the verification suite enforces; subtlety
+   comes from opacity, not from unreadably small text. */
+/* Sits at the top of the cluster, centred over the buttons below it. Still
+   deliberately near-invisible until hovered: useful when someone reports a
+   bug, irrelevant the rest of the time. */
+/* .build-badge retired. It set opacity:.22, which is what made the version
+   nearly invisible — deliberate once, when it was a faint corner watermark,
+   but wrong now that it is a labelled row someone is meant to read and click.
+   .tc-build replaces it. */
+.build-badge{
+  font-family:var(--font-mono); letter-spacing:.06em;
+  color:var(--build-red); cursor:pointer; user-select:none;
+  padding:1px 4px; border-radius:4px; line-height:1.2;
+  transition:text-shadow .18s ease, background .18s ease;
+}
+.build-badge:hover, .build-badge:focus-visible{
+  opacity:1;
+  text-shadow:0 0 8px var(--build-red), 0 0 18px rgba(255,45,85,.55);
+  background:rgba(255,45,85,.10);
+}
+.build-badge.copied{ color:var(--green); text-shadow:0 0 8px var(--green); opacity:1; }
+
+
+/* ===== QUICK FLAT-RATE ESTIMATE ===== */
+.quickrate-panel{ background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:10px; padding:16px; margin-bottom:18px; }
+.qr-head b{ font-family:var(--font-mono); font-size:18.1px; color:var(--amber); display:block; }
+.qr-sub{ display:block; font-size:17.2px; color:var(--text-faint); margin-top:3px; line-height:1.5; }
+.qr-status{ margin-top:9px; font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint); }
+.qr-status.ok{ color:var(--green); }
+.qr-status.warn{ color:var(--amber); }
+
+
+/* ===== FINANCE PRESETS ===== */
+.fin-presets{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:12px;
+  padding-top:12px; border-top:1px solid var(--panel-border); }
+.fin-preset-label{ font-family:var(--font-mono); font-size:17.4px; color:var(--text-dim); }
+
+/* ===== LAZY P0 -> P2 ===== */
+.lazy-results{ margin-bottom:14px; }
+.lazy-results:empty{ display:none; }
+.lazy-planet{ background:var(--panel); border:1px solid var(--panel-border);
+  border-radius:9px; padding:13px 15px; margin-bottom:9px; }
+.lazy-planet.none{ border-color:var(--amber); }
+.lz-head{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-bottom:7px; }
+.lz-name{ font-family:var(--font-mono); font-size:18.4px; color:var(--text-strong); }
+.lz-meta{ font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint); }
+
+
+/* ===== LAZY P0 -> P2 : OPTION ROWS =====
+   Stacked rows rather than a six-column table. A chip is a tier badge, an icon
+   and the full commodity name; two chips per cell across six columns clipped
+   on mobile and was cramped on desktop. Two lines reflow at any width with no
+   horizontal scrolling. */
+.lz-opts{ display:flex; flex-direction:column; gap:2px; }
+.lz-opt{ padding:9px 0; border-bottom:1px solid var(--panel-border); }
+.lz-opt:last-child{ border-bottom:0; }
+.lz-opt-top{ display:flex; align-items:center; justify-content:space-between;
+  gap:10px; flex-wrap:wrap; }
+.lz-opt-from{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.lz-from-label{ font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint);
+  flex-shrink:0; }
+.lz-plus{ color:var(--text-faint); font-family:var(--font-mono); font-size:17.2px; }
+.lz-rate{ font-family:var(--font-mono); font-size:18.8px; color:var(--green);
+  font-weight:700; white-space:nowrap; margin-left:auto; }
+.lz-per{ color:var(--text-faint); font-weight:400; font-size:17.2px; }
+
+/* Chips carry the FULL commodity name, and some are long — "Genetically
+   Enhanced Livestock" is wider than a phone on its own. The label is
+   white-space:nowrap globally, so without this a single chip forces the whole
+   row wide and the panel clips.
+   min-width:0 is the part that actually matters: a flex item will not shrink
+   below its content width without it, so max-width alone does nothing. */
+.lz-opt .chip-commodity{ max-width:100%; min-width:0; }
+.lz-opt .chip-label{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+
+@media (max-width:760px){
+  .lz-opt-top{ align-items:flex-start; }
+  .lz-rate{ margin-left:0; }
+  /* WRAP rather than truncate on small screens. Ellipsising a commodity name
+     hides the one piece of information the row exists to convey; letting it
+     run onto a second line costs nothing but vertical space. */
+  .lz-opt .chip-label{ white-space:normal; overflow:visible; text-overflow:clip;
+    word-break:break-word; }
+  .lz-opt .chip-commodity{ align-items:flex-start; }
+  .lz-opt-from{ align-items:flex-start; }
+}
+@media (max-width:480px){
+  /* Give the product its own line so a long name never squeezes the rate. */
+  .lz-opt-top{ flex-direction:column; gap:4px; }
+  .lz-rate{ font-size:18.1px; }
+}
+
+/* The hover popup is positioned by JS from the cursor, so on a narrow screen
+   it can be placed partly off the edge. body has overflow-x:hidden, which
+   means the overflow is CLIPPED rather than scrollable — content simply
+   disappears. Constrain it to the viewport instead. */
+@media (max-width:760px){
+  #selectorPopup{ max-width:calc(100vw - 24px); left:12px !important; right:12px; }
+}
+
+/* ===== LAZY P2 : PER-CHARACTER ASSIGNMENT ===== */
+.lz-assign{ background:var(--panel); border:1px solid var(--panel-border);
+  border-radius:10px; padding:14px 16px; margin-top:12px; }
+.lz-assign-head{ font-family:var(--font-mono); font-size:18.4px; color:var(--amber);
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.lz-assign-total{ margin-left:auto; color:var(--green); font-weight:700; }
+.lz-assign-note{ font-size:17.2px; color:var(--text-faint); margin:5px 0 12px; line-height:1.5; }
+.lz-char{ margin-bottom:13px; }
+.lz-char:last-child{ margin-bottom:0; }
+.lz-char-head{ font-family:var(--font-mono); font-size:17.7px; color:var(--cyan);
+  padding-bottom:5px; border-bottom:1px solid var(--panel-border); margin-bottom:8px;
+  display:flex; align-items:baseline; }
+.lz-char-n{ margin-left:auto; color:var(--text-faint); font-size:17.2px; }
+.lz-char-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:8px; }
+.lz-cell{ background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:7px; padding:9px 11px; min-width:0; }
+.lz-cell.idle{ opacity:.6; }
+.lz-cell-name{ font-family:var(--font-mono); font-size:17.7px; color:var(--text-strong);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lz-cell-sub{ font-family:var(--font-mono); font-size:17.1px; color:var(--text-faint); margin-top:2px; }
+.lz-cell-out{ margin-top:6px; }
+.lz-cell-out .chip-commodity{ max-width:100%; min-width:0; }
+.lz-cell-out .chip-label{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.lz-cell-from{ font-size:17.1px; color:var(--text-faint); margin-top:4px; line-height:1.4;
+  word-break:break-word; }
+.lz-cell-rate{ font-family:var(--font-mono); font-size:17.7px; color:var(--green);
+  font-weight:700; margin-top:4px; }
+@media (max-width:760px){
+  .lz-char-grid{ grid-template-columns:1fr; }
+  .lz-assign-total{ margin-left:0; flex:1 1 100%; }
+  .lz-cell-out .chip-label{ white-space:normal; word-break:break-word; }
+  .lz-cell-name{ white-space:normal; }
+}
+
+
+/* ===== OPTIMIZATION GOAL OPTIONS =====
+   All three choices share one card style so none reads as more important than
+   the others. Equal padding, equal gaps, equal internal rhythm — the previous
+   layout had two cramped inline radios above a full-width card, which made the
+   third option look like a separate feature rather than a third choice. */
+.goal-options{ display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+.goal-option{
+  display:flex; align-items:flex-start; gap:12px; cursor:pointer;
+  background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:9px; padding:13px 15px; margin:0;
+  transition:border-color .15s ease, background .15s ease;
+}
+.goal-option:hover{ border-color:var(--amber); }
+.goal-option:focus-within{ border-color:var(--amber);
+  box-shadow:0 0 0 2px rgba(232,163,61,.22); }
+
+/* Square yellow box for BOTH radios and the checkbox. The native radio is
+   suppressed rather than hidden, so keyboard focus and the accessibility tree
+   still see a real radio in a real group — only the painting changes. */
+.goal-option input[type="radio"],
+.goal-option input[type="checkbox"]{
+  appearance:none; -webkit-appearance:none;
+  width:21px; height:21px; margin:2px 0 0; flex-shrink:0;
+  border:2px solid var(--amber); border-radius:4px;
+  background:transparent; cursor:pointer; position:relative;
+  transition:background .15s ease;
+}
+.goal-option input:checked{ background:var(--amber); }
+.goal-option input:checked::after{
+  content:''; position:absolute; left:6px; top:2px;
+  width:5px; height:10px;
+  border:solid var(--bg); border-width:0 2.5px 2.5px 0;
+  transform:rotate(45deg);
+}
+.goal-option input:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
+
+.go-body{ min-width:0; }
+.goal-option b{ font-family:var(--font-mono); font-size:18.1px; color:var(--amber);
+  display:flex; align-items:center; }
+.go-sub{ display:block; font-size:17.2px; color:var(--text-faint);
+  margin-top:4px; line-height:1.5; }
+/* The selected goal is highlighted, so the active choice is obvious at a
+   glance rather than requiring a look at the small box. */
+.goal-option:has(input:checked){ background:rgba(232,163,61,.08); border-color:var(--amber); }
+
+@media (max-width:760px){
+  .goal-option{ padding:12px 13px; gap:10px; }
+}
+
+/* Goal icons: inline SVG so they inherit the amber heading colour and stay
+   crisp at any zoom, unlike the emoji they replace. */
+.go-icon{ width:20px; height:20px; vertical-align:-4px; margin-right:8px;
+  color:var(--amber); flex-shrink:0; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VALUE FIELDS — number entry with a read-only fill bar
+   ═══════════════════════════════════════════════════════════════════════
+   Replaces every slider. The bar is a DISPLAY, not a control, which is what
+   removes the clipping problems: a range input needs a usable minimum width
+   or it becomes undraggable, so it fought every narrow container it was put
+   in. A bar has no minimum — it just gets shorter.
+
+   Structure: .val-field wraps the number input, a unit label sits inside the
+   field, and the bar is appended underneath by JS. */
+.val-field{
+  display:inline-flex; flex-direction:column; gap:5px;
+  min-width:0; max-width:100%; position:relative;
+}
+.val-field input[type="number"]{
+  width:100%; min-width:0;
+  font-family:var(--font-mono); font-size:18.4px; text-align:right;
+  background:var(--panel); color:var(--text-strong);
+  border:1px solid var(--panel-border); border-radius:6px;
+  /* Right padding must clear the unit label sitting on top of the input.
+   *
+   * It was a flat 34px, which fits "%" and nothing else. "ISK/m³" is 63px
+   * wide, so the label landed on the digit and the Shipping row rendered as
+   * "ISK0m³" — the value hidden inside its own unit.
+   *
+   * --unit-pad lets a wider unit reserve the room it actually needs. 34px
+   * stays the default, so every percentage field is unchanged. */
+  padding:7px var(--unit-pad, 34px) 7px 10px;
+  -moz-appearance:textfield; appearance:textfield;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.val-field input[type="number"]::-webkit-outer-spin-button,
+.val-field input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+.val-field input[type="number"]:hover{ border-color:var(--text-faint); }
+.val-field input[type="number"]:focus{
+  border-color:var(--cyan); outline:none;
+  box-shadow:0 0 0 2px rgba(34,232,255,.20);
+}
+/* Unit sits inside the field, vertically centred on the input row only —
+   not the whole column, or it would drift down as the bar is added. */
+.val-unit{
+  position:absolute; right:11px; top:0; height:37px;
+  display:flex; align-items:center; pointer-events:none;
+  font-family:var(--font-mono); font-size:17.4px; color:var(--text-faint);
+}
+.val-bar{
+  height:6px; border-radius:3px; overflow:hidden;
+  background:var(--panel-border); width:100%;
+}
+.val-bar-fill{
+  height:100%; width:0%; border-radius:3px;
+  background:linear-gradient(90deg, var(--cyan), var(--magenta));
+  transition:width .12s ease-out;
+}
+
+/* ── settings table ────────────────────────────────────────────────── */
+.slider-table{ width:100%; border-collapse:separate; border-spacing:0 4px; table-layout:fixed; }
+.slider-table .st-label{
+  width:auto; padding:8px 14px 8px 0; white-space:normal;
+  font-family:var(--font-mono); font-size:18.4px; color:var(--text-dim);
+  vertical-align:middle; line-height:1.4;
+}
+.slider-table .st-slider{ width:190px; padding:6px 0; vertical-align:middle; }
+.slider-table .st-slider .val-field{ width:100%; }
+
+/* ── per-resource density rows ─────────────────────────────────────── */
+.slider-row{
+  display:grid; grid-template-columns:24px minmax(0,1fr) 128px;
+  align-items:center; gap:11px; padding:7px 0;
+  border-bottom:1px solid var(--panel-border);
+}
+.slider-row:last-child{ border-bottom:0; }
+.slider-row .res-name{
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:18.1px;
+}
+.slider-row .val-field{ width:128px; }
+
+/* ── quick flat-rate row ───────────────────────────────────────────── */
+.qr-row{ display:flex; align-items:flex-end; gap:11px; flex-wrap:wrap; margin-top:11px; }
+.qr-row label{ align-self:center; font-family:var(--font-mono); font-size:17.4px; color:var(--text-dim); }
+.qr-row .val-field{ width:130px; }
+
+/* ── mobile ───────────────────────────────────────────────────────── */
+@media (max-width:760px){
+  /* Settings become stacked blocks: a label and a value column cannot both
+     be readable in ~340px. */
+  .slider-table, .slider-table tbody, .slider-table tr, .slider-table td{
+    display:block; width:auto;
+  }
+  .slider-table tr{ padding:10px 0; border-bottom:1px solid var(--panel-border); }
+  .slider-table tr:last-child{ border-bottom:0; }
+  .slider-table .st-label{ padding:0 0 7px; }
+  .slider-table .st-slider{ width:100%; padding:0; }
+
+  /* Resource name gets its own line so a long name never squeezes the field. */
+  .slider-row{ grid-template-columns:24px minmax(0,1fr); grid-auto-rows:min-content; row-gap:6px; }
+  .slider-row .val-field{ width:100%; grid-column:1 / -1; }
+  .slider-row .res-name{ white-space:normal; }
+
+  .qr-row .val-field{ width:100%; }
+  .qr-row .btn{ flex:1 1 auto; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LAYOUT HARDENING — the rules that actually prevent clipping
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* A flex or grid child will NOT shrink below its content width without
+   min-width:0. That single default is the cause of most clipping in this
+   file: 48 flex/grid containers existed against 16 min-width:0 declarations,
+   so any container holding a long commodity name pushed past its bounds.
+   body has overflow-x:hidden, which means that overflow was CLIPPED rather
+   than scrollable — silent data loss. Setting the sane default once beats
+   discovering it container by container. */
+.form-row > *, .qr-row > *, .gc-table td, .lz-opt > *,
+.goal-option > *, .slider-row > *, .fin-presets > *,
+.gen-planet-row > *, .lz-char-grid > *{ min-width:0; }
+
+/* Long unbroken commodity and system names must wrap rather than overflow.
+   "Genetically Enhanced Livestock" is wider than a phone on its own. */
+.res-name, .gc-name, .lz-name, .lz-cell-name, .chip-label,
+.result-name, .st-label{ overflow-wrap:anywhere; }
+
+/* Tooltips are absolutely positioned from their trigger, so on a narrow
+   screen they can be placed partly off the edge — and with overflow-x hidden
+   that content simply disappears rather than being reachable by scrolling. */
+@media (max-width:480px){
+  .hint .hint-body{ width:auto; max-width:calc(100vw - 28px); right:0; left:auto; }
+}
+
+/* Anything that scrolls horizontally should do so deliberately and visibly,
+   rather than being clipped by the body rule. */
+
+/* Cards must never be able to push the page sideways. */
+.card, section.card, .system-card, .planet-card{ max-width:100%; min-width:0; }
+
+/* ===== FINANCE PRESETS + DISCLAIMER ===== */
+.preset-btn.active{ border-color:var(--cyan); color:var(--cyan);
+  background:rgba(34,232,255,.10); }
+.fin-preset-note{ font-size:17.2px; color:var(--text-faint); line-height:1.55;
+  margin-top:10px; }
+.fin-preset-note b{ color:var(--cyan); }
+.fin-disclaimer{ background:rgba(232,163,61,.08); border-left:3px solid var(--amber);
+  padding:12px 15px; border-radius:0 7px 7px 0; margin-top:12px;
+  font-size:17.4px; color:var(--text-dim); line-height:1.6; }
+.fin-disclaimer b{ color:var(--amber); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HERO JUMP BUTTONS + BOTTOM PANELS
+   ═══════════════════════════════════════════════════════════════════════ */
+/* The hero stats are buttons now, but they must look EXACTLY as they did as
+   plain cells. The bar is a seamless segmented strip: a 1px grid gap over a
+   border-coloured background makes the hairline dividers, and each cell fills
+   with var(--panel). An earlier version of this rule set background:none with
+   its own border and radius, which broke the strip into floating boxes and
+   changed the padding. Everything geometric is inherited from .hstat; only
+   interaction is added. */
+button.hstat{
+  font:inherit; color:inherit; border:0; margin:0;
+  cursor:pointer; width:100%;
+  -webkit-appearance:none; appearance:none;
+  transition:background .15s ease;
+}
+button.hstat:hover{ background:var(--panel-raised); }
+button.hstat:hover b{ color:var(--cyan-bright, var(--cyan)); }
+button.hstat:focus-visible{ outline:2px solid var(--cyan); outline-offset:-3px; }
+/* Brief highlight so it is obvious which panel a jump opened. */
+.jump-flash{ animation:jumpflash 1.2s ease-out; }
+@keyframes jumpflash{ 0%{ box-shadow:0 0 0 3px var(--cyan); } 100%{ box-shadow:0 0 0 0 transparent; } }
+
+.tab-row{ display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+.tab-btn{ background:var(--panel-raised); border:1px solid var(--panel-border);
+  color:var(--text-dim); border-radius:7px 7px 0 0; padding:9px 15px; cursor:pointer;
+  font-family:var(--font-mono); font-size:17.7px; }
+.tab-btn.active{ border-color:var(--cyan); color:var(--cyan); background:rgba(34,232,255,.08); }
+
+.chart-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; }
+.chart-controls select, .chart-controls input[type="text"]{
+  background:var(--panel); color:var(--text); border:1px solid var(--panel-border);
+  border-radius:6px; padding:7px 10px; font-size:17.7px; min-width:0; max-width:100%; }
+.chart-filter, .chart-scale{ font-family:var(--font-mono); font-size:17.4px; color:var(--text-faint); }
+.chart-scale label{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+.chart-status{ font-family:var(--font-mono); font-size:17.4px; color:var(--text-faint);
+  padding:7px 0; line-height:1.5; }
+.chart-status.ok{ color:var(--green); } .chart-status.warn{ color:var(--amber); }
+.chart-status.err{ color:var(--red); }
+.chart-wrap{ width:100%; overflow-x:auto; background:var(--panel);
+  border:1px solid var(--panel-border); border-radius:9px; padding:8px; }
+.chart-wrap svg{ width:100%; min-width:520px; height:auto; display:block; }
+
+.chart-legend{ display:flex; flex-wrap:wrap; gap:5px; margin-top:11px;
+  max-height:230px; overflow-y:auto; padding:3px; }
+.lg-item{ display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+  background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:5px; padding:4px 9px; font-size:17.1px; color:var(--text);
+  max-width:100%; min-width:0; }
+.lg-item:hover{ border-color:var(--cyan); }
+.lg-item.off{ opacity:.38; }
+.lg-item.off .lg-swatch{ background:var(--text-faint) !important; }
+.lg-swatch{ width:11px; height:11px; border-radius:2px; flex-shrink:0; }
+.lg-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── template library ── */
+.tpl-group{ margin-bottom:20px; }
+/* The group heading doubles as the fold control, so it has to look pressable
+   without becoming a button — the marker and the hover state do that. */
+.tpl-group-title{ font-family:var(--font-display); font-size:22px; color:var(--cyan);
+  margin-bottom:3px; display:flex; align-items:baseline; gap:8px;
+  cursor:pointer; list-style:none; padding:7px 0;
+  border-bottom:1px solid transparent; transition:border-color .14s ease; }
+.tpl-group-title:hover{ border-bottom-color:var(--cyan-dim); }
+.tpl-group-title::-webkit-details-marker{ display:none; }
+/* Own marker rather than the browser's, which sits oddly against a flex row
+   and cannot be coloured. Rotates when the group opens. */
+.tpl-group-title::before{ content:'\25b8'; display:inline-block; flex-shrink:0;
+  transition:transform .16s ease; color:var(--cyan-dim); }
+details[open] > .tpl-group-title::before{ transform:rotate(90deg); }
+.tpl-group-title:focus-visible{ outline:2px solid var(--cyan); outline-offset:3px; }
+.tpl-group-n{ font-family:var(--font-mono); font-size:17.4px; color:var(--text-faint); }
+.tpl-group-note{ font-size:17.2px; color:var(--text-faint); margin-bottom:9px; line-height:1.5; }
+.tpl-list{ display:flex; flex-direction:column; gap:2px; }
+.tpl-row{ display:flex; align-items:center; gap:11px; padding:8px 0;
+  border-bottom:1px solid var(--panel-border); }
+.tpl-row:last-child{ border-bottom:0; }
+.tpl-info{ flex:1 1 auto; min-width:0; }
+.tpl-name{ font-family:var(--font-mono); font-size:18.1px; color:var(--text-strong);
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tpl-sub{ font-size:17.2px; color:var(--text-faint); margin-top:2px; overflow-wrap:anywhere; }
+
+/* AUTHOR CREDIT, in the green the old badge used.
+ *
+ * When the confidence badges went, so did the only green on these rows — and
+ * the credit links inherited .tpl-sub's faint grey, which made the one piece
+ * of information these authors are owed the least visible thing in the row.
+ *
+ * Green because it was already the language of this list, underlined because a
+ * credit that does not look clickable is not really a link to the source. */
+.tpl-credit{ font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint); }
+.tpl-credit a{ color:var(--green); text-decoration:underline;
+  text-decoration-color:color-mix(in srgb, var(--green) 45%, transparent);
+  text-underline-offset:2px; }
+.tpl-credit a:hover{ color:var(--text-strong);
+  text-decoration-color:var(--text-strong); }
+.tpl-credit a:focus-visible{ outline:2px solid var(--green); outline-offset:2px;
+  border-radius:2px; }
+/* The word between two names, kept quiet so the names carry the row. */
+.tpl-credit .tc-amp{ color:var(--text-faint); }
+.tpl-badge.ok{ color:var(--green); }
+.tpl-copy{ flex-shrink:0; }
+.tpl-copy.copied{ border-color:var(--green); color:var(--green); }
+.tpl-count{ font-family:var(--font-mono); font-size:17.4px; color:var(--text-faint); }
+
+/* ── status panel ── */
+.status-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:11px; }
+.stat-card{ display:flex; align-items:flex-start; gap:11px; padding:14px 15px;
+  background:var(--panel); border:1px solid var(--panel-border); border-radius:9px; min-width:0; }
+.stat-dot{ width:13px; height:13px; border-radius:50%; flex-shrink:0; margin-top:4px;
+  background:var(--text-faint); }
+.stat-card.good .stat-dot{ background:var(--green); box-shadow:0 0 9px var(--green); }
+.stat-card.warn .stat-dot{ background:var(--amber); box-shadow:0 0 9px var(--amber); }
+.stat-card.bad .stat-dot{ background:var(--red); box-shadow:0 0 9px var(--red); }
+.stat-card.good{ border-color:var(--green); } .stat-card.bad{ border-color:var(--red); }
+.stat-card.warn{ border-color:var(--amber); }
+.stat-card.self{ border-color:var(--magenta); }
+.stat-label{ font-family:var(--font-mono); font-size:18.4px; color:var(--text-strong); }
+.stat-detail{ font-size:17.2px; color:var(--text-faint); margin-top:3px; line-height:1.5;
+  overflow-wrap:anywhere; }
+/* Deliberately unreliable: the hero claims it works MOST of the time, and a
+   steady green light would undercut the joke. */
+.stat-dot.flicker{ background:var(--magenta); animation:flick 3.1s infinite steps(1); }
+@keyframes flick{
+  0%,42%{ opacity:1; box-shadow:0 0 9px var(--magenta); }
+  43%,45%{ opacity:.15; box-shadow:none; }
+  46%,71%{ opacity:1; box-shadow:0 0 9px var(--magenta); }
+  72%,73%{ opacity:.2; box-shadow:none; }
+  74%,88%{ opacity:1; box-shadow:0 0 9px var(--magenta); }
+  89%,91%{ opacity:.1; box-shadow:none; }
+  92%,100%{ opacity:1; box-shadow:0 0 9px var(--magenta); }
+}
+@media (prefers-reduced-motion: reduce){
+  .stat-dot.flicker{ animation:none; opacity:1; }
+  .jump-flash{ animation:none; }
+}
+@media (max-width:760px){
+  .chart-legend{ max-height:180px; }
+  .tpl-row{ flex-wrap:wrap; }
+  .tpl-copy{ width:100%; }
+}
+
+/* ===== EVE TIME CLOCK =====
+   Sits directly under the theme switcher, matching its right edge. Cyan and
+   monospaced so the digits do not shift width as they change. */
+.eve-clock{
+  /* Sits under the theme buttons in the same cluster, spanning their combined
+     width so all three rows share one right edge and one left edge. Contents
+     are centred rather than left-packed, so the clock reads as the base of a
+     symmetrical stack instead of a third floating element. */
+  display:flex; align-items:center; justify-content:center; gap:7px;
+  font-family:var(--font-mono); color:var(--cyan);
+  background:var(--panel); border:1px solid var(--cyan-dim);
+  border-radius:7px; padding:5px 11px;
+  box-shadow:0 2px 10px rgba(0,0,0,.28);
+}
+/* The clock's own label is gone: the grid's left column says "EVE time", and
+   repeating it inside the value would be the same word twice on one row. */
+.eve-clock-label{ display:none; }
+.eve-clock-time{ font-size:19.3px; font-weight:700; font-variant-numeric:tabular-nums; }
+
+/* Inside .footer-legal now, so it drops its own border and width — that
+   second horizontal rule was what made it read as a fourth section rather
+   than the last line of the small print. */
+.ai-disclosure{
+  margin:10px auto 0; max-width:none; text-align:center;
+  font-size:17.4px; line-height:1.65; color:var(--text-dim);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COLLAPSIBLE SYSTEM AND PLANET CARDS
+   ═══════════════════════════════════════════════════════════════════════
+   Only the BODY folds; the header keeps the name, type and remove button
+   visible so a collapsed card stays identifiable and removable without
+   having to expand it first. */
+.card-collapse{
+  background:var(--panel); color:var(--text-dim);
+  border:1px solid var(--panel-border); border-radius:6px;
+  width:32px; height:32px; flex-shrink:0; cursor:pointer;
+  font-size:17.1px; line-height:1; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  transition:color .15s ease, border-color .15s ease;
+}
+.card-collapse:hover{ color:var(--cyan); border-color:var(--cyan); }
+.card-collapse:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
+.card-collapsed > .card-body{ display:none; }
+/* A collapsed card reads as a compact row rather than a box with a gap in it. */
+.card-collapsed{ padding-bottom:10px; }
+.system-card.card-collapsed .system-card-head,
+.planet-card.card-collapsed .planet-card-head{ margin-bottom:0; }
+
+.system-tools{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+
+@media (max-width:760px){
+  /* Card headers stack: a name field, a type select and two buttons cannot
+     share one row at phone width without the name becoming unusable. */
+  .planet-card-head, .system-card-head{ flex-wrap:wrap; row-gap:8px; }
+  .planet-card-head .planet-name-input,
+  .system-card-head .system-name-wrap{ flex:1 1 100%; order:1; min-width:0; }
+  .planet-card-head .planet-type-select{ flex:1 1 auto; order:2; min-width:0; }
+  .planet-card-head .card-collapse,
+  .system-card-head .card-collapse{ order:3; }
+  .planet-card-head .remove-planet-btn,
+  .system-card-head .remove-planet-btn{ order:4; flex:0 0 auto; }
+  .system-tools .btn{ flex:1 1 auto; }
+}
+
+/* ===== PER-CHARACTER ROWS WITH NAMES ===== */
+.per-char-row{ display:grid; grid-template-columns:auto minmax(0,1fr) 84px;
+  align-items:center; gap:8px; padding:5px 0; }
+.per-char-row .pc-label{ font-family:var(--font-mono); font-size:17.4px;
+  color:var(--text-faint); white-space:nowrap; }
+.per-char-row .pc-name{ min-width:0; width:100%;
+  background:var(--panel); color:var(--text); border:1px solid var(--panel-border);
+  border-radius:6px; padding:6px 9px; font-size:17.7px; }
+.per-char-row .pc-name:focus{ border-color:var(--cyan); outline:none;
+  box-shadow:0 0 0 2px rgba(34,232,255,.18); }
+.per-char-row .pc-planets{ width:100%; min-width:0; text-align:right;
+  font-family:var(--font-mono); font-size:17.7px;
+  background:var(--panel); color:var(--text-strong);
+  border:1px solid var(--panel-border); border-radius:6px; padding:6px 8px;
+  -moz-appearance:textfield; appearance:textfield; }
+.per-char-row .pc-planets::-webkit-outer-spin-button,
+.per-char-row .pc-planets::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+@media (max-width:760px){
+  /* The name gets the full width on its own row; label and count share the next. */
+  .per-char-row{ grid-template-columns:minmax(0,1fr) 84px; row-gap:5px; }
+  .per-char-row .pc-name{ grid-column:1 / -1; order:-1; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHARACTER GRID — CONDENSED CELLS
+   ═══════════════════════════════════════════════════════════════════════
+   Cells used to render every commodity as a full chip: tier badge, 16px icon
+   and full name. A seven-step factory chain came to 22 icons in one
+   card-width cell, which collided and made the grid unreadable. Commodities
+   are now plain text with one tier badge per row, and templates are icon-only
+   buttons naming their target in the tooltip. */
+.gc-table-ext{ table-layout:fixed; }
+.gc-step-tier{ width:46px; vertical-align:top; }
+.gc-step{ font-size:17.4px; line-height:1.45; overflow-wrap:anywhere; }
+.gc-step b{ color:var(--text-strong); }
+.gc-res{ font-size:17.4px; overflow-wrap:anywhere; }
+.gc-res b{ color:var(--text-strong); }
+
+.tier-badge{ display:inline-block; font-family:var(--font-mono); font-size:17.1px;
+  padding:1px 6px; border-radius:4px; line-height:1.3; white-space:nowrap; }
+.tier-badge.p0{ background:rgba(139,148,158,.18); color:var(--text-dim); }
+.tier-badge.p1{ background:rgba(34,232,255,.16);  color:var(--cyan); }
+.tier-badge.p2{ background:rgba(63,185,80,.16);   color:var(--green); }
+.tier-badge.p3{ background:rgba(255,194,51,.16);  color:var(--amber); }
+.tier-badge.p4{ background:rgba(255,147,224,.16); color:var(--magenta); }
+
+.icon-btn{ background:var(--panel-raised); color:var(--text-dim);
+  border:1px solid var(--panel-border); border-radius:5px;
+  padding:4px 8px; cursor:pointer; font-size:17.4px; line-height:1;
+  white-space:nowrap; }
+.icon-btn:hover{ color:var(--cyan); border-color:var(--cyan); }
+.icon-btn.copied{ color:var(--green); border-color:var(--green); }
+
+/* A character with no planets states it, rather than rendering an empty block
+   that looks like a rendering failure. */
+.gen-planet-row:empty::after{
+  content:'No planets left to assign \2014 more character slots than planets.';
+  display:block; font-size:17.2px; color:var(--text-faint); padding:8px 0;
+}
+
+/* ===== USEFUL ALTERNATIVE FOCUSES ===== */
+.alt-note{ margin-top:9px; padding:11px 13px; background:var(--panel);
+  border:1px solid var(--panel-border); border-radius:8px;
+  font-size:17.4px; line-height:1.6; color:var(--text-dim); }
+.alt-note b{ color:var(--text-strong); }
+.alt-pi{ color:var(--cyan); font-family:var(--font-mono); font-size:17.2px; }
+.alt-buy{ color:var(--amber); font-family:var(--font-mono); font-size:17.2px; }
+#altPickerRow select{ max-width:100%; min-width:0; }
+
+/* ===== PRODUCT MIX (v8 engine, stage 2) ===== */
+.mix-strip{ margin-top:14px; padding:14px 15px; background:var(--panel);
+  border:1px solid var(--panel-border); border-radius:9px; }
+.mix-head{ font-family:var(--font-mono); font-size:18.4px; color:var(--text-strong);
+  margin-bottom:9px; }
+.mix-sub{ font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint); }
+.mix-rows{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:8px; margin-bottom:11px; }
+.mix-row{ display:grid; grid-template-columns:minmax(0,1fr) 96px 34px;
+  align-items:center; gap:9px; }
+.mix-name{ min-width:0; overflow-wrap:anywhere; font-size:17.7px; }
+.mix-row .val-field{ width:96px; }
+.add-mix-btn{ flex-shrink:0; align-self:center; margin-left:8px; }
+.mix-result{ margin-top:16px; }
+@media (max-width:760px){
+  .mix-row{ grid-template-columns:minmax(0,1fr) 84px 34px; }
+}
+
+/* ===== THE PLAN DASHBOARD ===== */
+.dash-disclosures{ background:rgba(232,163,61,.10); border-left:3px solid var(--amber);
+  padding:11px 14px; border-radius:0 7px 7px 0; margin-bottom:12px;
+  font-size:17.4px; line-height:1.6; color:var(--text-dim); }
+.dash-summary{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:8px; margin-bottom:12px; }
+.dash-stat{ background:var(--panel); border:1px solid var(--panel-border);
+  border-radius:9px; padding:9px 13px; min-width:0; }
+.dash-stat .label{ font-family:var(--font-mono); font-size:17.2px; color:var(--text-faint); }
+.dash-stat .value{ font-family:var(--font-display); font-size:26px; color:var(--cyan);
+  margin-top:1px; overflow-wrap:anywhere; line-height:1.15; }
+.dash-stat .unit{ font-size:17.4px; color:var(--text-faint); font-family:var(--font-mono); }
+.dash-limit{ font-size:18.4px !important; color:var(--amber) !important; }
+
+/* Characters sit side by side ONLY when there is genuinely room.
+ *
+ * The floor was 340px, chosen by reasoning about the planet name and role
+ * badge — and wrong, because this is a seven-column table, not a narrow card.
+ * At 340px each block got 429px while its table needed 468px: it overflowed,
+ * the Template column was clipped off, and "Broadcast Node" wrapped to
+ * "Broa / dcas / t / Nod / e".
+ *
+ * 700px is measured, not guessed: below that the columns cannot hold their
+ * content without breaking words. On a wide monitor two blocks still fit
+ * side by side; on anything narrower they stack full-width and stay
+ * readable, which is the right trade. */
+.dash-chars{ display:grid; grid-template-columns:repeat(auto-fill,minmax(700px,1fr));
+  gap:10px; align-items:start; }
+.dash-char{ background:var(--panel); border:1px solid var(--panel-border);
+  border-radius:9px; padding:10px 12px; min-width:0; }
+.dash-char-head{ font-family:var(--font-mono); font-size:19px; color:var(--text-strong);
+  margin-bottom:5px; display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
+.dash-char-sub{ font-size:17.2px; color:var(--text-faint); }
+
+.dash-table{ width:100%; border-collapse:collapse; table-layout:auto; }
+/* The header repeats once per character block. At 28 characters that is 29
+ * headers for 135 rows — pure noise once you have read it the first time. It
+ * stays in the markup for screen readers and for a single-character plan, but
+ * is visually suppressed after the first block. */
+.dash-table th{ text-align:left; font-family:var(--font-mono); font-size:17.2px;
+  color:var(--text-faint); font-weight:normal; padding:3px 8px 3px 0;
+  border-bottom:1px solid var(--panel-border); white-space:nowrap; }
+.dash-char:not(:first-child) .dash-table thead{
+  position:absolute; width:1px; height:1px; overflow:hidden;
+  clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
+.dash-table td{ padding:4px 8px 4px 0; font-size:17.7px; vertical-align:top;
+  border-bottom:1px solid var(--panel-border); min-width:0; line-height:1.35; }
+.dash-table tr:last-child td{ border-bottom:0; }
+.dc-order{ color:var(--text-faint); font-family:var(--font-mono); width:26px; }
+.dc-planet{ overflow-wrap:anywhere; }
+.dc-sub{ display:block; font-size:17.1px; color:var(--text-faint); }
+.dc-summary{ overflow-wrap:anywhere; }
+.dc-role{ display:inline-block; font-family:var(--font-mono); font-size:17.1px;
+  padding:1px 7px; border-radius:4px; white-space:nowrap; }
+.dc-extract{ background:rgba(34,232,255,.16); color:var(--cyan); }
+.dc-factory{ background:rgba(63,185,80,.16); color:var(--green); }
+.dc-p4-assembly{ background:rgba(255,147,224,.16); color:var(--magenta); }
+.dc-ok{ color:var(--green); font-family:var(--font-mono); font-size:17.1px; }
+.dc-warn{ color:var(--amber); font-family:var(--font-mono); font-size:17.1px; }
+.dc-tpl{ white-space:nowrap; }
+/* max-width:220px was set when each character card was full-width. In a
+ * multi-column grid the column itself is often narrower than that, so a fixed
+ * ceiling either overflows its cell or reserves width nothing uses. Letting it
+ * fill the cell and wrap is correct at every width. */
+.dc-tpl-label{ display:block; font-size:17.1px; color:var(--text-faint);
+  white-space:normal; max-width:100%; overflow-wrap:anywhere; }
+.dash-block{ margin-top:14px; }
+
+@media (max-width:760px){
+  /* Each colony becomes a stacked block: six columns cannot share a phone. */
+  .dash-table, .dash-table tbody, .dash-table tr, .dash-table td{ display:block; width:auto; }
+  .dash-table thead{ display:none; }
+  .dash-table tr{ padding:9px 0; border-bottom:1px solid var(--panel-border); }
+  .dash-table td{ border-bottom:0; padding:2px 0; }
+  .dc-order{ display:none; }
+  .dc-tpl-label{ max-width:none; }
+}
+
+/* ===== SETUP-COMPLETE TICKS ON THE PLAN DASHBOARD =====
+   Working through a 28-character plan in-game means the rows you have already
+   done are the ones in your way. Ticking collapses them; unticking brings them
+   back in full. Reversible by design — a mark you cannot clear is one people
+   are afraid to set. */
+.dc-check{ width:26px; padding-right:4px !important; }
+/* 26px hit area, not 20. This is the control a user taps once per colony —
+   165 times on a full plan — and 20px is below the 24px minimum for a
+   comfortable target. The tick itself stays 18px; the label around it grows,
+   so the visual weight is unchanged and only the tappable area increases. */
+.done-box{ display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:26px; cursor:pointer; position:relative; }
+.done-box input{ position:absolute; opacity:0; width:100%; height:100%;
+  margin:0; cursor:pointer; }
+.done-tick{ display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; border:1px solid var(--panel-border);
+  border-radius:4px; background:var(--panel-raised);
+  color:transparent; font-size:17px; line-height:1;
+  transition:background .12s ease, border-color .12s ease, color .12s ease; }
+.done-box:hover .done-tick{ border-color:var(--green); }
+.done-box input:focus-visible + .done-tick{ outline:2px solid var(--cyan); outline-offset:2px; }
+.done-box input:checked + .done-tick{ background:var(--green);
+  border-color:var(--green); color:var(--on-accent); }
+
+/* A finished row keeps its planet name and its tick — enough to see what is
+   done and to undo it — and drops the detail you no longer need. */
+.dash-table tr.row-done td{ opacity:.5; }
+.dash-table tr.row-done .dc-role,
+.dash-table tr.row-done .dc-summary,
+.dash-table tr.row-done .dc-density,
+.dash-table tr.row-done .dc-tpl{ display:none; }
+.dash-table tr.row-done .dc-planet{ text-decoration:line-through;
+  text-decoration-color:var(--green); }
+.dash-table tr.row-done .dc-sub{ display:none; }
+.dash-table tr.row-done .dc-check{ opacity:1; }
+
+/* A finished character collapses to its header alone.
+ *
+ * No ::after label here: the progress line already reads "6 of 6 set up", and
+ * adding one produced "6 of 6 set up set up" on screen. The strike-through,
+ * the green border and the tick already say completed. */
+.dash-char.char-done{ border-color:var(--green); opacity:.75; }
+.dash-char.char-done .dash-table{ display:none; }
+.dash-char.char-done .dash-char-name{ text-decoration:line-through;
+  text-decoration-color:var(--green); }
+.dash-char-name{ overflow-wrap:anywhere; }
+.dash-char-progress{ font-size:17.1px; color:var(--text-faint);
+  font-family:var(--font-mono); margin-left:auto; }
+@media (max-width:760px){
+  /* The stacked layout hides thead, so the tick needs to stay visible as its
+     own line rather than relying on a column that no longer exists. */
+  .dash-table tr.row-done .dc-check{ display:block; }
+}
+
+/* ===== QOL VISIT INTERVAL =====
+   The input QOL Goal Focus was always described around. The note beside it
+   states the yield cost while you type: a longer gap means fewer logins and
+   less yield per hour, and letting that surface only after calculating would
+   make the lazy option look free. */
+#qolIntervalRow{ margin-top:11px; }
+#qolIntervalRow .qr-row{ display:flex; align-items:center; gap:12px;
+  flex-wrap:wrap; margin-bottom:6px; }
+#qolIntervalRow .val-field{ width:150px; flex-shrink:0; }
+.qol-interval-note{ font-family:var(--font-mono); font-size:17.4px;
+  color:var(--text-dim); min-width:0; overflow-wrap:anywhere; }
+.qol-interval-note b{ color:var(--text-strong); }
+.qol-ok{ color:var(--green); }
+/* Amber, not red: a reduced yield is a deliberate trade, not an error. */
+.qol-cost{ color:var(--amber); }
+@media (max-width:480px){
+  #qolIntervalRow .val-field{ width:100%; }
+}
+
+/* ===== AUTOSAVE =====
+   A quiet reassurance line, not a banner. It should be findable when someone
+   wonders "did that save?" and invisible the rest of the time. */
+.autosave-status{ font-family:var(--font-mono); font-size:17.1px;
+  color:var(--text-faint); margin-top:5px; min-height:1.2em; }
+.autosave-status.ok::before{ content:'\2713\00a0'; color:var(--green); }
+
+/* The restore offer. Amber rather than green: it is asking a question, not
+   confirming something good happened. */
+.autosave-restore{ display:flex; align-items:center; gap:11px; flex-wrap:wrap;
+  margin-top:9px; padding:10px 13px; border-radius:8px;
+  background:var(--panel); border:1px solid var(--amber);
+  font-size:17.7px; color:var(--text); max-width:100%; }
+.autosave-restore .btn{ flex-shrink:0; }
+.autosave-restore[hidden]{ display:none; }
+@media (max-width:560px){
+  .autosave-restore{ flex-direction:column; align-items:stretch; }
+}
+
+/* ===== ACCESSIBILITY =====
+   .skip-link is styled further up. That rule has existed for a long time with
+   NO markup using it — the styling for a feature that was never actually on
+   the page. The anchor now exists, so it finally does something. */
+#main:focus{ outline:none; }   /* focused programmatically by the skip link */
+
+/* Announced but never displayed. clip-path rather than display:none, which
+   would remove it from the accessibility tree entirely — the exact opposite
+   of what a live region needs. */
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
+  border:0; }
+
+/* ===== 1. HOW DO YOU WANT TO PLAN? =====
+   A fork, presented as two equal choices rather than a default with an
+   alternative. Both are legitimate ways in and neither is the "advanced" one. */
+.plan-modes{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:11px; margin-bottom:14px; }
+.plan-mode{ display:flex; gap:11px; align-items:flex-start; cursor:pointer;
+  padding:13px 15px; border:1px solid var(--panel-border); border-radius:9px;
+  background:var(--panel); transition:border-color .14s ease, background .14s ease; }
+.plan-mode:hover{ border-color:var(--cyan); }
+.plan-mode:has(input:checked){ border-color:var(--cyan); background:var(--panel-raised); }
+.plan-mode input{ margin-top:4px; flex-shrink:0; }
+.pm-body{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+/* Caps so the two choices read as headings rather than sentences — they are
+   the primary decision on the page. text-transform rather than typing them in
+   caps, so the markup and the accessibility tree keep normal casing. */
+.pm-body b{ color:var(--text-strong); font-size:18.8px;
+  text-transform:uppercase; letter-spacing:.5px; }
+.pm-sub{ font-size:17.4px; color:var(--text-dim); overflow-wrap:anywhere; }
+.pm-steps{ font-family:var(--font-mono); font-size:17.1px; color:var(--text-faint); }
+
+.quota-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:12px; margin-bottom:12px; }
+.quota-select{ width:100%; font-family:var(--font-mono); font-size:18.4px;
+  padding:8px 10px; border-radius:6px; background:var(--panel);
+  color:var(--text-strong); border:1px solid var(--panel-border); }
+.quota-results{ margin-top:15px; }
+.quota-results:empty{ margin-top:0; }
+
+/* The range leads the answer. Amber because it is a caveat, not a result. */
+.quota-range{ margin:11px 0; padding:10px 13px; border-radius:8px;
+  background:var(--panel); border-left:3px solid var(--amber);
+  font-size:17.7px; color:var(--text); }
+
+.quota-hunt{ margin:13px 0; padding:11px 15px; border-radius:8px;
+  background:var(--panel); border:1px solid var(--panel-border); }
+.quota-hunt ul{ margin:7px 0 0; padding-left:19px; }
+.quota-hunt li{ font-size:17.7px; margin-bottom:3px; }
+
+/* The alternatives, dimmer than the first choice but present. A player who
+   cannot find a Lava planet needs to see that Plasma also works. */
+.qt-alt{ font-size:17.1px; color:var(--text-faint); font-family:var(--font-mono); }
+
+/* ===== INLINE QUICKSTART =====
+   The same box as the hero one, but sitting between cards inside main rather
+   than in the hero. It needs to fill the column it is in, not carry the hero's
+   1040px cap, and it needs the margin below that a card would have. */
+.quickstart-inline{ max-width:100%; margin:0 0 22px; }
+/* Nested lists inside the steps: the three goal choices sit under step one. */
+.quickstart-body ul{ margin:7px 0 4px 18px; }
+.quickstart-body ul li{ margin-bottom:5px; }
+
+/* ===== EXPLAIN EVERY DETAIL =====
+   Deliberately a different colour from the blue quickstart boxes. Those answer
+   "what do I do here"; this answers "why, and show me the arithmetic". Someone
+   opening it has already decided they want the long version, so it can be
+   dense — but it must not look like another quickstart or people will open it
+   expecting a summary. */
+.explain-all{ margin:0 0 14px; border:1px solid var(--amber-dim);
+  border-radius:8px; background:var(--panel); }
+.explain-all > summary{ cursor:pointer; padding:10px 15px; user-select:none;
+  font-family:var(--font-mono); font-size:18.4px; letter-spacing:.06em;
+  color:var(--amber); list-style:none; }
+.explain-all > summary::-webkit-details-marker{ display:none; }
+.explain-all > summary:hover{ color:var(--text-strong); }
+.explain-all[open] > summary{ border-bottom:1px solid var(--panel-border); }
+.explain-body{ padding:13px 17px 15px; font-size:18.8px; color:var(--text-dim);
+  line-height:1.62; }
+.explain-body h4{ font-family:var(--font-display); font-size:19.6px;
+  color:var(--text-strong); margin:14px 0 5px; letter-spacing:.4px; }
+.explain-body h4:first-child{ margin-top:0; }
+.explain-body p{ margin:0 0 9px; }
+.explain-body b{ color:var(--text); }
+
+/* The arithmetic itself, set apart so it can be read as a formula rather than
+   scanned as prose. Monospace because column alignment is the whole point of
+   showing a calculation. */
+.ex-math{ font-family:var(--font-mono); font-size:17.9px; color:var(--cyan);
+  background:var(--void); border-left:2px solid var(--cyan-dim);
+  padding:9px 13px; margin:8px 0 11px !important; border-radius:0 5px 5px 0;
+  overflow-x:auto; line-height:1.75; }
+.ex-math b{ color:var(--text-strong); }
+
+/* ===== TEMPLATE SUBGROUPS =====
+   A second fold inside each group. 84 extractors in one list is a wall; split
+   by Nullsec, Lowsec and planet type it is a short menu of real choices.
+   Indented and quieter than the group heading so the hierarchy reads at a
+   glance rather than looking like two rows of equal weight. */
+.tpl-sub-group{ margin:0 0 4px 14px; border-left:1px solid var(--panel-border);
+  padding-left:12px; }
+.tpl-sub-title{ cursor:pointer; list-style:none; padding:6px 0;
+  font-family:var(--font-mono); font-size:17.6px; color:var(--text-dim);
+  display:flex; align-items:baseline; gap:7px; }
+.tpl-sub-title::-webkit-details-marker{ display:none; }
+.tpl-sub-title::before{ content:'\002b'; color:var(--cyan-dim); flex-shrink:0;
+  font-family:var(--font-mono); }
+details[open] > .tpl-sub-title::before{ content:'\2212'; }
+.tpl-sub-title:hover{ color:var(--text-strong); }
+.tpl-sub-title:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
+
+/* ===== REFERENCE PANELS =====
+   Market Reference, Price History, PI Templates and System Status shared
+   section.card with the five numbered steps — same rainbow bar, same gradient,
+   same cyan dash on the title. The only difference was a missing number, which
+   is easy to miss while scrolling. A user read them as steps he had skipped
+   and went looking for what he was supposed to do in them.
+
+   They are not steps. They are things you look up. Everything here exists to
+   say that before the user has to work it out. */
+
+/* The break in the sequence. Does most of the work on its own: it tells you
+   the numbered path has ended. */
+.ref-divider{ margin:34px 0 18px; padding-top:20px;
+  border-top:1px solid var(--panel-border); }
+.ref-divider-label{ display:inline-block; font-family:var(--font-mono);
+  font-size:17.4px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--text-faint); background:var(--void);
+  padding:0 11px 0 0; margin-top:-31px; }
+.ref-divider-note{ font-size:17.7px; color:var(--text-faint);
+  margin:5px 0 0; max-width:62ch; }
+
+/* No rainbow bar. It is the loudest "this is a step" signal on the page and
+   these panels should not carry it. */
+section.card.reference::before{ display:none; }
+
+/* Flat rather than the steps' gradient, dimmer border, tighter padding.
+   Still obviously a card; visibly a different KIND of card. */
+section.card.reference{ background:var(--panel); border-color:var(--panel-border);
+  box-shadow:none; padding:16px 20px; margin-bottom:14px; }
+section.card.reference:hover{ border-color:var(--text-faint); }
+
+/* An open square instead of the steps' solid cyan dash, so the heading reads
+   differently even before you notice the missing number. */
+section.card.reference .section-title::before{ width:9px; height:9px;
+  background:none; border:1px solid var(--text-faint); border-radius:2px; }
+section.card.reference .section-title{ font-size:20.4px; color:var(--text); }
+
+/* ===== CONTACT / BUG REPORT =====
+   Quiet by design. It should be findable the moment something goes wrong and
+   invisible the rest of the time — a loud "report a bug" button implies you
+   expect it to break. */
+.report-btn{ display:block; text-align:center; cursor:pointer;
+  font-family:var(--font-mono); font-size:17.4px; letter-spacing:.04em;
+  color:var(--text-faint); text-decoration:none;
+  padding:6px 12px; border:1px solid var(--panel-border); border-radius:7px;
+  background:var(--panel); transition:color .14s ease, border-color .14s ease; }
+.report-btn:hover{ color:var(--cyan); border-color:var(--cyan-dim); }
+
+/* Gold in the top cluster. Amber is this page's "pay attention, but nothing
+   is wrong" colour, which is exactly the register for a report link: visible
+   when you need it, not alarming when you do not. The footer copy keeps the
+   quieter treatment, since down there it sits among the small print. */
+.top-cluster .report-btn{ color:var(--amber); border-color:var(--amber-dim);
+  background:rgba(255,194,51,.07); padding:2px 7px; border-radius:5px;
+  font-size:12.5px; letter-spacing:.02em; width:100%; box-sizing:border-box; }
+.top-cluster .report-btn:hover{ color:var(--text-strong);
+  border-color:var(--amber); background:rgba(255,194,51,.16); }
+.report-btn:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
+
+/* Width and box-sizing folded into the rule above, which now owns everything
+   about this button inside the cluster. Two rules for one selector is how
+   they drift. */
+
+/* The footer has room for the explanation the top one cannot fit. */
+/* Full width, like everything else down here.
+ *
+ * This was a centred flex column with a 52ch cap on the note, so it sat as a
+ * narrow island inside a footer that runs the width of the page — the same
+ * content-sizing problem the legal paragraph had. Stretch, and let the text
+ * centre itself with text-align. */
+.footer-contact{ margin:18px 0 0; padding-top:16px; width:100%;
+  box-sizing:border-box; border-top:1px solid var(--panel-border);
+  display:flex; flex-direction:column; align-items:center; gap:7px; }
+/* One rule for this button, not two. Gold matches the top cluster: same
+   action, same colour — cyan in one place and amber in the other would
+   suggest they do different things. Sized for the footer rather than the
+   corner. */
+.footer-contact .report-btn{ display:inline-flex; align-items:center;
+  justify-content:center;
+  color:var(--amber); border-color:var(--amber-dim);
+  background:rgba(255,194,51,.07); padding:8px 18px; border-radius:7px;
+  font-size:18.1px; letter-spacing:.03em; }
+.footer-contact-note{ font-size:17.1px; color:var(--text-faint);
+  width:100%; max-width:none; text-align:center; line-height:1.5; }
+.footer-contact .report-btn:hover{ color:var(--text-strong);
+  border-color:var(--amber); background:rgba(255,194,51,.16); }
+
+/* ===== HELP BUTTON AND GUIDE =====
+   The button pulses until it has been opened once. A guide nobody notices is
+   a guide nobody reads, and this tool has five steps, three goal modes and two
+   planning directions — enough that a first visit benefits from being told
+   where to start. */
+.help-btn{ position:relative; border-color:var(--cyan); color:var(--cyan);
+  font-weight:600; }
+.help-btn:hover{ color:var(--on-accent); background:var(--cyan); }
+
+/* The glow lives on a pseudo-element so the button's own colours are never
+   animated — animating a border repaints text with it and the label shimmers. */
+.help-btn::after{ content:''; position:absolute; inset:-3px; border-radius:9px;
+  border:2px solid var(--cyan); opacity:0; pointer-events:none;
+  animation:help-pulse 2.4s ease-out infinite; }
+@keyframes help-pulse{
+  0%   { opacity:.85; transform:scale(1); }
+  70%  { opacity:0;   transform:scale(1.16); }
+  100% { opacity:0;   transform:scale(1.16); }
+}
+/* Stops for good once opened — remembered in localStorage. */
+.help-btn.is-seen::after{ animation:none; opacity:0; }
+
+/* A pulsing button is exactly the kind of motion that hurts to look at for
+   some people. It is decoration, so it goes entirely. */
+@media (prefers-reduced-motion: reduce){
+  .help-btn::after{ animation:none; opacity:0; }
+}
+
+.help-modal{ position:fixed; inset:0; z-index:600;
+  background:rgba(3,5,9,.82); display:flex; align-items:flex-start;
+  justify-content:center; padding:26px 16px; overflow-y:auto; }
+.help-modal[hidden]{ display:none; }
+.help-card{ background:var(--panel); border:1px solid var(--panel-border);
+  border-radius:12px; max-width:880px; width:100%; box-shadow:var(--shadow); }
+.help-head{ display:flex; align-items:center; justify-content:space-between;
+  gap:14px; padding:16px 22px; border-bottom:1px solid var(--panel-border);
+  position:sticky; top:0; background:var(--panel); border-radius:12px 12px 0 0; }
+.help-head h2{ font-family:var(--font-display); font-size:24px;
+  color:var(--text-strong); margin:0; letter-spacing:.5px; }
+.help-body{ padding:20px 26px 26px; font-size:19.2px; line-height:1.68;
+  color:var(--text-dim); }
+.help-lead{ font-size:20px; color:var(--text); margin:0 0 18px; }
+.help-body h3{ font-family:var(--font-display); font-size:21px;
+  color:var(--cyan); margin:24px 0 7px; letter-spacing:.4px; }
+.help-body p{ margin:0 0 11px; }
+.help-body b{ color:var(--text); }
+.help-body ul, .help-body ol{ margin:0 0 13px 22px; }
+.help-body li{ margin-bottom:7px; }
+.help-steps li{ margin-bottom:6px; }
+
+/* ===== PER-INPUT SOURCING =====
+   Three buttons rather than a checkbox, because there are three real
+   strategies and a tick can only express two. */
+.src-row{ display:flex; align-items:center; justify-content:space-between;
+  gap:10px; background:var(--panel-raised); border:1px solid var(--panel-border);
+  border-radius:5px; padding:5px 8px; }
+.src-name{ display:flex; align-items:center; gap:6px; font-size:18.4px;
+  color:var(--text-dim); white-space:nowrap; }
+.src-choice{ display:inline-flex; gap:3px; flex-shrink:0; }
+.src-btn{ font-family:var(--font-mono); font-size:17px; cursor:pointer;
+  background:none; border:1px solid var(--panel-border); border-radius:4px;
+  color:var(--text-faint); padding:3px 9px; transition:all .13s ease; }
+.src-btn:hover{ color:var(--text-strong); border-color:var(--text-faint); }
+.src-btn.active{ color:var(--on-accent); background:var(--cyan);
+  border-color:var(--cyan); font-weight:600; }
+/* Refine carries a real cost most people will not expect — amber when chosen,
+   so the warning is visible at the moment of choosing rather than only in the
+   plan afterwards. */
+.src-btn[data-src="refine"].active{ background:var(--amber);
+  border-color:var(--amber); }
+.src-btn:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }

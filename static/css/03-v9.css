@@ -1,0 +1,52 @@
+/* v9 bridge styles: the new engine's widgets, dressed in the v8.3 token
+ * palette (01-tokens.css). Nothing here overrides the carried-over skin —
+ * it only styles elements the v9 renderer creates (.v9-*), so both themes
+ * (carbon/daylight) apply automatically through the tokens. */
+
+.v9-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 12px 0; }
+.v9-card {
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.v9-card h4 { margin: 0 0 4px; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; color: var(--cyan); }
+.v9-card p { margin: 2px 0; }
+.v9-card .v9-big { font-size: 1.3rem; font-weight: 700; color: var(--text-strong); }
+.v9-muted { color: var(--text-faint); font-size: .85rem; }
+
+.v9-table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+.v9-table th, .v9-table td { text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--panel-border); font-size: .9rem; }
+.v9-table th { color: var(--text-faint); font-weight: 600; letter-spacing: .03em; }
+.v9-table td.v9-neg { color: var(--red); text-align: right; font-variant-numeric: tabular-nums; }
+.v9-table td.v9-pos { color: var(--green); text-align: right; font-variant-numeric: tabular-nums; }
+.v9-table tr.v9-total td { font-weight: 700; border-top: 2px solid var(--panel-border); }
+
+.v9-row { display: flex; gap: 10px; align-items: center; margin: 7px 0; flex-wrap: wrap; }
+.v9-row label { display: inline-flex; gap: 6px; align-items: center; color: var(--text); }
+.v9-warn {
+  background: color-mix(in srgb, var(--red) 12%, var(--panel));
+  border: 1px solid var(--red); border-radius: 8px;
+  padding: 10px 14px; margin: 10px 0; white-space: pre-wrap;
+}
+.v9-planet {
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 10px; padding: 10px 12px; margin: 10px 0;
+}
+.v9-scan-tag { color: var(--amber); font-size: .78rem; margin-left: 8px; }
+.v9-template {
+  width: 100%; min-height: 220px; font: 12px/1.45 var(--font-mono, ui-monospace, monospace);
+  white-space: pre; background: var(--panel); color: var(--text);
+  border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px;
+}
+.v9-insight p { margin: 3px 0; font-size: .88rem; }
+.v9-mode { display: block; margin: 4px 0; }
+#stickyCalc { display: flex; }
+input.v9-num { width: 6.2em; }
+input.v9-text { width: 11em; }
+details.v9-ledger summary { color: var(--cyan); cursor: pointer; margin: 8px 0; }
+
+/* Keep the skin's full-width form styling from stretching v9 inline rows. */
+.v9-row select, .v9-planet select { width: auto; max-width: 340px; display: inline-block; }
+.v9-row input[type="number"], .v9-planet input[type="number"] { width: 7.5em; display: inline-block; }
+.v9-row input[type="text"], .v9-planet input[type="text"] { width: 13em; display: inline-block; }
+.v9-table input[type="number"] { width: 7.5em; }
+.v9-planet > .v9-row:first-child { justify-content: flex-start; }
