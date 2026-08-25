@@ -132,7 +132,8 @@ function jumpToSection(id){
   // several sit next to each other.
   sec.classList.add('jump-flash');
   setTimeout(()=> sec.classList.remove('jump-flash'), 1200);
-  sec.dispatchEvent(new CustomEvent('section:expanded'));
+  /* v9: duplicate dispatch removed — setCollapsed (00-shims) already announces
+   * 'section:expanded'; dispatching twice double-loaded System Status (audit #6). */
 }
 
 document.querySelectorAll('[data-jump]').forEach(btn=>{
@@ -170,7 +171,7 @@ document.querySelectorAll('[data-jump]').forEach(btn=>{
      * tool is broken before they have described anything. */
     try { if (navigator && navigator.userAgent) bits.push('Browser: ' + navigator.userAgent); }
     catch { /* not worth failing a bug report over */ }
-    const plan = document.querySelector('input[name="planMode"]:checked');
+    const plan = document.querySelector('input[name="v9mode"]:checked');
     if(plan) bits.push('Planning mode: ' + plan.value);
     const goal = document.querySelector('input[name="goalMode"]:checked');
     if(goal) bits.push('Goal: ' + goal.value);
@@ -242,6 +243,25 @@ document.querySelectorAll('[data-jump]').forEach(btn=>{
   /* Clicking the backdrop closes; clicking the card must not. */
   modal.addEventListener('click', e=>{ if(e.target === modal) shut(); });
   document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape' && !modal.hidden) shut();
+  });
+})();
+
+/* ---------- Zelle QR modal (carried from v8 24-saveload.js:399-414 verbatim) ----------
+ * Missed in the original extraction — the footer button did nothing (audit #3). */
+(function initZelleModal(){
+  const btn   = document.getElementById('zelleBtn');
+  const modal = document.getElementById('zelleModal');
+  const close = document.getElementById('zelleClose');
+  if(!btn || !modal || !close) return;
+
+  const open = ()=>{ modal.hidden = false; close.focus(); };
+  const shut = ()=>{ modal.hidden = true; btn.focus(); };
+
+  btn.addEventListener('click', open);
+  close.addEventListener('click', shut);
+  modal.addEventListener('click', (e)=>{ if(e.target === modal) shut(); });
+  document.addEventListener('keydown', (e)=>{
     if(e.key === 'Escape' && !modal.hidden) shut();
   });
 })();

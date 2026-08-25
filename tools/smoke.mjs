@@ -27,26 +27,39 @@ const port = server.address().port;
 const chromium = process.env.CHROMIUM ?? '/opt/pw-browsers/chromium';
 
 let dom = '';
+let consoleLog = '';
 try {
   // MUST be async spawn: a sync child would block this process's event loop
   // and the HTTP server above could never answer Chromium's request (found
   // the hard way). Chromium is also noisy in bare containers — judge the
-  // dumped DOM, not the exit code.
-  dom = await new Promise((resolveDom, reject) => {
+  // dumped DOM plus the js console, not the exit code.
+  const result = await new Promise((resolveDom, reject) => {
     const child = spawn(chromium, [
       '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
       '--no-first-run', '--disable-component-update', '--disable-background-networking',
+      '--enable-logging=stderr', '--v=0',
       '--virtual-time-budget=8000', '--dump-dom', `http://127.0.0.1:${port}/`,
-    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
+    let err = '';
     const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('smoke: chromium timed out')); }, 90000);
     child.stdout.on('data', (d) => { out += d; });
-    child.on('close', () => { clearTimeout(timer); resolveDom(out); });
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('close', () => { clearTimeout(timer); resolveDom({ out, err }); });
     child.on('error', (e) => { clearTimeout(timer); reject(e); });
   });
+  dom = result.out;
+  consoleLog = result.err;
 } finally {
   server.close();
 }
+
+// Audit #9: a page that throws anywhere is a failed build — dump-dom alone
+// cannot see it. Chromium relays page console errors into its own stderr
+// as CONSOLE(...) lines; network noise from the sandbox is filtered out.
+const jsErrors = consoleLog.split('\n').filter((l) =>
+  /Uncaught (SyntaxError|ReferenceError|TypeError|RangeError|Error)/.test(l) &&
+  !/net::|ssl_client|dbus|ERR_INTERNET|Failed to load resource/.test(l));
 
 const checks = [
   ['module graph executed', dom.includes('data-smoke="ok"')],
@@ -54,10 +67,14 @@ const checks = [
   ['UI rendered (Solve button present)', dom.includes('>Solve<')],
   ['operation section rendered by v9', dom.includes('Add character')],
   ['v8 skin hero present', dom.includes('The All-In-One PI Tool')],
-  ['legacy market grid rendered without crashing', dom.includes('legend-col') || dom.includes('pt-name') || dom.includes('legendGrid')],
-  ['templates library rendered', /tplCount[^>]*>[^<]*template/i.test(dom) || dom.includes('tpl-table') || dom.includes('tplTables')],
+  // Audit #9: assert on RENDERED OUTPUT, never on static mount ids that are
+  // present even when the feature is a parse-time corpse.
+  ['market grid rendered rows', dom.includes('selector-item') && dom.includes('legend-col')],
+  ['templates library rendered rows', dom.includes('tpl-row') && dom.includes('tpl-group')],
+  ['template count populated', /id="tplCount"[^>]*>[^<]+</.test(dom)],
   ['version stamped (no literal build token)', !dom.includes('@build:version')],
   ['batch import panel present', dom.includes('batchInput')],
+  ['no uncaught page errors in console', jsErrors.length === 0],
 ];
 let failed = false;
 for (const [name, ok] of checks) {
@@ -67,6 +84,7 @@ for (const [name, ok] of checks) {
 if (failed) {
   const m = /data-selftest="fail:[^"]*"/.exec(dom);
   if (m) console.error(`selftest detail: ${m[0]}`);
+  if (jsErrors.length > 0) console.error(`console errors:\n${jsErrors.slice(0, 8).join('\n')}`);
   console.error('smoke: page did not prove itself — failing the build.');
   process.exit(1);
 }

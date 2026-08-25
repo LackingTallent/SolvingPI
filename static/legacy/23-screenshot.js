@@ -643,13 +643,23 @@ async function analyzeBatch(fileList, onProgress){
           const densities = {};
           r.readings.forEach(x=>{ if(x.pct!=null) densities[x.name]=x.pct; });
           const pname = (r.planet && r.planet.value) || r.file.replace(/\.[a-z]+$/i,'');
-          deliver.push({ system: sysName, name: pname, type, densities, capturedAt: r.stamp ? r.stamp.iso : null });
+          const entry = { system: sysName, name: pname, type, densities, capturedAt: r.stamp ? r.stamp.iso : null };
+          Object.defineProperty(entry, '__result', { value: r, enumerable: false });
+          deliver.push(entry);
           created++;
         }
       }
       if (window.__v9 && typeof window.__v9.deliverBatch === 'function') {
         const res = window.__v9.deliverBatch(deliver);
-        if (res && typeof res.rejected === 'number' && res.rejected > 0) {
+        if (res && Array.isArray(res.verdicts)) {
+          /* v9 (audit #10): per-planet verdicts — mark bridge-rejected rows bad
+           * with the reason, instead of counting them silently. */
+          res.verdicts.forEach((v, i) => {
+            const src = deliver[i] && deliver[i].__result;
+            if (src && !v.ok) { src.bridgeError = v.reason || 'rejected'; }
+          });
+          failed += res.rejected; created -= res.rejected;
+        } else if (res && typeof res.rejected === 'number' && res.rejected > 0) {
           failed += res.rejected; created -= res.rejected;
         }
       } else {
@@ -661,7 +671,7 @@ async function analyzeBatch(fileList, onProgress){
         setCollapsed(document.getElementById('sec1'), false);
 
       out.innerHTML = batch.results.map(r=>{
-        const bad = !r.ok || !r.readings.length;
+        const bad = !r.ok || !r.readings.length || !!r.bridgeError;
         // Every interpolated value below is untrusted: filenames come from the
         // uploaded archive, system/planet names come from OCR of an arbitrary
         // image. All of it is escaped.
@@ -674,6 +684,7 @@ async function analyzeBatch(fileList, onProgress){
               `${escapeHtml((r.system&&r.system.value)||'system ?')} &middot; ${escapeHtml((r.planet&&r.planet.value)||'planet ?')}<br>${dens}`
             }</div>
             ${r.error?`<div class="bi-err">${escapeHtml(r.error)}</div>`:''}
+            ${r.bridgeError?`<div class="bi-err">${escapeHtml(r.bridgeError)}</div>`:''}
             ${(r.warnings||[]).map(w=>`<div class="bi-warn">&#9888; ${escapeHtml(w)}</div>`).join('')}
           </div>
           <div class="bi-time">${escapeHtml(r.stamp?r.stamp.label:'')}</div>
@@ -684,7 +695,7 @@ async function analyzeBatch(fileList, onProgress){
       status.textContent =
         `${created} planet(s) imported, ${failed} failed` +
         (batch.skipped ? ` — ${batch.skipped} beyond the ${BATCH_LIMIT}-image limit were skipped` : '') +
-        `. Check every density against the screenshot before calculating.`;
+        `. Check every density against the screenshot before you press Solve.`;
       if(typeof refreshProgressiveUI==='function') refreshProgressiveUI();
     } catch(err){
       status.className='batch-status err';

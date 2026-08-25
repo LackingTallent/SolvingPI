@@ -79,8 +79,8 @@
     loaded = true;
   }
 
-  sec.addEventListener('section:expanded', ()=> load());
-  sec.querySelector('.collapse-btn')?.addEventListener('click', ()=>{
-    if(!sec.classList.contains('collapsed')) load();
-  });
+  /* v9 (audit #6/#7): load exactly once, on first expansion. The direct
+   * collapse-btn listener is gone — it ran BEFORE the shims' toggle, so a
+   * COLLAPSE click read "expanded" and fired a fresh ESI load. */
+  sec.addEventListener('section:expanded', ()=>{ if(!loaded) load(); });
 })();

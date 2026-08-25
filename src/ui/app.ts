@@ -59,6 +59,18 @@ function persist(): void {
   saveState(state);
   const a = document.getElementById('autosaveStatus');
   if (a) a.textContent = 'Autosaved to this browser just now.';
+  markResultsStale();
+}
+
+/** Audit #11: a solved answer must never sit unmarked next to changed inputs. */
+function markResultsStale(): void {
+  const panel = document.getElementById('resultsPanel');
+  if (panel === null || panel.childElementCount === 0) return;
+  if (panel.querySelector('.v9-stale') !== null) return;
+  panel.prepend(el('div', { class: 'v9-warn v9-stale' },
+    'Inputs changed since this was solved — press Solve to refresh these numbers.'));
+  const summary = document.getElementById('sec4Summary');
+  if (summary && !summary.textContent!.includes('(stale)')) summary.textContent += ' (stale)';
 }
 
 function toWorld(s: UiState): SolveWorld {
@@ -111,9 +123,17 @@ function neededCommodities(s: UiState): string[] {
 // ---------------------------------------------------------------------------
 
 function numInput(value: number, min: number, max: number, step: number, onchange: (v: number) => void): HTMLElement {
+  // Audit #12: clamp to the declared range and reject cleared/NaN values —
+  // the input's own min/max are advisory in every browser.
   return el('input', {
     class: 'v9-num', type: 'number', value: String(value), min: String(min), max: String(max), step: String(step),
-    change: (ev) => { onchange(Number((ev.target as HTMLInputElement).value)); persist(); rerender(); },
+    change: (ev) => {
+      const input = ev.target as HTMLInputElement;
+      const raw = Number(input.value);
+      if (!Number.isFinite(raw) || input.value.trim() === '') { input.value = String(value); return; }
+      onchange(Math.min(max, Math.max(min, raw)));
+      persist(); rerender();
+    },
   });
 }
 
@@ -130,7 +150,7 @@ function renderOperation(): void {
       el('td', {}, numInput(c.customsCodeLevel, 0, 5, 1, (v) => { c.customsCodeLevel = v; })),
       el('td', {}, numInput(c.accountingLevel, 0, 5, 1, (v) => { c.accountingLevel = v; })),
       el('td', {}, numInput(c.brokerRelationsLevel, 0, 5, 1, (v) => { c.brokerRelationsLevel = v; })),
-      el('td', {}, `${1 + c.icLevel} planets`),
+      el('td', {}, `${1 + c.icLevel} planet${c.icLevel === 0 ? '' : 's'}`),
       el('td', {}, el('button', { class: 'btn small', click: () => { state.characters.splice(i, 1); persist(); rerender(); } }, '✕')),
     ),
   );
@@ -141,7 +161,7 @@ function renderOperation(): void {
     el('p', { class: 'section-sub' },
       'Every character is modeled individually — the tool adds up what you tell it, never assumes everyone is maxed. Supported: 1 to 50 characters.'),
     el('table', { class: 'v9-table' },
-      el('tr', {}, ...['Name', 'Interplanetary Consolidation', 'CC Upgrades', 'Customs Code', 'Accounting', 'Broker Relations', 'Budget', ''].map((h) => el('th', {}, h))),
+      el('tr', {}, ...['Name', 'Interplanetary Consolidation', 'CC Upgrades', 'Customs Code', 'Accounting', 'Broker Relations', 'Planet budget', ''].map((h) => el('th', {}, h))),
       ...rows,
     ),
     el('button', {
@@ -286,8 +306,14 @@ function renderMarket(): void {
         },
       }).then((snap) => {
         for (const [name, quote] of Object.entries(snap.prices)) state.prices[name] = { ...quote };
+        // Audit B2: developer error text ("run tools/gen-sde.mjs") means nothing
+        // to a site visitor — translate it at the display boundary.
+        const friendly = (reason: string): string =>
+          reason.startsWith('missing-typeid')
+            ? 'no type ID in this build — enter its quote manually'
+            : reason;
         state.priceNote = `Live: ${snap.source} at ${snap.fetchedAt}.` +
-          (snap.unpriced.length > 0 ? ` UNPRICED: ${snap.unpriced.map((u) => `${u.name} (${u.reason})`).join('; ')}` : '');
+          (snap.unpriced.length > 0 ? ` UNPRICED: ${snap.unpriced.map((u) => `${u.name} (${friendly(u.reason)})`).join('; ')}` : '');
         persist(); rerender();
       }).catch((e: Error) => {
         state.priceNote = `Live fetch failed: ${e.message} — enter quotes manually.`;
@@ -360,7 +386,7 @@ function renderGoal(): void {
   } catch { /* product mid-edit */ }
 
   const modes: Array<[UiState['mode'], string]> = [
-    ['max', 'Maximum output/profit from my planets'],
+    ['max', 'Maximum output of my chosen product'],
     ['quota', 'Hit a weekly quota with minimal colonies'],
     ['qol', 'Best net within a login budget'],
     ['compare', 'Compare every product (ranked frontier)'],
@@ -506,7 +532,11 @@ function runSolve(): void {
       if (state.mode === 'compare') {
         const { ranked, excluded } = comparative(world, toMarket(state));
         if (summary) summary.textContent = `${ranked.length} viable products ranked`;
+        announce(`Comparison complete: ${ranked.length} viable products ranked.`);
         resultsBox.replaceChildren(
+          // Audit B3: never truncate silently.
+          el('p', { class: 'v9-muted' },
+            ranked.length > 15 ? `Top 15 shown of ${ranked.length} viable products.` : `${ranked.length} viable product${ranked.length === 1 ? '' : 's'}.`),
           el('table', { class: 'v9-table' },
             el('tr', {}, ...['#', 'Product', 'Net ISK/wk', 'Output/wk', 'Method'].map((h) => el('th', {}, h))),
             ...ranked.slice(0, 15).map((r, i) => el('tr', {},
@@ -515,7 +545,8 @@ function runSolve(): void {
               el('td', {}, r.result.method),
             )),
           ),
-          el('details', {}, el('summary', {}, `${excluded.length} products excluded (each with a named reason)`),
+          el('details', {},
+            el('summary', {}, `${excluded.length} products excluded (each with a named reason)${excluded.length > 40 ? ' — first 40 shown' : ''}`),
             el('ul', {}, ...excluded.slice(0, 40).map((x) => el('li', {}, `${x.product}: ${x.reason}`)))),
         );
         return;
@@ -542,11 +573,19 @@ function runSolve(): void {
         result = r;
       }
       if (summary) summary.textContent = `${fmt(result.realizedPerWeek)} ${result.product}/wk · ${result.method}`;
+      announce(`Solved: ${fmt(result.realizedPerWeek)} ${result.product} per week using ${result.slotsUsed} colonies.`);
       resultsBox.replaceChildren(renderResult(result, state, extra));
     } catch (e) {
       resultsBox.replaceChildren(el('div', { class: 'v9-warn' }, (e as Error).message));
+      announce('Solve failed — see the results section for the reason.');
     }
   }, 30);
+}
+
+/** Audit #14: write the screen-reader live region v8 used to announce results. */
+function announce(text: string): void {
+  const region = document.getElementById('calcAnnounce');
+  if (region) region.textContent = text;
 }
 
 // ---------------------------------------------------------------------------
@@ -622,37 +661,56 @@ interface BatchPlanet {
   capturedAt: string | null;
 }
 
-function deliverBatch(planets: BatchPlanet[]): { accepted: number; rejected: number } {
+function deliverBatch(planets: BatchPlanet[]): {
+  accepted: number; rejected: number;
+  verdicts: Array<{ ok: boolean; reason?: string }>;
+} {
   let accepted = 0, rejected = 0;
+  const verdicts: Array<{ ok: boolean; reason?: string }> = [];
   for (const bp of planets) {
     const type = (PLANET_TYPES as readonly string[]).includes(bp.type ?? '') ? (bp.type as PlanetType) : null;
-    if (type === null) { rejected++; continue; }
+    if (type === null) {
+      rejected++;
+      verdicts.push({ ok: false, reason: 'planet type unrecognized — fewer than 3 resources matched; add this planet by hand' });
+      continue;
+    }
     const legal = resourcesOf(type);
     const resources = Object.entries(bp.densities)
       .filter(([p0, pct]) => legal.includes(p0) && Number.isFinite(pct) && pct > 0)
       .map(([p0, pct]) => ({ p0, w: wFromDensityPct(pct) }));
-    if (resources.length === 0) { rejected++; continue; }
-    const name = `${bp.system} ${bp.name}`.trim();
+    if (resources.length === 0) {
+      rejected++;
+      verdicts.push({ ok: false, reason: `no readable densities are legal on a ${type} planet — check the scan` });
+      continue;
+    }
+    // Audit #5: the OCR planet name is already "SYSTEM ROMAN" — never prefix twice.
+    const name = bp.name.toLowerCase().startsWith(bp.system.toLowerCase())
+      ? bp.name.trim()
+      : `${bp.system} ${bp.name}`.trim();
     const existing = state.planets.find((p) => p.name.toLowerCase() === name.toLowerCase());
     if (existing !== undefined) {
       existing.type = type;
       existing.resources = resources;
+      existing.system = bp.system;
       if (bp.capturedAt) existing.scannedAt = bp.capturedAt;
     } else {
-      const planet: UiPlanet = { name, type, resources };
+      const planet: UiPlanet = { name, type, resources, system: bp.system };
       if (bp.capturedAt) planet.scannedAt = bp.capturedAt;
       state.planets.push(planet);
     }
     accepted++;
+    verdicts.push({ ok: true });
   }
   persist(); rerender();
-  return { accepted, rejected };
+  return { accepted, rejected, verdicts };
 }
 
-/** v8-shaped planet list for the market-reference hover popup. */
-function readPlanetsForLegacy(): Array<{ name: string; type: string; densities: Record<string, number> }> {
+/** v8-shaped planet list for the market-reference hover popup.
+ * Audit #4: the popup renders `system` too — omitting it printed "undefined". */
+function readPlanetsForLegacy(): Array<{ name: string; system: string; type: string; densities: Record<string, number> }> {
   return state.planets.map((p) => ({
     name: p.name,
+    system: p.system ?? '',
     type: p.type,
     densities: Object.fromEntries(p.resources.map((r) => [r.p0, Math.round(densityPctFromW(Math.max(r.w, 1)))])),
   }));

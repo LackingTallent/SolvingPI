@@ -21,6 +21,8 @@ export interface UiPlanet {
   name: string;
   type: PlanetType;
   resources: UiResource[];
+  /** Solar system this planet is in (screenshot imports set it; optional for manual entry). */
+  system?: string;
   /** ISO capture time when the values came from a screenshot import. */
   scannedAt?: string;
 }

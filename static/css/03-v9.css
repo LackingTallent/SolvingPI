@@ -40,6 +40,8 @@
 .v9-insight p { margin: 3px 0; font-size: .88rem; }
 .v9-mode { display: block; margin: 4px 0; }
 #stickyCalc { display: flex; }
+/* audit #15: the skin's body.has-sticky padding never gets its class; reserve it here. */
+body { padding-bottom: 96px; }
 input.v9-num { width: 6.2em; }
 input.v9-text { width: 11em; }
 details.v9-ledger summary { color: var(--cyan); cursor: pointer; margin: 8px 0; }

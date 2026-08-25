@@ -859,7 +859,10 @@ async function loadAllSystems(){
   })();
   return systemsLoadPromise;
 }
-loadAllSystems(); // kick off in background as soon as the page loads
+/* v9: eager loadAllSystems() removed — the v8 system-autocomplete that consumed
+ * ALL_SYSTEMS was not carried, so this burned ~10 ESI requests per page load for
+ * data with zero consumers (functional audit #8). The function remains for a
+ * future system field. */ // kick off in background as soon as the page loads
 
 /* ===================== PLANET NAME ORDERING =====================
  *
@@ -960,7 +963,9 @@ const PI_DECAY_FACTOR = 0.012;
 const PI_NOISE_FACTOR = 0.8;
 const PI_QTY_PER_CYCLE_BASE = 13277.2694; // exact-solved; integer 13277 was 0.05% low
 const PI_SUB_CYCLE_SEC = 1800; // 30-minute extractor sub-cycles
-const P0_PER_DAY_BASELINE = p0PerDayForProgram(6);
+/* v9: P0_PER_DAY_BASELINE removed — p0PerDayForProgram was a v8 engine function
+ * not carried into v9, and nothing here consumed the constant. Its call threw an
+ * uncaught ReferenceError on every load (found in the v9 functional audit). */
 const MAX_RESOURCES_PER_COLONY = 5;   // a planet carries at most 5 resources
 const P1_TO_P0 = (()=>{ const m={}; Object.entries(P0_TO_P1).forEach(([p0,p1])=>{ m[p1]=p0; }); return m; })();
 

@@ -26,7 +26,6 @@
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to the planner</a>
-<a class="skip-link" href="#sec1">Skip to planner</a>
 
 <!-- TOP-RIGHT STATUS CLUSTER: build badge, theme switch, EVE clock, report-bug -->
 <div class="top-cluster" role="group" aria-label="Tools and information">
@@ -59,7 +58,6 @@
 </div>
 
 <div class="hexbg"></div>
-<div id="tooltip"></div>
 <div id="selectorPopup"></div>
 
 <header class="hero">
@@ -140,11 +138,6 @@
     </div>
     <div class="saveload-status" id="saveLoadStatus" role="status" aria-live="polite"></div>
     <div class="autosave-status" id="autosaveStatus" role="status" aria-live="polite"></div>
-    <div class="autosave-restore" id="autosaveRestore" hidden>
-      <span id="autosaveRestoreText">Unsaved work from a previous visit was found.</span>
-      <button class="btn" id="autosaveRestoreBtn">Restore it</button>
-      <button class="btn" id="autosaveDiscardBtn" title="Forget the saved copy and start clean">Discard</button>
-    </div>
   </div>
   <div class="hero-stats">
     <button type="button" class="hstat" data-jump="secMarket" title="Jump to the commodity reference table">
@@ -208,15 +201,15 @@
       <b>1-Click</b><span>Import PI Templates</span>
     </button>
   </div>
-  <p class="subhead">Enter your characters, your planets, and their scanned resource values — the planner works out the most profitable thing you can actually build with what you've got, using live EVE market prices and the game's real physical limits. Works for any solar system, from 1 to 50 characters.</p>
+  <p class="subhead">Enter your characters, your planets, and their scanned resource values — the planner works out the most profitable thing you can actually build with what you've got, using Jita market prices — fetched live where this build can, entered by you where it can't — and the game's real physical limits. Works for any solar system, from 1 to 50 characters.</p>
   <details class="quickstart">
     <summary>New here? Read this first (60 seconds)</summary>
     <div class="quickstart-body">
       <p><b>What this does:</b> you tell it what planets you can reach and how many characters you have; it tells you what to build, how to split your colonies between extraction and factories, and what you'd actually clear per week after tax, shipping and customs. Every answer says how good it is: small operations get a <b>provably optimal</b> plan; big ones get a measured "within X% of the best possible" bound.</p>
       <ol>
-        <li><b>Section 1 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V), skills, and your <b>extraction program length</b> — short programs yield much more per week but need more logins.</li>
+        <li><b>Section 1 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
         <li><b>Section 2 — Your Systems &amp; Planets.</b> Add planets and enter the survey values from your in-game scan — the raw number, with the familiar percentage shown alongside. Or drop in planet screenshots and let the reader fill them in.</li>
-        <li><b>Section 3 — Costs &amp; Market.</b> Taxes, fees, freight, and live Jita prices — including whether you sell instantly or list orders, which changes real money.</li>
+        <li><b>Section 3 — Costs &amp; Market.</b> Taxes, fees, freight, and Jita prices (fetch what's available live, type in the rest) — including whether you sell instantly or list orders, which changes real money.</li>
         <li><b>Sections 4-5 — Goal &amp; Results.</b> Pick a goal (max profit, a quota, a login budget, or compare everything), hit Solve, and get per-character build sheets plus the analytics: what's bottlenecking you, what the next character or skill is worth, and whether each input is better extracted, refined, or bought.</li>
       </ol>
       <p class="quickstart-note">Numbers here come from CCP's published formulas and the game's own data, verified — where something can't be known (like another player's POCO tax), you set it and the tool says what it assumed. It never silently guesses.</p>
@@ -341,7 +334,7 @@
     <button class="btn collapse-btn" data-target="secMarket" title="Collapse or expand this section">&#9660;</button>
   </div>
   <div class="sec-body" id="secMarketBody">
-  <p class="section-sub">Everything the planner prices, with live Jita price trends. Hover one to highlight every planet in your plan that touches it. The first five columns are the PI chain itself (P0 to P4). <b>Built from PI</b> are products the planner can plan for you &mdash; fuel blocks, nanite paste and deployables. <b>Bought inputs</b> are the non-PI materials those need; your planets do not make them, so the planner prices them as a cost and charges freight on them, never treating them as free.<span class="hint">&#9432;<span class="hint-body">Each entry shows its 24H / 7D / 30D Jita price movement and per-unit volume. Volume key: <b>&#10003;</b> means that item&rsquo;s volume was individually confirmed against EVE&rsquo;s own SDE data; <b>*</b> means it uses its tier&rsquo;s confirmed value.</span></span></p>
+  <p class="section-sub">Everything tracked here, with live Jita price trends. Hover one to see which of your planets carry it. The first five columns are the PI chain itself (P0 to P4). <b>Built from PI</b> are things made from PI &mdash; fuel blocks, nanite paste and deployables &mdash; shown with live prices for reference. <b>Bought inputs</b> are the non-PI materials those recipes need. This build's planner plans the PI chain itself, P1&ndash;P4.<span class="hint">&#9432;<span class="hint-body">Each entry shows its 24H / 7D / 30D Jita price movement and per-unit volume. Volume key: <b>&#10003;</b> means that item&rsquo;s volume was individually confirmed against EVE&rsquo;s own SDE data; <b>*</b> means it uses its tier&rsquo;s confirmed value.</span></span></p>
   <div class="legend-grid" id="legendGrid"></div>
   </div>
 </section>
@@ -358,7 +351,7 @@
     </div>
 
     <div class="ptab" data-ptab-panel="history">
-      <p class="section-sub">Daily Jita highs and lows straight from public ESI market history. All
+      <p class="section-sub">Daily Jita average prices straight from public ESI market history. All
         101 items are plotted at once &mdash; use the legend or the tier filter to narrow it down.</p>
       <div class="chart-controls">
         <button class="btn small" id="phAll" type="button">Select all</button>
@@ -402,7 +395,8 @@
     <button class="btn collapse-btn" data-target="secTemplates" title="Collapse or expand this section">&#9660;</button>
   </div>
   <div class="sec-body">
-    <p class="section-sub">Every template the tool can generate. Copy one, then in EVE open the planet,
+    <p class="section-sub">Every template in the library &mdash; the layouts this tool generates plus 199 community
+      templates, copied exactly and credited to their authors. Copy one, then in EVE open the planet,
       click <b>Import</b> and paste. Extractor heads still have to be placed by hand afterwards — that is
       normal EVE behaviour, not a gap in the template.</p>
     <div class="chart-controls">
@@ -450,7 +444,7 @@
       <ol class="help-steps">
         <li>Enter your characters — each one individually, with their real skills.</li>
         <li>Enter your planets and their scanned resource values (or drop in screenshots).</li>
-        <li>Enter your costs &mdash; tax, fees, shipping &mdash; and load live prices.</li>
+        <li>Enter your costs &mdash; tax, fees, shipping &mdash; and load or enter Jita prices.</li>
         <li>Pick a goal and press Solve.</li>
         <li>You get a build sheet per character, plus the analytics that explain it.</li>
       </ol>
@@ -493,10 +487,11 @@
         leaving on the table.</p>
 
       <h3>Steps 4-5 &mdash; Goal &amp; results</h3>
-      <p>Four ways to define &ldquo;best&rdquo;: <b>most profit</b>, <b>a quota</b> (minimum
-        colonies to hit a weekly amount), <b>a login budget</b> (best net within your sessions
-        per week), or <b>compare everything</b> (a ranked list of every product your operation
-        could make).</p>
+      <p>Four ways to define &ldquo;best&rdquo;: <b>most output of your chosen product</b> (then
+        priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
+        weekly amount), <b>a login budget</b> (best net within your sessions per week), or
+        <b>compare everything</b> (the profit ranking across every product your operation could
+        make).</p>
       <p>Every result names its <b>bottleneck</b> (add capacity there first), its
         <b>answer quality</b> (exact, or within a measured percentage of the best possible),
         and reconciles every ISK to one ledger you can open and read line by line. A plan
@@ -559,7 +554,7 @@
         </svg>
         <span>Open source on GitHub</span>
       </a>
-      <p class="footer-legal-text">Created for the EVE Online community by <b>Admiral Leyton</b> &mdash; aka Lacking Tallent, aka Ryan Allen. Free to use, built on live EVE ESI market data. If it saved you time or ISK and you would like to chip in toward hosting, it is genuinely appreciated but never expected. <span class="footer-fineprint">EVE Online and all related marks are the property of Fenris Creations (formerly CCP Games). Unofficial fan tool, not affiliated with or endorsed by them.</span> <span class="ai-disclosure">This tool was created using Claude Code, Opus 5 and Sonnet 5 &mdash; AI content isn&rsquo;t slop, but everyone who accuses it of being so is certainly sloppy. Fly safe, live dangerously, and remember that resistance is futile.</span></p>
+      <p class="footer-legal-text">Created for the EVE Online community by <b>Admiral Leyton</b> &mdash; aka Lacking Tallent, aka Ryan Allen. Free to use, built on live EVE ESI market data. If it saved you time or ISK and you would like to chip in toward hosting, it is genuinely appreciated but never expected. <span class="footer-fineprint">EVE Online and all related marks are the property of CCP hf. Unofficial fan tool, not affiliated with or endorsed by them.</span> <span class="ai-disclosure">This tool was created using Claude Code, Opus 5 and Sonnet 5 &mdash; AI content isn&rsquo;t slop, but everyone who accuses it of being so is certainly sloppy. Fly safe, live dangerously, and remember that resistance is futile.</span></p>
       <div class="footer-contact">
         <a class="report-btn" id="reportFooter" href="#"
            title="Report a bug or contact the developer">&#9993; Contact the developer / Report a bug</a>
@@ -610,7 +605,6 @@
 <script src="./legacy/02-composites.js"></script>
 <script src="./legacy/10-shell.js"></script>
 <script src="./legacy/19-market-grid.js"></script>
-<script src="./legacy/20b-imported-templates.js"></script>
 <script src="./legacy/21-templates.js"></script>
 <script src="./legacy/22-price-history.js"></script>
 <script src="./legacy/23-screenshot.js"></script>

@@ -155,10 +155,9 @@
   });
 
   sec.addEventListener('section:expanded', loadHistory);
-  // Also load if expanded via its own collapse button rather than a hero jump.
-  sec.querySelector('.collapse-btn')?.addEventListener('click', ()=>{
-    if(!sec.classList.contains('collapsed')) loadHistory();
-  });
+  /* v9 (audit #7): the direct collapse-btn backup listener is gone — it ran
+   * before the shims' class toggle, so it observed the WRONG state; expansion
+   * always announces 'section:expanded' now (00-shims setCollapsed). */
 })();
 
 /* ===================== SUPPLY / DEMAND DEPTH ===================== */

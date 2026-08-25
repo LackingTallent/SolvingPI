@@ -237,7 +237,7 @@ document.querySelectorAll('.selector-item').forEach(btn=>{
     selectorPopup.innerHTML = `<div class="sp-title">${iconHtml}${name}${tier?` <span style="color:var(--text-faint); font-size:18.4px;">${tier}${volTxt?' · '+volTxt:''}</span>`:''}</div>` +
       (rows.length ? rows.map(r=>`<div class="sp-row"><span style="color:var(--amber);">${r.system}</span><span>${r.planet} · ${r.dir}</span></div>`).join('')
                     : `<div class="sp-row" style="color:var(--text-dim);">${emptyMsg}</div>`) +
-      `<div class="sp-count">${rows.length ? `${rows.length} planet(s) in your plan handle this · click to pin` : 'Hover another commodity to explore the chain'}</div>`;
+      `<div class="sp-count">${rows.length ? `${rows.length} planet(s) of your planets carry this · click to pin` : 'Hover another commodity to explore the chain'}</div>`;
     selectorPopup.style.display='block';
   });
   btn.addEventListener('mousemove', (e)=>{
@@ -255,3 +255,10 @@ document.querySelectorAll('.selector-item').forEach(btn=>{
     lockedSelector = name; btn.classList.add('locked');
   });
 });
+
+
+/* v9 (audit #17): keep the hero stat honest — count from the data, never hardcode. */
+(function(){
+  const hc = document.getElementById('heroCommodityCount');
+  if (hc && typeof priceableNames === 'function') hc.textContent = String(priceableNames().length);
+})();
