@@ -686,6 +686,56 @@ function colonyTemplate(r: SolveResult): string {
   return lines.join('\n');
 }
 
+/** One-click template for a planned colony, via the legacy template layer:
+ * a byte-exact community template when the library has one for this planet
+ * type + product, else a generated layout — ALWAYS flagged ⚠ verify. */
+interface TplResult {
+  ok: boolean; source?: 'library' | 'generated'; name?: string; credit?: string;
+  label?: string; json?: string; cautions?: string[]; why?: string;
+}
+
+function copyText(text: string): Promise<void> {
+  try { return navigator.clipboard.writeText(text); } catch { return Promise.reject(new Error('clipboard unavailable')); }
+}
+
+function colonyTemplateRow(c: SolveResult['plan']['colonies'][number]): HTMLElement | null {
+  const api = (globalThis as unknown as { __v9tpl?: { forColony: (spec: unknown) => TplResult } }).__v9tpl;
+  if (api === undefined) return null; // legacy layer absent (tests) — no row
+  const kinds = c.plan.factories.map((f) => SCHEMATICS.get(f.schematic)?.facility ?? 'advanced');
+  const role = c.plan.extractors.length > 0 ? 'extract'
+    : kinds.includes('hightech') ? 'ht'
+      : kinds.every((k) => k === 'basic') ? 'refine' : 'advanced';
+  const res = api.forColony({
+    planetType: c.planetType,
+    ccLevel: c.ccLevel,
+    role,
+    p0: c.plan.extractors[0]?.resource,
+    p1: role === 'extract' ? c.plan.factories[0]?.schematic : undefined,
+    schematics: c.plan.factories.map((f) => ({ name: f.schematic, count: f.count })),
+  });
+  if (!res.ok || res.json === undefined) {
+    return el('div', { class: 'v9-tpl' }, el('span', { class: 'v9-muted' }, `No 1-click template: ${res.why ?? 'unavailable'}`));
+  }
+  const idle = '⧉ Copy template';
+  const btn = el('button', {
+    class: 'btn small', type: 'button',
+    click: () => {
+      copyText(res.json!).then(() => { btn.textContent = '✓ Copied — import in game'; })
+        .catch(() => { btn.textContent = 'Copy failed'; });
+      setTimeout(() => { btn.textContent = idle; }, 2200);
+    },
+  }, idle);
+  const row = el('div', { class: 'v9-tpl' }, btn);
+  if (res.source === 'library') {
+    row.append(el('span', { class: 'v9-tpl-src' }, `library: ${res.name ?? ''} · ${res.credit ?? ''}`));
+  } else {
+    row.append(el('span', { class: 'v9-tpl-caution' }, '⚠︎ generated — verify in game before trusting'));
+    if (res.label !== undefined && res.label !== '') row.append(el('span', { class: 'v9-tpl-src' }, ` · ${res.label}`));
+  }
+  for (const note of res.cautions ?? []) row.append(el('div', { class: 'v9-tpl-note v9-muted' }, note));
+  return row;
+}
+
 /** Character-by-character, planet-by-planet dashboard of the solved plan —
  * the same facts as the copy-paste build sheet, rendered as cards. */
 function characterDashboard(r: SolveResult): HTMLElement {
@@ -712,6 +762,7 @@ function characterDashboard(r: SolveResult): HTMLElement {
           ...c.plan.imports.map((i) => el('li', { class: 'v9-import' },
             `import ${fmt1(i.qtyPerHour)}/h ${i.commodity}`)),
         ),
+        colonyTemplateRow(c),
       )),
     ));
   const buys = r.plan.logistics?.purchases ?? [];

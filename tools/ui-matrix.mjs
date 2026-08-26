@@ -87,7 +87,10 @@ const seededState = {
 
 // ---------------------------------------------------------------------------
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
+const page = await browser.newPage({
+  viewport: { width: 1500, height: 950 },
+  permissions: ['clipboard-read', 'clipboard-write'],
+});
 const consoleErrors = [];
 page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error' && !/net::|Failed to load resource/.test(m.text())) consoleErrors.push(m.text()); });
@@ -143,7 +146,24 @@ check('max: character dashboard renders all 3 characters',
   await page.locator('.v9-char', { hasText: 'Main' }).count() >= 1
   && await page.locator('.v9-char', { hasText: 'Miner Alt' }).count() >= 0); // dealer may not need every char
 check('max: no ESTIMATE banner at user-cost refined level', await page.locator('.v9-estimate').count() === 0);
+
+// Per-colony one-click templates in the dashboard.
+const tplRows = await page.locator('.v9-colony .v9-tpl').count();
+const colonies = await page.locator('.v9-colony').count();
+check('templates: every colony card carries a template row', tplRows === colonies && colonies > 0);
+check('templates: at least one byte-exact library match (credited)', await page.locator('.v9-tpl-src', { hasText: 'library:' }).count() >= 1);
+check('templates: generated layouts flagged ⚠ verify', await page.locator('.v9-tpl-caution', { hasText: 'generated — verify in game' }).count() >= 1);
+// Element handle, not a text locator — the label changes on click, and a
+// hasText locator would silently re-resolve to the NEXT un-clicked button.
+const copyBtn = await page.locator('.v9-tpl button', { hasText: 'Copy template' }).first().elementHandle();
+await copyBtn.click();
+await page.waitForTimeout(300);
+check('templates: copy confirms on the button', /Copied — import in game/.test(await copyBtn.textContent()));
+const clip = await page.evaluate(() => navigator.clipboard.readText());
+check('templates: clipboard holds a real EVE template (CmdCtrLv + pins + routes)',
+  /"CmdCtrLv"/.test(clip) && /"P": \[/.test(clip) && /"R": \[/.test(clip) && /"Pln"/.test(clip));
 await shoot('03-max-results-top', page.locator('#resultsPanel'));
+await shoot('12-colony-templates', page.locator('.v9-char').first());
 await shoot('04-max-dashboard', page.locator('#resultsPanel').locator('xpath=.//h3[contains(text(),"Plan by character")]/..'));
 
 // 4 ── Quota goal.

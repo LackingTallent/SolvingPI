@@ -77,3 +77,11 @@ details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0
 .v9-colony-lines { margin: 0; padding-left: 18px; }
 .v9-colony-lines li { font-size: .85rem; margin: 2px 0; }
 .v9-colony-lines .v9-import { color: var(--amber, #e5b567); }
+
+/* --- Per-colony one-click templates in the character dashboard --- */
+.v9-tpl { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--panel-border); font-size: .82rem; }
+.v9-tpl .btn.small { margin-right: 8px; }
+.v9-tpl-src { color: var(--text-dim, #9aa); margin-left: 4px; }
+.v9-tpl-caution { color: var(--amber, #e5b567); font-weight: 600; }
+.v9-tpl-note { margin-top: 3px; font-size: .78rem; }
+.tpl-warn-inline { color: var(--amber, #e5b567); }
