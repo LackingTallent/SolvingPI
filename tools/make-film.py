@@ -175,7 +175,7 @@ fc = ";".join([
 subprocess.run(["ffmpeg", "-y", "-loglevel", "error",
     "-i", CLIP1, "-i", CLIP2, "-i", DEMO, "-i", CARD, "-i", WAV,
     "-filter_complex", fc, "-map", "[vout]", "-map", "4:a",
-    "-c:v", "libx264", "-preset", "medium", "-crf", "21",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-profile:v", "main", "-level", "4.0", "-preset", "medium", "-crf", "21",
     "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", OUT], check=True)
 p = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration,size",
                     "-of", "default=nw=1", OUT], capture_output=True, text=True)

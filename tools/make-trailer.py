@@ -178,7 +178,7 @@ for i in range(1, len(SCENES)):
 fc = ";".join(filters + crossfades)
 cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, "-i", WAV,
        "-filter_complex", fc, "-map", "[vout]", "-map", f"{len(SCENES)}:a",
-       "-c:v", "libx264", "-preset", "medium", "-crf", "22",
+       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-profile:v", "main", "-level", "4.0", "-preset", "medium", "-crf", "22",
        "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", OUT]
 subprocess.run(cmd, check=True)
 probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration,size",
