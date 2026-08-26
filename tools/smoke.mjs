@@ -82,7 +82,15 @@ const checks = [
   // The default world is deliberately solvable (missing ores default to buy
   // sourcing), so the gate is proven by the in-page self-test instead: it must
   // block a no-planet world and an unscanned-ore world, and pass a scanned one.
-  ['solve gate blocks/passes correctly (in-page check)', dom.includes('data-gate="pass"')],
+  ['solve gate blocks/passes correctly incl. accuracy ladder (in-page check)', dom.includes('data-gate="pass"')],
+  ['every planner section has a reset button',
+    ['sec3', 'sec0', 'sec1', 'sec2', 'sec4'].every((id) => dom.includes(`data-reset="${id}"`))],
+  // Progressive disclosure: a fresh visitor has not picked a goal, so the
+  // sourcing/detail controls must NOT be rendered yet — only the goal prompt.
+  ['sourcing stays hidden until a goal is picked',
+    dom.includes('Pick a goal to continue') && !dom.includes('Adjust sourcing (optional')],
+  ['security-band density buttons present', dom.includes('data-band="nullsec"')],
+  ['cost presets + confirm-own-rates rendered', dom.includes('These are my real rates')],
   ['price fetch can resolve type ids beyond the partial registry (legacy fallback)', dom.includes('data-typeids="pass"')],
   ['no uncaught page errors in console', jsErrors.length === 0],
 ];

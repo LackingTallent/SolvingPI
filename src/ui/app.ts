@@ -19,6 +19,11 @@ import { idRegistry } from '../data/ids.js';
 import { fetchPrices } from '../data/prices.js';
 import { defaultEsiJson, importSystem, loadSystemIndex, searchSystems, type SystemIndex } from './esi-universe.js';
 import { solveReadiness, type Readiness } from './readiness.js';
+import { suggestSourcing, type SourcingSuggestion } from '../engine/suggest.js';
+import {
+  BAND_LABELS, PRESETS_ARE_APPROXIMATIONS, QUICK_DENSITY_DISCLOSURE, QUICK_DENSITY_PCT,
+  SPACE_BANDS, SPACE_COST_PRESETS, type SpaceBand,
+} from './presets.js';
 import type { IdRegistry } from '../data/ids.js';
 
 // ---------------------------------------------------------------------------
@@ -76,13 +81,27 @@ function markResultsStale(): void {
   if (summary && !summary.textContent!.includes('(stale)')) summary.textContent += ' (stale)';
 }
 
+/** How many density values the Quick level would assume right now (0 outside quick). */
+function assumedDensityCount(s: UiState): number {
+  if (s.detailLevel !== 'quick' || s.spaceBand === null) return 0;
+  return s.planets.reduce((n, p) => n + p.resources.filter((r) => !(r.w > 0)).length, 0);
+}
+
 function toWorld(s: UiState): SolveWorld {
+  // Accuracy ladder, quick rung: unscanned densities are stood in by the
+  // chosen band's typical value. NEVER touches saved state — the substitution
+  // lives only in the world handed to the engine, and every result built on
+  // it is labeled an estimate.
+  const quickW = s.detailLevel === 'quick' && s.spaceBand !== null
+    ? wFromDensityPct(QUICK_DENSITY_PCT[s.spaceBand]) : null;
   return {
     operation: operation(s.characters.map((c) => character({ ...c }))),
     planets: s.planets.map((p) => ({
       name: p.name,
       type: p.type,
-      resources: Object.fromEntries(p.resources.filter((r) => r.w > 0).map((r) => [r.p0, r.w])),
+      resources: Object.fromEntries(p.resources
+        .map((r) => [r.p0, r.w > 0 ? r.w : (quickW ?? 0)] as const)
+        .filter(([, w]) => w > 0)),
     })),
     programHours: s.programHours,
   };
@@ -118,6 +137,10 @@ function currentReadiness(): Readiness {
     sourcing,
     mode: state.mode,
     prices: state.prices,
+    modeChosen: state.modeChosen,
+    detailLevel: state.detailLevel,
+    spaceBand: state.spaceBand,
+    costsSource: state.costsSource,
   });
 }
 
@@ -343,6 +366,32 @@ function basisSelect(value: 'immediate' | 'patient', set: (v: 'immediate' | 'pat
   }));
 }
 
+/** Apply a space-type cost preset as an EDITABLE PREFILL (never a silent
+ * constant): writes the fee/freight fields, records where they came from, and
+ * the UI keeps disclosing it until the user edits or confirms the rates. */
+function applyCostPreset(band: SpaceBand): void {
+  const p = SPACE_COST_PRESETS[band];
+  state.fees.customsPct = p.customsPct;
+  state.fees.hisecNpc = p.hisecNpc;
+  state.fees.salesTaxPct = p.salesTaxPct;
+  state.fees.brokerPct = p.brokerPct;
+  state.freight.outPerM3 = p.freightPerM3;
+  state.freight.inPerM3 = p.freightPerM3;
+  state.costsSource = `preset-${band}`;
+}
+
+function costsSourceLabel(): string {
+  if (state.costsSource === 'user') return 'Costs: your own rates.';
+  if (state.costsSource === 'default') return 'Costs: this build’s defaults — not yet your rates.';
+  const band = state.costsSource.slice('preset-'.length) as SpaceBand;
+  return `Costs: ${SPACE_COST_PRESETS[band].label} preset — ${PRESETS_ARE_APPROXIMATIONS}`;
+}
+
+/** A fee/freight edit makes the rates the user's own. */
+function ownCosts(set: (v: number) => void): (v: number) => void {
+  return (v) => { set(v); state.costsSource = 'user'; };
+}
+
 function renderMarket(): void {
   const body = byId('sec2Body');
   const summary = document.getElementById('sec2Summary');
@@ -402,22 +451,40 @@ function renderMarket(): void {
       ...priceRows,
     ),
     fetchBtn,
+    el('div', { class: 'v9-row fin-presets' },
+      el('span', { class: 'fin-preset-label' }, 'Typical costs for:'),
+      ...SPACE_BANDS.map((b) => {
+        const btn = el('button', {
+          class: `btn small preset-btn${state.costsSource === `preset-${b}` ? ' active' : ''}`,
+          type: 'button',
+          title: SPACE_COST_PRESETS[b].rationale,
+          click: () => { applyCostPreset(b); persist(); rerender(); },
+        }, BAND_LABELS[b]);
+        return btn;
+      }),
+      el('button', {
+        class: 'btn small', type: 'button',
+        title: 'Marks the current fee and freight numbers as your real rates (required for Exact detail level).',
+        click: () => { state.costsSource = 'user'; persist(); rerender(); },
+      }, 'These are my real rates'),
+    ),
+    el('p', { class: 'v9-muted fin-preset-note' }, costsSourceLabel()),
     el('div', { class: 'v9-row' },
-      el('label', {}, 'Sales tax % ', numInput(state.fees.salesTaxPct, 0, 100, 0.001, (v) => { state.fees.salesTaxPct = v; })),
-      el('label', {}, 'Broker % ', numInput(state.fees.brokerPct, 0, 100, 0.001, (v) => { state.fees.brokerPct = v; })),
-      el('label', {}, 'Customs owner % ', numInput(state.fees.customsPct, 0, 100, 0.1, (v) => { state.fees.customsPct = v; })),
+      el('label', {}, 'Sales tax % ', numInput(state.fees.salesTaxPct, 0, 100, 0.001, ownCosts((v) => { state.fees.salesTaxPct = v; }))),
+      el('label', {}, 'Broker % ', numInput(state.fees.brokerPct, 0, 100, 0.001, ownCosts((v) => { state.fees.brokerPct = v; }))),
+      el('label', {}, 'Customs owner % ', numInput(state.fees.customsPct, 0, 100, 0.1, ownCosts((v) => { state.fees.customsPct = v; }))),
       el('label', {}, (() => {
         const cb = el('input', {
           type: 'checkbox',
-          change: (ev) => { state.fees.hisecNpc = (ev.target as HTMLInputElement).checked; persist(); rerender(); },
+          change: (ev) => { state.fees.hisecNpc = (ev.target as HTMLInputElement).checked; state.costsSource = 'user'; persist(); rerender(); },
         });
         if (state.fees.hisecNpc) cb.setAttribute('checked', 'checked');
         return cb;
       })(), ' hisec NPC customs component'),
     ),
     el('div', { class: 'v9-row' },
-      el('label', {}, 'Freight out ISK/m³ ', numInput(state.freight.outPerM3, 0, 1e6, 1, (v) => { state.freight.outPerM3 = v; })),
-      el('label', {}, 'Freight in ISK/m³ ', numInput(state.freight.inPerM3, 0, 1e6, 1, (v) => { state.freight.inPerM3 = v; })),
+      el('label', {}, 'Freight out ISK/m³ ', numInput(state.freight.outPerM3, 0, 1e6, 1, ownCosts((v) => { state.freight.outPerM3 = v; }))),
+      el('label', {}, 'Freight in ISK/m³ ', numInput(state.freight.inPerM3, 0, 1e6, 1, ownCosts((v) => { state.freight.inPerM3 = v; }))),
       el('label', {}, 'Sell ', basisSelect(state.sellBasis, (v) => { state.sellBasis = v; })),
       el('label', {}, 'Buy ', basisSelect(state.buyBasis, (v) => { state.buyBasis = v; })),
     ),
@@ -432,7 +499,7 @@ function renderGoal(): void {
   const body = byId('sec3Body');
   const summary = document.getElementById('sec3Summary');
   const modeLabel = { max: 'max profit', quota: 'quota', qol: 'login budget', compare: 'compare all' }[state.mode];
-  if (summary) summary.textContent = `${state.product} · ${modeLabel}`;
+  if (summary) summary.textContent = state.modeChosen ? `${state.product} · ${modeLabel}` : `${state.product} · pick a goal`;
   const productSel = el('select', {
     change: (ev) => { state.product = (ev.target as HTMLSelectElement).value; state.sourcingOverrides = {}; persist(); rerender(); },
   }, ...[...SCHEMATICS.keys()].sort((a, b) => tierOf(a) - tierOf(b) || a.localeCompare(b)).map((name) => {
@@ -441,47 +508,138 @@ function renderGoal(): void {
     return o;
   }));
 
-  let sourcingRows: HTMLElement[] = [];
-  try {
-    const src = currentSourcing(state);
-    sourcingRows = Object.entries(src).map(([p1, mode]) =>
-      el('div', { class: 'v9-row' },
-        el('span', {}, p1),
-        el('select', {
-          change: (ev) => { state.sourcingOverrides[p1] = (ev.target as HTMLSelectElement).value as Sourcing; persist(); rerender(); },
-        }, ...(['extract', 'refine', 'buy'] as const).filter((m) => !(p1 === state.product && m === 'buy')).map((m) => {
-          const label = m === 'extract' ? 'extract (mine it)' : m === 'refine' ? 'refine (buy ore, 150:1)' : 'buy finished';
-          const o = el('option', { value: m }, label);
-          if (m === mode) o.setAttribute('selected', 'selected');
-          return o;
-        })),
-      ),
-    );
-  } catch { /* product mid-edit */ }
-
   const modes: Array<[UiState['mode'], string]> = [
     ['max', 'Maximum output of my chosen product'],
     ['quota', 'Hit a weekly quota with minimal colonies'],
     ['qol', 'Best net within a login budget'],
     ['compare', 'Compare every product (ranked frontier)'],
   ];
+  const modeBlock = el('div', {}, ...modes.map(([m, label]) => el('label', { class: 'v9-mode' },
+    (() => {
+      const r = el('input', {
+        type: 'radio', name: 'v9mode', value: m,
+        change: () => { state.mode = m; state.modeChosen = true; persist(); rerender(); },
+      });
+      // Nothing is pre-checked until the user actually chooses a goal.
+      if (state.modeChosen && state.mode === m) r.setAttribute('checked', 'checked');
+      return r;
+    })(), ` ${label}`,
+  )));
+
+  if (!state.modeChosen) {
+    // Progressive disclosure: the goal comes first; sourcing, detail level and
+    // the Solve button appear only once a goal exists to shape them.
+    body.replaceChildren(
+      el('div', { class: 'v9-row' }, el('label', {}, 'Product '), productSel),
+      el('h3', {}, 'What do you want?'),
+      modeBlock,
+      el('p', { class: 'v9-muted' },
+        'Pick a goal to continue. You will NOT have to fill everything in — the tool suggests sourcing and can stand in typical values until you provide your own.'),
+    );
+    return;
+  }
+
+  // --- Detail level (accuracy ladder) ---------------------------------------
+  const levels: Array<[UiState['detailLevel'], string, string]> = [
+    ['quick', 'Quick estimate', 'typical values stand in for anything you have not entered — instant numbers, clearly labeled an estimate'],
+    ['refined', 'Refined', 'your real scans required; typical cost presets still allowed (results say so)'],
+    ['exact', 'Exact', 'everything is yours — scans entered, costs confirmed; numbers carry no assumptions'],
+  ];
+  const detailBlock = el('div', { class: 'v9-detail' },
+    el('h3', {}, 'Detail level'),
+    ...levels.map(([lv, label, desc]) => el('label', { class: 'v9-mode' },
+      (() => {
+        const r = el('input', {
+          type: 'radio', name: 'v9detail', value: lv,
+          change: () => { state.detailLevel = lv; persist(); rerender(); },
+        });
+        if (state.detailLevel === lv) r.setAttribute('checked', 'checked');
+        return r;
+      })(), ` ${label} — ${desc}`,
+    )),
+  );
+
+  // Quick rung: the security band that supplies typical densities (and offers
+  // the matching cost prefill for section 4).
+  let bandRow: HTMLElement | null = null;
+  if (state.detailLevel === 'quick') {
+    const bandSel = el('select', {
+      change: (ev) => {
+        const v = (ev.target as HTMLSelectElement).value;
+        state.spaceBand = (SPACE_BANDS as readonly string[]).includes(v) ? (v as SpaceBand) : null;
+        if (state.spaceBand !== null && state.costsSource !== 'user') applyCostPreset(state.spaceBand);
+        persist(); rerender();
+      },
+    },
+      (() => { const o = el('option', { value: '' }, 'choose…'); if (state.spaceBand === null) o.setAttribute('selected', 'selected'); return o; })(),
+      ...SPACE_BANDS.map((b) => {
+        const o = el('option', { value: b }, `${BAND_LABELS[b]} — assume ${QUICK_DENSITY_PCT[b]}% density`);
+        if (state.spaceBand === b) o.setAttribute('selected', 'selected');
+        return o;
+      }));
+    const assumed = assumedDensityCount(state);
+    bandRow = el('div', { class: 'v9-row' },
+      el('label', {}, 'Your space ', bandSel),
+      el('span', { class: 'v9-muted' },
+        state.spaceBand === null
+          ? QUICK_DENSITY_DISCLOSURE
+          : `${assumed} unscanned value${assumed === 1 ? '' : 's'} will assume ${QUICK_DENSITY_PCT[state.spaceBand]}% (${BAND_LABELS[state.spaceBand]} typical). ${state.costsSource === 'user' ? 'Your own cost rates are kept.' : 'Typical costs were prefilled into section 4 — edit them any time.'}`),
+    );
+  }
+
+  // --- Sourcing: suggested by default, pinnable per input -------------------
+  let sourcingBlock: HTMLElement | null = null;
+  if (state.mode !== 'compare') {
+    let rows: HTMLElement[] = [];
+    try {
+      const heuristic = currentSourcing(state);
+      rows = Object.entries(heuristic).map(([p1, mode]) => {
+        const pinned = p1 in state.sourcingOverrides;
+        return el('div', { class: 'v9-row' },
+          el('span', {}, p1),
+          el('select', {
+            change: (ev) => {
+              const v = (ev.target as HTMLSelectElement).value;
+              if (v === 'auto') delete state.sourcingOverrides[p1];
+              else state.sourcingOverrides[p1] = v as Sourcing;
+              persist(); rerender();
+            },
+          },
+            (() => {
+              const o = el('option', { value: 'auto' }, `Suggested (auto — currently ${mode})`);
+              if (!pinned) o.setAttribute('selected', 'selected');
+              return o;
+            })(),
+            ...(['extract', 'refine', 'buy'] as const).filter((m) => !(p1 === state.product && m === 'buy')).map((m) => {
+              const label = m === 'extract' ? 'extract (mine it)' : m === 'refine' ? 'refine (buy ore, 150:1)' : 'buy finished';
+              const o = el('option', { value: m }, label);
+              if (pinned && state.sourcingOverrides[p1] === m) o.setAttribute('selected', 'selected');
+              return o;
+            })),
+        );
+      });
+    } catch { /* product mid-edit */ }
+    sourcingBlock = el('details', { class: 'v9-sourcing' },
+      el('summary', {}, 'Adjust sourcing (optional — Suggested by default)'),
+      el('p', { class: 'v9-muted' },
+        'The tool picks the best sourcing for each input from your goal, your scanned systems and (when loaded) prices — and the result names each choice with its reason. Pin an input here only if you want to overrule it.'),
+      ...rows,
+    );
+  }
+
   const children: Array<Node | null> = [
     el('div', { class: 'v9-row' }, el('label', {}, 'Product '), productSel),
-    el('h3', {}, 'Sourcing per input'),
-    ...sourcingRows,
-    el('div', {}, ...modes.map(([m, label]) => el('label', { class: 'v9-mode' },
-      (() => {
-        const r = el('input', { type: 'radio', name: 'v9mode', value: m, change: () => { state.mode = m; persist(); rerender(); } });
-        if (state.mode === m) r.setAttribute('checked', 'checked');
-        return r;
-      })(), ` ${label}`,
-    ))),
+    el('h3', {}, 'What do you want?'),
+    modeBlock,
     state.mode === 'quota'
       ? el('label', {}, 'Target/week ', numInput(state.quotaPerWeek, 1, 1e9, 1, (v) => { state.quotaPerWeek = v; }))
       : null,
     state.mode === 'qol'
       ? el('label', {}, 'Max sessions/week ', numInput(state.qolSessions, 0.5, 28, 0.5, (v) => { state.qolSessions = v; }))
       : null,
+    detailBlock,
+    bandRow,
+    sourcingBlock,
     (() => {
       const readiness = currentReadiness();
       const btn = el('button', { class: 'btn primary', click: runSolve }, 'Solve');
@@ -608,6 +766,42 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
   return box;
 }
 
+/** The accuracy ladder's honesty end: every number built on a stand-in is
+ * labeled with EXACTLY which stand-ins are in play. Returns null when nothing
+ * was assumed (the Exact promise). */
+function estimateBanner(): HTMLElement | null {
+  const assumptions: string[] = [];
+  const assumed = assumedDensityCount(state);
+  if (assumed > 0 && state.spaceBand !== null) {
+    assumptions.push(`${assumed} density value${assumed === 1 ? '' : 's'} assumed at ${QUICK_DENSITY_PCT[state.spaceBand]}% (${BAND_LABELS[state.spaceBand]} typical) — scan your planets for real numbers.`);
+  }
+  // The costs assumption only matters when ISK is actually on screen —
+  // an unpriced solve shows output, not net.
+  if (state.costsSource !== 'user' && Object.keys(state.prices).length > 0) {
+    assumptions.push(`${costsSourceLabel()} Edit or confirm them in section 4.`);
+  }
+  if (assumptions.length === 0) return null;
+  return el('div', { class: 'v9-warn v9-estimate' },
+    el('b', {}, 'ESTIMATE — these numbers stand in for details you have not provided yet:'),
+    ...assumptions.map((a) => el('div', {}, `• ${a}`)));
+}
+
+/** Disclose the sourcing the tool chose — every input, with its reason. */
+function suggestionCard(s: SourcingSuggestion): HTMLElement {
+  const pinned = Object.keys(state.sourcingOverrides).length;
+  return el('div', { class: 'v9-card v9-suggest' },
+    el('h4', {}, 'Sourcing — chosen for you'),
+    ...s.notes.map((n) => el('p', {}, el('b', {}, `${n.p1}: ${n.mode}`), ` — ${n.reason}`)),
+    el('p', { class: 'v9-muted' },
+      s.refined
+        ? 'Choices were price-compared: each alternative fully re-solved and settled through the one ledger (single deterministic pass).'
+        : `Heuristic choice${s.refinementSkipped !== undefined ? ` — ${s.refinementSkipped}` : ''}.`,
+    ),
+    pinned > 0 ? el('p', { class: 'v9-muted' }, `${pinned} input${pinned === 1 ? '' : 's'} pinned by you (never overruled).`) : null,
+    el('p', { class: 'v9-muted' }, 'To overrule any of these, pin it under “Adjust sourcing” in section 1.'),
+  );
+}
+
 function runSolve(): void {
   const resultsBox = byId('resultsPanel');
   const gate = currentReadiness();
@@ -625,11 +819,13 @@ function runSolve(): void {
   setTimeout(() => {
     try {
       const world = toWorld(state);
+      const banner = estimateBanner();
       if (state.mode === 'compare') {
         const { ranked, excluded } = comparative(world, toMarket(state));
-        if (summary) summary.textContent = `${ranked.length} viable products ranked`;
+        if (summary) summary.textContent = `${ranked.length} viable products ranked${banner !== null ? ' (estimate)' : ''}`;
         announce(`Comparison complete: ${ranked.length} viable products ranked.`);
         resultsBox.replaceChildren(
+          ...(banner !== null ? [banner] : []),
           // Audit B3: never truncate silently.
           el('p', { class: 'v9-muted' },
             ranked.length > 15 ? `Top 15 shown of ${ranked.length} viable products.` : `${ranked.length} viable product${ranked.length === 1 ? '' : 's'}.`),
@@ -647,9 +843,12 @@ function runSolve(): void {
         );
         return;
       }
-      const sourcing = currentSourcing(state);
+      // Sourcing is an OUTPUT here: the tool picks per input from the goal,
+      // the world and (when loaded) prices; user pins are applied verbatim.
+      const suggestion = suggestSourcing(world, state.product, toMarket(state), state.sourcingOverrides);
+      const sourcing = suggestion.sourcing;
       let result: SolveResult;
-      const extra: HTMLElement[] = [];
+      const extra: HTMLElement[] = [suggestionCard(suggestion)];
       if (state.mode === 'quota') {
         const q = solveQuota(world, state.product, state.quotaPerWeek, sourcing);
         if ('error' in q) {
@@ -668,9 +867,11 @@ function runSolve(): void {
         if ('error' in r) { resultsBox.replaceChildren(el('div', { class: 'v9-warn' }, r.error)); return; }
         result = r;
       }
-      if (summary) summary.textContent = `${fmt(result.realizedPerWeek)} ${result.product}/wk · ${result.method}`;
+      if (summary) summary.textContent = `${fmt(result.realizedPerWeek)} ${result.product}/wk · ${result.method}${banner !== null ? ' (estimate)' : ''}`;
       announce(`Solved: ${fmt(result.realizedPerWeek)} ${result.product} per week using ${result.slotsUsed} colonies.`);
-      resultsBox.replaceChildren(renderResult(result, state, extra));
+      const rendered = renderResult(result, state, extra);
+      if (banner !== null) rendered.prepend(banner);
+      resultsBox.replaceChildren(rendered);
     } catch (e) {
       resultsBox.replaceChildren(el('div', { class: 'v9-warn' }, (e as Error).message));
       announce('Solve failed — see the results section for the reason.');
@@ -725,6 +926,52 @@ function wireShell(): void {
     if (confirm('Reset everything to defaults?')) { state = defaultState(); persist(); rerender(); }
   });
 
+  // Per-section resets (v8 chrome, v9 state slices). Each resets ONLY its own
+  // section's slice, after a confirm that names what is about to go.
+  const resets: Record<string, { what: string; run: () => void }> = {
+    sec3: {
+      what: 'your goal — product, mode, detail level, space band and sourcing pins',
+      run: () => {
+        const d = defaultState();
+        state.product = d.product; state.mode = d.mode; state.modeChosen = false;
+        state.detailLevel = d.detailLevel; state.spaceBand = null;
+        state.quotaPerWeek = d.quotaPerWeek; state.qolSessions = d.qolSessions;
+        state.sourcingOverrides = {};
+      },
+    },
+    sec0: { what: 'your operation — all characters and their skills', run: () => { state.characters = defaultState().characters; } },
+    sec1: { what: 'ALL planets and their scan values', run: () => { state.planets = defaultState().planets; flatRateUndo = null; } },
+    sec2: {
+      what: 'all prices, fees and freight rates',
+      run: () => {
+        const d = defaultState();
+        state.prices = d.prices; state.priceNote = d.priceNote; state.fees = d.fees;
+        state.freight = d.freight; state.sellBasis = d.sellBasis; state.buyBasis = d.buyBasis;
+        state.costsSource = d.costsSource;
+      },
+    },
+    sec4: {
+      what: 'the solved results shown below (your inputs are kept)',
+      run: () => {
+        document.getElementById('resultsPanel')?.replaceChildren();
+        const sum = document.getElementById('sec4Summary');
+        if (sum) sum.textContent = '';
+      },
+    },
+  };
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('button[data-reset]')) {
+    const target = btn.dataset['reset'] ?? '';
+    const r = resets[target];
+    if (r === undefined) continue;
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (!confirm(`Reset this section? This clears ${r.what}.`)) return;
+      r.run();
+      persist(); rerender();
+      announce('Section reset to defaults.');
+    });
+  }
+
   wireSystemSearch();
 
   document.getElementById('applyFlatRate')?.addEventListener('click', () => {
@@ -737,6 +984,19 @@ function wireShell(): void {
     if (st) st.textContent = `Applied ${pct}% (w=${fmt1(w)}) to every resource on every planet — an estimate, not your real numbers.`;
     persist(); rerender();
   });
+  // Per-security-band quick buttons: set the flat-density field to the band's
+  // typical value (same anchors as the Quick estimate detail level).
+  for (const bandBtn of document.querySelectorAll<HTMLButtonElement>('button[data-band]')) {
+    const band = bandBtn.dataset['band'] as SpaceBand | undefined;
+    if (band === undefined || !(SPACE_BANDS as readonly string[]).includes(band)) continue;
+    bandBtn.addEventListener('click', () => {
+      const input = document.getElementById('flatRate') as HTMLInputElement | null;
+      if (input) input.value = String(QUICK_DENSITY_PCT[band]);
+      const st = document.getElementById('flatRateStatus');
+      if (st) st.textContent = `${BAND_LABELS[band]} typical: ${QUICK_DENSITY_PCT[band]}% — press “Apply to all planets” to use it. ${QUICK_DENSITY_DISCLOSURE}`;
+    });
+  }
+
   document.getElementById('clearFlatRate')?.addEventListener('click', () => {
     if (flatRateUndo === null) return;
     state.planets = flatRateUndo;
@@ -961,6 +1221,26 @@ function selfTest(): void {
       product: 'Water', sourcing: { Water: 'extract' }, mode: 'max', prices: {},
     });
     if (blockedNoPlanets.ready || blockedNoScan.ready || !open.ready) throw new Error('selftest: solve gate misjudged');
+
+    // Accuracy-ladder gating: no goal blocks everything; quick+band passes an
+    // unscanned world; quick without a band blocks it; exact demands own costs.
+    const unscanned: UiPlanet[] = [{ name: 'U', type: 'Storm', resources: [{ p0: 'Aqueous Liquids', w: 0 }] }];
+    const noGoal = solveReadiness({ planets: unscanned, product: 'Water', sourcing: {}, mode: 'max', prices: {}, modeChosen: false });
+    const quickBand = solveReadiness({ planets: unscanned, product: 'Water', sourcing: { Water: 'extract' }, mode: 'max', prices: {}, detailLevel: 'quick', spaceBand: 'nullsec' });
+    const quickNoBand = solveReadiness({ planets: unscanned, product: 'Water', sourcing: { Water: 'extract' }, mode: 'max', prices: {}, detailLevel: 'quick', spaceBand: null });
+    const exactDefaultCosts = solveReadiness({
+      planets: [{ name: 'G', type: 'Storm', resources: [{ p0: 'Aqueous Liquids', w: 9000 }] }],
+      product: 'Water', sourcing: { Water: 'extract' }, mode: 'max', prices: {}, detailLevel: 'exact', costsSource: 'default',
+    });
+    if (noGoal.ready || !quickBand.ready || quickNoBand.ready || exactDefaultCosts.ready) {
+      throw new Error('selftest: accuracy-ladder gate misjudged');
+    }
+
+    // Suggested sourcing must cover every input with a named reason.
+    const sug = suggestSourcing(world, 'Coolant', { ...toMarket(defaultState()), prices: {} });
+    if (sug.notes.length === 0 || sug.notes.some((n) => n.reason === '' || !['extract', 'refine', 'buy'].includes(n.mode))) {
+      throw new Error('selftest: sourcing suggestion incomplete');
+    }
     document.body.dataset['gate'] = 'pass';
 
     // Price fetch depends on typeID resolution: the merged registry must cover

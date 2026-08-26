@@ -6,6 +6,7 @@
 import type { PlanetType } from '../spec/schematics.js';
 import { PLANET_TYPES } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
+import { SPACE_BANDS, type SpaceBand } from './presets.js';
 
 export interface UiCharacter {
   name: string;
@@ -32,6 +33,14 @@ export interface UiQuote { bid: number; ask: number; dailyVolume?: number }
 
 export type UiMode = 'max' | 'quota' | 'qol' | 'compare';
 
+/** Accuracy ladder: quick (typical-value stand-ins, instant numbers) →
+ * refined (your scans, preset costs allowed) → exact (everything yours). */
+export type DetailLevel = 'quick' | 'refined' | 'exact';
+
+/** Where the current fee/freight numbers came from — decides whether results
+ * are labeled estimates and whether the Exact rung is satisfied. */
+export type CostsSource = 'default' | `preset-${SpaceBand}` | 'user';
+
 export interface UiState {
   characters: UiCharacter[];
   planets: UiPlanet[];
@@ -43,9 +52,16 @@ export interface UiState {
   buyBasis: 'immediate' | 'patient';
   programHours: number;
   mode: UiMode;
+  /** Sourcing/detail controls stay hidden until the user has picked a goal. */
+  modeChosen: boolean;
+  detailLevel: DetailLevel;
+  /** Security band driving Quick-estimate densities (and the cost prefill offer). */
+  spaceBand: SpaceBand | null;
+  costsSource: CostsSource;
   product: string;
   quotaPerWeek: number;
   qolSessions: number;
+  /** Explicit per-input pins; an absent key means "Suggested (auto)". */
   sourcingOverrides: Record<string, 'extract' | 'refine' | 'buy'>;
 }
 
@@ -61,6 +77,10 @@ export function defaultState(): UiState {
     buyBasis: 'immediate',
     programHours: 6,
     mode: 'max',
+    modeChosen: false,
+    detailLevel: 'quick',
+    spaceBand: null,
+    costsSource: 'default',
     product: 'Coolant',
     quotaPerWeek: 5000,
     qolSessions: 7,
@@ -80,6 +100,11 @@ export function loadState(): UiState {
     const merged: UiState = { ...base, ...parsed, fees: { ...base.fees, ...parsed.fees }, freight: { ...base.freight, ...parsed.freight } };
     if (!Array.isArray(merged.characters) || merged.characters.length === 0) merged.characters = base.characters;
     if (!Array.isArray(merged.planets)) merged.planets = base.planets;
+    if (!['quick', 'refined', 'exact'].includes(merged.detailLevel)) merged.detailLevel = base.detailLevel;
+    if (merged.spaceBand !== null && !(SPACE_BANDS as readonly string[]).includes(merged.spaceBand)) merged.spaceBand = null;
+    if (typeof merged.modeChosen !== 'boolean') merged.modeChosen = false;
+    if (merged.costsSource !== 'default' && merged.costsSource !== 'user'
+      && !SPACE_BANDS.some((b) => merged.costsSource === `preset-${b}`)) merged.costsSource = base.costsSource;
     merged.planets = merged.planets.filter((p) => (PLANET_TYPES as readonly string[]).includes(p.type));
     // Game truth: each planet carries each of its type's 5 resources at most
     // once — sanitize saves made before the UI enforced it (keep the first

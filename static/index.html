@@ -226,6 +226,7 @@
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">1. Your Goal</span><span class="sec-summary" id="sec3Summary"></span></h2>
     <div class="sec-controls">
+      <button class="btn reset-section" data-reset="sec3" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec3" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
@@ -236,6 +237,7 @@
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">2. Your Operation</span><span class="sec-summary" id="sec0Summary"></span></h2>
     <div class="sec-controls">
+      <button class="btn reset-section" data-reset="sec0" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec0" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
@@ -246,6 +248,7 @@
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">3. Your Systems &amp; Planets</span><span class="sec-summary" id="sec1Summary"></span></h2>
     <div class="sec-controls">
+      <button class="btn reset-section" data-reset="sec1" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec1" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
@@ -287,10 +290,18 @@
 
     <div class="quickrate-panel">
       <div class="qr-head">
-        <b>&#9889; Quick estimate</b>
-        <span class="qr-sub">Set every resource on every planet to one flat density.
-          Useful for a fast ballpark before you scan anything &mdash; but the result is
-          an estimate, not your real numbers.</span>
+        <b>&#9889; Flat density</b>
+        <span class="qr-sub">Set every resource on every planet to one flat density &mdash;
+          or tap a security band for its typical value. Useful for a fast ballpark before
+          you scan anything, but the result is an estimate, not your real numbers.
+          (The Quick estimate detail level in section 1 does this automatically,
+          without touching your saved values.)</span>
+      </div>
+      <div class="qr-row">
+        <button class="btn small preset-btn" data-band="highsec" type="button" title="Typical high-sec yield &mdash; an estimate, not a scan">High sec 30%</button>
+        <button class="btn small preset-btn" data-band="lowsec" type="button" title="Typical low-sec yield &mdash; an estimate, not a scan">Low sec 60%</button>
+        <button class="btn small preset-btn" data-band="nullsec" type="button" title="Typical null-sec yield &mdash; an estimate, not a scan">Null sec 90%</button>
+        <button class="btn small preset-btn" data-band="wormhole" type="button" title="Typical wormhole yield &mdash; an estimate, not a scan">Wormhole 100%</button>
       </div>
       <div class="qr-row">
         <label for="flatRate">Flat density</label>
@@ -324,6 +335,7 @@
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">4. Costs &amp; Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
     <div class="sec-controls">
+      <button class="btn reset-section" data-reset="sec2" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec2" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
@@ -334,6 +346,7 @@
   <div class="section-head-row">
     <h2 class="section-title"><span class="st-label">5. Results</span><span class="sec-summary" id="sec4Summary"></span></h2>
     <div class="sec-controls">
+      <button class="btn reset-section" data-reset="sec4" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec4" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
@@ -467,11 +480,13 @@
 
       <h3>The short version</h3>
       <ol class="help-steps">
-        <li>Pick your goal: the product, how you define &ldquo;best&rdquo;, and where each input comes from.</li>
+        <li>Pick your goal: the product and how you define &ldquo;best&rdquo;. That is all the tool
+          demands &mdash; sourcing is <b>suggested for you</b> and typical values can stand in for
+          the rest until you provide your own.</li>
         <li>Enter your characters — each one individually, with their real skills.</li>
         <li>Enter your planets and their scanned resource values (search a system, drop in screenshots, or type them).</li>
-        <li>Enter your costs &mdash; tax, fees, shipping &mdash; and load or enter Jita prices.</li>
-        <li>Press Solve (it unlocks once everything it needs is defined) — you get a build sheet per character, plus the analytics that explain it.</li>
+        <li>Enter your costs &mdash; tax, fees, shipping (or apply a typical space-type preset) &mdash; and load or enter Jita prices.</li>
+        <li>Press Solve (it unlocks once everything your goal and detail level need is defined) — you get a build sheet per character, plus the analytics that explain it.</li>
       </ol>
 
       <h3>Step 1 &mdash; Your goal</h3>
@@ -479,11 +494,25 @@
         priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
         weekly amount), <b>a login budget</b> (best net within your sessions per week), or
         <b>compare everything</b> (the profit ranking across every product your operation could
-        make). <b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
+        make). Pick one and the rest of the section appears &mdash; only what that goal needs.</p>
+      <p><b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
         <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
         the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
-        The analytics re-solve all three per input and tell you what your current choice is
-        leaving on the table.</p>
+        You do not have to decide this: it defaults to <b>Suggested</b> &mdash; the tool picks per
+        input from your goal, your scanned systems and (when loaded) prices, and the result
+        names every choice with its reason and what the alternatives were worth. Pin an input
+        under <i>Adjust sourcing</i> only to overrule it.</p>
+      <p><b>Detail level</b> is the accuracy-for-convenience dial. <b>Quick estimate</b> answers
+        immediately: unscanned densities assume your security band&rsquo;s typical value and
+        typical costs are prefilled &mdash; every such number is clearly labeled an estimate with
+        the exact assumptions listed. <b>Refined</b> requires your real scans (typical cost
+        presets still allowed, still labeled). <b>Exact</b> means everything is yours &mdash;
+        scans entered, cost rates edited or confirmed &mdash; and only Exact prints unlabeled
+        numbers. The band density assumptions (High sec 30%, Low sec 60%, Null sec 90%,
+        Wormhole 100%) are typical-yield anchors, not game data &mdash; CCP publishes no density
+        table &mdash; so replace them with scans when you commit.</p>
+      <p>Each planner section has a <b>&#10226; Reset</b> button that clears only that
+        section back to defaults, after asking.</p>
 
       <h3>Step 2 &mdash; Your operation</h3>
       <p>Every character is modeled individually. One character can run <b>six planets at
@@ -508,6 +537,10 @@
 
       <h3>Step 4 &mdash; Costs &amp; market</h3>
       <ul>
+        <li><b>Space-type presets</b> &mdash; one tap fills typical High/Low/Null/Wormhole
+          rates (each figure&rsquo;s rationale is on its button). Presets are typical values,
+          not yours &mdash; results stay labeled as estimates until you edit the fields or press
+          <i>These are my real rates</i>.</li>
         <li><b>Customs tax</b> &mdash; what your POCO or skyhook charges. The game taxes fixed
           base values per tier, not market price &mdash; the tool gets this right.</li>
         <li><b>Sales tax and broker fee</b> &mdash; what the market takes when you sell.</li>

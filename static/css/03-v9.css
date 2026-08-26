@@ -52,3 +52,15 @@ details.v9-ledger summary { color: var(--cyan); cursor: pointer; margin: 8px 0; 
 .v9-row input[type="text"], .v9-planet input[type="text"] { width: 13em; display: inline-block; }
 .v9-table input[type="number"] { width: 7.5em; }
 .v9-planet > .v9-row:first-child { justify-content: flex-start; }
+
+/* --- Goal refinement: accuracy ladder, suggested sourcing, estimate labels --- */
+.v9-estimate {
+  background: color-mix(in srgb, var(--amber, #e5b567) 14%, var(--panel));
+  border-color: var(--amber, #e5b567);
+}
+.v9-estimate b { display: block; margin-bottom: 4px; }
+.v9-suggest p { margin: 4px 0; font-size: .9rem; }
+details.v9-sourcing { margin: 10px 0; }
+details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0; }
+.v9-detail { margin: 10px 0; }
+.v9-detail h3 { margin-bottom: 4px; }
