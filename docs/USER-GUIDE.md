@@ -15,7 +15,10 @@ silently: every assumption is named, on screen, next to the number it touched.
 
 ## Section 1 — Your Goal
 
-**Pick a product and a goal.** Four goals:
+**"What do you want?" comes first.** The goal is the section's opening
+question, and the answer dictates what appears next: Max output, Quota and
+Login budget then ask for a product; **Compare shows no product dropdown at
+all** — it ranks every product itself. Four goals:
 
 | Goal | Question it answers | Needs prices? |
 |---|---|---|

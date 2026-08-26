@@ -499,7 +499,11 @@ function renderGoal(): void {
   const body = byId('sec3Body');
   const summary = document.getElementById('sec3Summary');
   const modeLabel = { max: 'max profit', quota: 'quota', qol: 'login budget', compare: 'compare all' }[state.mode];
-  if (summary) summary.textContent = state.modeChosen ? `${state.product} · ${modeLabel}` : `${state.product} · pick a goal`;
+  if (summary) {
+    summary.textContent = !state.modeChosen ? 'pick a goal'
+      : state.mode === 'compare' ? modeLabel
+        : `${state.product} · ${modeLabel}`;
+  }
   const productSel = el('select', {
     change: (ev) => { state.product = (ev.target as HTMLSelectElement).value; state.sourcingOverrides = {}; persist(); rerender(); },
   }, ...[...SCHEMATICS.keys()].sort((a, b) => tierOf(a) - tierOf(b) || a.localeCompare(b)).map((name) => {
@@ -527,10 +531,10 @@ function renderGoal(): void {
   )));
 
   if (!state.modeChosen) {
-    // Progressive disclosure: the goal comes first; sourcing, detail level and
-    // the Solve button appear only once a goal exists to shape them.
+    // Progressive disclosure: THE GOAL IS THE FIRST AND ONLY QUESTION.
+    // Product, sourcing, detail level and Solve all appear only once a goal
+    // exists to shape them — the goal decides whether a product is even asked.
     body.replaceChildren(
-      el('div', { class: 'v9-row' }, el('label', {}, 'Product '), productSel),
       el('h3', {}, 'What do you want?'),
       modeBlock,
       el('p', { class: 'v9-muted' },
@@ -628,9 +632,13 @@ function renderGoal(): void {
   }
 
   const children: Array<Node | null> = [
-    el('div', { class: 'v9-row' }, el('label', {}, 'Product '), productSel),
     el('h3', {}, 'What do you want?'),
     modeBlock,
+    // The goal dictates whether a product is even a question: compare ranks
+    // ALL products itself, so no product dropdown exists in that mode.
+    state.mode !== 'compare'
+      ? el('div', { class: 'v9-row' }, el('label', {}, 'Product '), productSel)
+      : null,
     state.mode === 'quota'
       ? el('label', {}, 'Target/week ', numInput(state.quotaPerWeek, 1, 1e9, 1, (v) => { state.quotaPerWeek = v; }))
       : null,

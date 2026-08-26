@@ -121,6 +121,10 @@ check('fresh: goal prompt shown', await page.locator('#sec3', { hasText: 'Pick a
 check('fresh: sourcing hidden', await page.locator('text=Adjust sourcing (optional').count() === 0);
 check('fresh: sticky Solve disabled with goal named', await page.locator('#stickyCalcBtn[disabled]').count() === 1
   && /Pick your goal/.test(await page.locator('#stickyCalcInfo').textContent()));
+// "What do you want?" is the FIRST and ONLY question before a goal is picked —
+// no product dropdown exists yet.
+check('fresh: goal question first, no product dropdown', await page.locator('#sec3 select').count() === 0
+  && /What do you want\?/.test(await page.locator('#sec3').textContent()));
 await shoot('01-fresh-goal-first', page.locator('#sec3'));
 
 // Seed the full operation and reload (autosave storage key).
@@ -184,6 +188,7 @@ await shoot('06-qol-results', page.locator('#resultsPanel'));
 await page.check('input[name="v9mode"][value="compare"]');
 await page.waitForTimeout(200);
 check('compare: sourcing controls absent', await page.locator('text=Adjust sourcing (optional').count() === 0);
+check('compare: product dropdown disappears', await page.locator('#sec3').textContent().then((t) => !/Product /.test(t)));
 await solveAndWait();
 check('compare: ranked table with pick buttons',
   await page.locator('#resultsPanel table tr').count() > 3
