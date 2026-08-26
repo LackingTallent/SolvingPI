@@ -164,7 +164,7 @@ for i, (f, d) in enumerate(SCENES):
     # Slow push-in (outro pulls back out instead).
     zexpr = "'min(1.042,1+0.0011*on)'" if f != "f24.png" else "'max(1.0,1.04-0.0011*on)'"
     filters.append(
-        f"[{i}:v]scale=1280:800,zoompan=z={zexpr}"
+        f"[{i}:v]scale=2560:1600:flags=lanczos,zoompan=z={zexpr}"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1280x800:fps={FPS},"
         f"format=yuv420p,settb=AVTB[v{i}]")
 crossfades, total = [], SCENES[0][1]
