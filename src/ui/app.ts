@@ -18,6 +18,8 @@ import { analyze, bottleneckReport, optimalityInsight, runwayInsight, type Insig
 import { idRegistry } from '../data/ids.js';
 import { fetchPrices } from '../data/prices.js';
 import { defaultEsiJson, importSystem, loadSystemIndex, searchSystems, type SystemIndex } from './esi-universe.js';
+import { solveReadiness, type Readiness } from './readiness.js';
+import type { IdRegistry } from '../data/ids.js';
 
 // ---------------------------------------------------------------------------
 // Tiny DOM helper
@@ -105,6 +107,52 @@ function currentSourcing(s: UiState): Record<string, Sourcing> {
     if (p1 in base) base[p1] = mode;
   }
   return base;
+}
+
+function currentReadiness(): Readiness {
+  let sourcing: Record<string, Sourcing> = {};
+  try { sourcing = currentSourcing(state); } catch { /* product mid-edit */ }
+  return solveReadiness({
+    planets: state.planets,
+    product: state.product,
+    sourcing,
+    mode: state.mode,
+    prices: state.prices,
+  });
+}
+
+/**
+ * TypeID registry with the field-proven legacy fallback: the carried-over
+ * 01-data.js defines TYPE_IDS for all 101 commodities (they priced the live
+ * v8 site for months). The generated registry wins where it exists; the
+ * legacy map fills the rest, so live price fetch works for EVERYTHING today
+ * instead of the 4 gen-sde-verified ids.
+ */
+function mergedIds(): IdRegistry {
+  const base = idRegistry();
+  const g = globalThis as unknown as {
+    TYPE_IDS?: Record<string, number>;
+    priceableTypeId?: (n: string) => number | null;
+  };
+  return {
+    typeIdOf(name: string): number {
+      try { return base.typeIdOf(name); } catch (e) {
+        const id = (typeof g.priceableTypeId === 'function' ? g.priceableTypeId(name) : null) ?? g.TYPE_IDS?.[name];
+        if (typeof id === 'number' && id > 0) return id;
+        throw e;
+      }
+    },
+    nameOf(typeId: number): string {
+      try { return base.nameOf(typeId); } catch (e) {
+        const hit = Object.entries(g.TYPE_IDS ?? {}).find(([, v]) => v === typeId);
+        if (hit !== undefined) return hit[0];
+        throw e;
+      }
+    },
+    schematicName: (id) => base.schematicName(id),
+    pinKind: (id) => base.pinKind(id),
+    meta: base.meta,
+  };
 }
 
 function neededCommodities(s: UiState): string[] {
@@ -204,11 +252,15 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
     if (t === p.type) o.setAttribute('selected', 'selected');
     return o;
   }));
+  // Game truth: a planet carries exactly the 5 resources of its type, each
+  // once. The row's dropdown offers only resources not already listed (plus
+  // its own), so duplicates are unpickable, and the add button caps at 5.
+  const taken = new Set(p.resources.map((r) => r.p0));
   const resRows = p.resources.map((r, ri) =>
     el('div', { class: 'v9-row' },
       el('select', {
         change: (ev) => { r.p0 = (ev.target as HTMLSelectElement).value; persist(); rerender(); },
-      }, ...resourcesOf(p.type).map((p0) => {
+      }, ...resourcesOf(p.type).filter((p0) => p0 === r.p0 || !taken.has(p0)).map((p0) => {
         const o = el('option', { value: p0 }, p0);
         if (p0 === r.p0) o.setAttribute('selected', 'selected');
         return o;
@@ -242,15 +294,23 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
       el('button', { class: 'btn small', click: () => { state.planets.splice(i, 1); persist(); rerender(); } }, 'remove planet'),
     ),
     ...resRows,
-    el('button', {
-      class: 'btn small',
-      click: () => {
-        const first = resourcesOf(p.type)[0];
-        if (first === undefined) return;
-        p.resources.push({ p0: first, w: Math.round(DENSITY_REFERENCE_W) });
-        persist(); rerender();
-      },
-    }, '+ scanned resource'),
+    (() => {
+      const unused = resourcesOf(p.type).filter((p0) => !taken.has(p0));
+      const btn = el('button', {
+        class: 'btn small',
+        title: unused.length === 0
+          ? `A ${p.type} planet carries exactly these ${resourcesOf(p.type).length} resources — there are no more to add.`
+          : 'Add the next resource this planet type carries',
+        click: () => {
+          const first = resourcesOf(p.type).filter((p0) => !p.resources.some((r) => r.p0 === p0))[0];
+          if (first === undefined) return;
+          p.resources.push({ p0: first, w: 0 });
+          persist(); rerender();
+        },
+      }, '+ scanned resource');
+      if (unused.length === 0) btn.setAttribute('disabled', 'disabled');
+      return btn;
+    })(),
   );
 }
 
@@ -306,12 +366,16 @@ function renderMarket(): void {
     class: 'btn',
     click: () => {
       fetchBtn.textContent = 'Fetching Jita order books…';
-      fetchPrices(neededCommodities(state), {
-        ids: idRegistry(),
+      const names = neededCommodities(state);
+      let fetched = 0;
+      fetchPrices(names, {
+        ids: mergedIds(),
         now: () => new Date().toISOString(),
         fetchJson: async (url) => {
-          const res = await fetch(url, { headers: { Accept: 'application/json' } });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status} from ESI`);
+          fetched++;
+          fetchBtn.textContent = `Fetching Jita order books… (${Math.min(Math.ceil(fetched / 2), names.length)}/${names.length})`;
           return { body: await res.json(), headers: {} };
         },
       }).then((snap) => {
@@ -418,7 +482,21 @@ function renderGoal(): void {
     state.mode === 'qol'
       ? el('label', {}, 'Max sessions/week ', numInput(state.qolSessions, 0.5, 28, 0.5, (v) => { state.qolSessions = v; }))
       : null,
-    el('div', { class: 'v9-row' }, el('button', { class: 'btn primary', click: runSolve }, 'Solve')),
+    (() => {
+      const readiness = currentReadiness();
+      const btn = el('button', { class: 'btn primary', click: runSolve }, 'Solve');
+      if (!readiness.ready) {
+        btn.setAttribute('disabled', 'disabled');
+        btn.setAttribute('title', readiness.missing.join('\n'));
+      }
+      const row = el('div', { class: 'v9-row' }, btn);
+      if (!readiness.ready) {
+        row.append(el('div', { class: 'v9-muted' },
+          el('b', {}, 'Solve unlocks when: '),
+          ...readiness.missing.map((m) => el('div', {}, `• ${m}`))));
+      }
+      return row;
+    })(),
   ];
   body.replaceChildren(...children.filter((c): c is Node => c !== null));
 }
@@ -532,6 +610,14 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
 
 function runSolve(): void {
   const resultsBox = byId('resultsPanel');
+  const gate = currentReadiness();
+  if (!gate.ready) {
+    const sec4g = document.getElementById('sec4');
+    if (sec4g) sec4g.classList.remove('collapsed');
+    resultsBox.replaceChildren(el('div', { class: 'v9-warn' },
+      'Not ready to solve yet:\n' + gate.missing.map((m) => `• ${m}`).join('\n')));
+    return;
+  }
   const sec4 = document.getElementById('sec4');
   if (sec4) sec4.classList.remove('collapsed');
   resultsBox.replaceChildren(el('p', {}, 'Solving…'));
@@ -828,6 +914,25 @@ function rerender(): void {
   renderPlanets();
   renderMarket();
   renderGoal();
+  updateSolveGate();
+}
+
+/** Keep the sticky Solve in step with the gate (the Goal section's button is
+ * rebuilt each render; this one persists). */
+function updateSolveGate(): void {
+  const btn = document.getElementById('stickyCalcBtn');
+  const info = document.getElementById('stickyCalcInfo');
+  if (btn === null) return;
+  const readiness = currentReadiness();
+  if (readiness.ready) {
+    btn.removeAttribute('disabled');
+    btn.removeAttribute('title');
+    if (info) info.textContent = 'Judge-checked plans · one ledger · answers carry their optimality bound';
+  } else {
+    btn.setAttribute('disabled', 'disabled');
+    btn.setAttribute('title', readiness.missing.join('\n'));
+    if (info) info.textContent = `Solve unlocks when: ${readiness.missing[0] ?? ''}${readiness.missing.length > 1 ? ` (+${readiness.missing.length - 1} more — see section 1)` : ''}`;
+  }
 }
 
 function selfTest(): void {
@@ -844,6 +949,29 @@ function selfTest(): void {
     const r = solveMax(world, 'Coolant', { Water: 'extract', Electrolytes: 'extract' });
     if ('error' in r) throw new Error(r.error);
     if (!r.verdict.legal || r.realizedPerWeek <= 0) throw new Error('selftest: implausible result');
+
+    // The solve gate itself must block what it should and pass what it should.
+    const blockedNoPlanets = solveReadiness({ planets: [], product: 'Coolant', sourcing: { Water: 'extract', Electrolytes: 'extract' }, mode: 'max', prices: {} });
+    const blockedNoScan = solveReadiness({
+      planets: [{ name: 'G', type: 'Storm', resources: [{ p0: 'Aqueous Liquids', w: 0 }] }],
+      product: 'Water', sourcing: { Water: 'extract' }, mode: 'max', prices: {},
+    });
+    const open = solveReadiness({
+      planets: [{ name: 'G', type: 'Storm', resources: [{ p0: 'Aqueous Liquids', w: 9000 }] }],
+      product: 'Water', sourcing: { Water: 'extract' }, mode: 'max', prices: {},
+    });
+    if (blockedNoPlanets.ready || blockedNoScan.ready || !open.ready) throw new Error('selftest: solve gate misjudged');
+    document.body.dataset['gate'] = 'pass';
+
+    // Price fetch depends on typeID resolution: the merged registry must cover
+    // commodities the generated (partial) registry lacks, via the legacy map.
+    const ids = mergedIds();
+    for (const name of ['Coolant', 'Electrolytes', 'Robotics', 'Broadcast Node']) {
+      const id = ids.typeIdOf(name);
+      if (!(id > 0)) throw new Error(`selftest: typeID unresolved for ${name}`);
+    }
+    document.body.dataset['typeids'] = 'pass';
+
     document.body.dataset['selftest'] = 'pass';
   } catch (e) {
     document.body.dataset['selftest'] = `fail: ${(e as Error).message}`;

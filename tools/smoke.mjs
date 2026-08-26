@@ -75,7 +75,15 @@ const checks = [
   ['version stamped (no literal build token)', !dom.includes('@build:version')],
   ['batch import panel present', dom.includes('batchInput')],
   ['system search rendered', dom.includes('sysSearch') && dom.includes('Load its planets')],
-  ['only section 1 starts expanded', /id="sec1" [^>]*class="card collapsed"|class="card collapsed" id="sec1"/.test(dom) && !/class="card collapsed" id="sec0"/.test(dom)],
+  ['goal section is step 1 and the only one expanded',
+    dom.includes('class="card" id="sec3"')
+    && ['sec0', 'sec1', 'sec2', 'sec4'].every((id) => dom.includes(`class="card collapsed" id="${id}"`))
+    && dom.indexOf('id="sec3"') < dom.indexOf('id="sec0"')],
+  // The default world is deliberately solvable (missing ores default to buy
+  // sourcing), so the gate is proven by the in-page self-test instead: it must
+  // block a no-planet world and an unscanned-ore world, and pass a scanned one.
+  ['solve gate blocks/passes correctly (in-page check)', dom.includes('data-gate="pass"')],
+  ['price fetch can resolve type ids beyond the partial registry (legacy fallback)', dom.includes('data-typeids="pass"')],
   ['no uncaught page errors in console', jsErrors.length === 0],
 ];
 let failed = false;

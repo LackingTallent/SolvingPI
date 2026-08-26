@@ -5,6 +5,7 @@
  */
 import type { PlanetType } from '../spec/schematics.js';
 import { PLANET_TYPES } from '../spec/schematics.js';
+import { resourcesOf } from '../world/planets.js';
 
 export interface UiCharacter {
   name: string;
@@ -80,6 +81,18 @@ export function loadState(): UiState {
     if (!Array.isArray(merged.characters) || merged.characters.length === 0) merged.characters = base.characters;
     if (!Array.isArray(merged.planets)) merged.planets = base.planets;
     merged.planets = merged.planets.filter((p) => (PLANET_TYPES as readonly string[]).includes(p.type));
+    // Game truth: each planet carries each of its type's 5 resources at most
+    // once — sanitize saves made before the UI enforced it (keep the first
+    // scanned entry per resource, drop illegal-for-type entries).
+    for (const p of merged.planets) {
+      const legal = resourcesOf(p.type);
+      const seen = new Set<string>();
+      p.resources = p.resources.filter((r) => {
+        if (!legal.includes(r.p0) || seen.has(r.p0)) return false;
+        seen.add(r.p0);
+        return true;
+      });
+    }
     return merged;
   } catch {
     return defaultState();

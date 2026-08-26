@@ -222,9 +222,19 @@
 
 <!-- ============ THE FIVE PLANNER STEPS (v9 engine renders into the .sec-body of each) ============ -->
 
-<section class="card" id="sec0">
+<section class="card" id="sec3">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">1. Your Operation</span><span class="sec-summary" id="sec0Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">1. Your Goal</span><span class="sec-summary" id="sec3Summary"></span></h2>
+    <div class="sec-controls">
+      <button class="btn collapse-btn" data-target="sec3" title="Collapse or expand this section">&#9660;</button>
+    </div>
+  </div>
+  <div class="sec-body" id="sec3Body"></div>
+</section>
+
+<section class="card collapsed" id="sec0">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">2. Your Operation</span><span class="sec-summary" id="sec0Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn collapse-btn" data-target="sec0" title="Collapse or expand this section">&#9660;</button>
     </div>
@@ -234,7 +244,7 @@
 
 <section class="card collapsed" id="sec1">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">2. Your Systems &amp; Planets</span><span class="sec-summary" id="sec1Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">3. Your Systems &amp; Planets</span><span class="sec-summary" id="sec1Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn collapse-btn" data-target="sec1" title="Collapse or expand this section">&#9660;</button>
     </div>
@@ -312,22 +322,12 @@
 
 <section class="card collapsed" id="sec2">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">3. Costs &amp; Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">4. Costs &amp; Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn collapse-btn" data-target="sec2" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
   <div class="sec-body" id="sec2Body"></div>
-</section>
-
-<section class="card collapsed" id="sec3">
-  <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">4. Your Goal</span><span class="sec-summary" id="sec3Summary"></span></h2>
-    <div class="sec-controls">
-      <button class="btn collapse-btn" data-target="sec3" title="Collapse or expand this section">&#9660;</button>
-    </div>
-  </div>
-  <div class="sec-body" id="sec3Body"></div>
 </section>
 
 <section class="card collapsed" id="sec4">
@@ -341,6 +341,11 @@
     <div id="resultsPanel" aria-live="polite"></div>
   </div>
 </section>
+
+
+
+
+
 
 <div class="ref-divider">
   <span class="ref-divider-label">Reference</span>
@@ -462,14 +467,25 @@
 
       <h3>The short version</h3>
       <ol class="help-steps">
+        <li>Pick your goal: the product, how you define &ldquo;best&rdquo;, and where each input comes from.</li>
         <li>Enter your characters — each one individually, with their real skills.</li>
-        <li>Enter your planets and their scanned resource values (or drop in screenshots).</li>
+        <li>Enter your planets and their scanned resource values (search a system, drop in screenshots, or type them).</li>
         <li>Enter your costs &mdash; tax, fees, shipping &mdash; and load or enter Jita prices.</li>
-        <li>Pick a goal and press Solve.</li>
-        <li>You get a build sheet per character, plus the analytics that explain it.</li>
+        <li>Press Solve (it unlocks once everything it needs is defined) — you get a build sheet per character, plus the analytics that explain it.</li>
       </ol>
 
-      <h3>Step 1 &mdash; Your operation</h3>
+      <h3>Step 1 &mdash; Your goal</h3>
+      <p>Four ways to define &ldquo;best&rdquo;: <b>most output of your chosen product</b> (then
+        priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
+        weekly amount), <b>a login budget</b> (best net within your sessions per week), or
+        <b>compare everything</b> (the profit ranking across every product your operation could
+        make). <b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
+        <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
+        the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
+        The analytics re-solve all three per input and tell you what your current choice is
+        leaving on the table.</p>
+
+      <h3>Step 2 &mdash; Your operation</h3>
       <p>Every character is modeled individually. One character can run <b>six planets at
         most</b>, and that needs Interplanetary Consolidation V. If your main runs six and two
         alts run one each, that is eight colonies, not eighteen — the tool adds up what you
@@ -481,7 +497,7 @@
         about 81% of it; a week about 34%. The Results section can show this trade as ISK per
         week <i>and</i> ISK per login, so you can pick what fits your life.</p>
 
-      <h3>Step 2 &mdash; Your systems &amp; planets</h3>
+      <h3>Step 3 &mdash; Your systems &amp; planets</h3>
       <p><b>Resource values come from your in-game planet scan.</b> Enter the raw per-cycle
         value the survey shows; the familiar percentage appears alongside. Values above 100%
         are real and the tool never caps them &mdash; but it also never claims output your
@@ -490,7 +506,7 @@
       <p>The screenshot reader fills planets in from survey screenshots, entirely in your
         browser. Check its work &mdash; it is a convenience, not a data source.</p>
 
-      <h3>Step 3 &mdash; Costs &amp; market</h3>
+      <h3>Step 4 &mdash; Costs &amp; market</h3>
       <ul>
         <li><b>Customs tax</b> &mdash; what your POCO or skyhook charges. The game taxes fixed
           base values per tier, not market price &mdash; the tool gets this right.</li>
@@ -500,13 +516,8 @@
           real money and the tool prices both honestly.</li>
         <li><b>Shipping</b> &mdash; ISK per cubic metre, charged on real cargo volume.</li>
       </ul>
-      <p><b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
-        <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
-        the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
-        The analytics re-solve all three per input and tell you what your current choice is
-        leaving on the table.</p>
 
-      <h3>Steps 4-5 &mdash; Goal &amp; results</h3>
+      <h3>Step 5 &mdash; Results</h3>
       <p>Four ways to define &ldquo;best&rdquo;: <b>most output of your chosen product</b> (then
         priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
         weekly amount), <b>a login budget</b> (best net within your sessions per week), or
