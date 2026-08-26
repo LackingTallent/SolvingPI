@@ -64,3 +64,16 @@ details.v9-sourcing { margin: 10px 0; }
 details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0; }
 .v9-detail { margin: 10px 0; }
 .v9-detail h3 { margin-bottom: 4px; }
+
+/* --- Character-by-character plan dashboard --- */
+.v9-char-grid { align-items: start; }
+.v9-char h4 { margin-bottom: 6px; }
+.v9-colony {
+  border: 1px solid var(--panel-border); border-radius: 8px;
+  padding: 8px 10px; margin: 8px 0;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
+.v9-colony-head { margin-bottom: 4px; }
+.v9-colony-lines { margin: 0; padding-left: 18px; }
+.v9-colony-lines li { font-size: .85rem; margin: 2px 0; }
+.v9-colony-lines .v9-import { color: var(--amber, #e5b567); }

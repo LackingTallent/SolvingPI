@@ -173,6 +173,8 @@ document.querySelectorAll('[data-jump]').forEach(btn=>{
     catch { /* not worth failing a bug report over */ }
     const plan = document.querySelector('input[name="v9mode"]:checked');
     if(plan) bits.push('Planning mode: ' + plan.value);
+    const det = document.querySelector('input[name="v9detail"]:checked');
+    if(det) bits.push('Detail level: ' + det.value);
     const goal = document.querySelector('input[name="goalMode"]:checked');
     if(goal) bits.push('Goal: ' + goal.value);
     const src = document.querySelector('input[name="sourcingMode"]:checked');

@@ -57,3 +57,15 @@ npm run gate1      # typecheck + all tests — must be green before Phase 2 work
 - [x] Phase 5 — analytics (Gate 5 green: marginal, buy-vs-make, saturation, cadence, baseline, bottleneck/runway — all re-solved, all cited)
 - [x] Phase 6 — data layer (Gate 6 green: id registry + generator, order-book price service, PKCE SSO with JWT validation, ESI colony importer)
 - [x] Phase 7 — UI + prototype deploy (Gate 7: build with module-graph check + headless-browser self-test smoke)
+- [x] Goal refinement — goal-first progressive disclosure, suggested sourcing
+      (heuristic + full-re-solve price comparison, every choice disclosed with
+      its reason), the Quick/Refined/Exact accuracy ladder with per-security-band
+      density stand-ins, space-type cost presets, per-section resets
+
+## Support documentation
+
+- `docs/USER-GUIDE.md` — the full user-facing guide (mirrors the in-site help)
+- `docs/PRESET-SOURCES.md` — the audit trail defending every preset figure
+  (cost presets and the per-band Quick-estimate densities)
+- In-site: the **? Help** modal, the hero quickstart, and per-control hints —
+  all kept in step with the flow above

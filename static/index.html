@@ -201,16 +201,17 @@
       <b>1-Click</b><span>Import PI Templates</span>
     </button>
   </div>
-  <p class="subhead">Enter your characters, your planets, and their scanned resource values — the planner works out the most profitable thing you can actually build with what you've got, using Jita market prices — fetched live where this build can, entered by you where it can't — and the game's real physical limits. Works for any solar system, from 1 to 50 characters.</p>
+  <p class="subhead">Start with your goal — the planner suggests the rest. Tell it what you want and what you have; it works out the most profitable thing you can actually build, using Jita market prices — fetched live where this build can, entered by you where it can't — and the game's real physical limits. Quick estimates from typical values when you want speed, exact numbers when you provide your own. Works for any solar system, from 1 to 50 characters.</p>
   <details class="quickstart">
     <summary>New here? Read this first (60 seconds)</summary>
     <div class="quickstart-body">
       <p><b>What this does:</b> you tell it what planets you can reach and how many characters you have; it tells you what to build, how to split your colonies between extraction and factories, and what you'd actually clear per week after tax, shipping and customs. Every answer says how good it is: small operations get a <b>provably optimal</b> plan; big ones get a measured "within X% of the best possible" bound.</p>
       <ol>
-        <li><b>Section 1 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
-        <li><b>Section 2 — Your Systems &amp; Planets.</b> Add planets and enter the survey values from your in-game scan — the raw number, with the familiar percentage shown alongside. Or drop in planet screenshots and let the reader fill them in.</li>
-        <li><b>Section 3 — Costs &amp; Market.</b> Taxes, fees, freight, and Jita prices (fetch what's available live, type in the rest) — including whether you sell instantly or list orders, which changes real money.</li>
-        <li><b>Sections 4-5 — Goal &amp; Results.</b> Pick a goal (max profit, a quota, a login budget, or compare everything), hit Solve, and get per-character build sheets plus the analytics: what's bottlenecking you, what the next character or skill is worth, and whether each input is better extracted, refined, or bought.</li>
+        <li><b>Section 1 — Your Goal.</b> Pick the product and how you define &ldquo;best&rdquo; (max output, a quota, a login budget, or compare everything). That is all the tool demands: <b>sourcing is suggested for you</b>, and the <b>detail level</b> lets typical values stand in until you provide your own — Quick estimates are clearly labeled, Exact numbers carry no assumptions.</li>
+        <li><b>Section 2 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
+        <li><b>Section 3 — Your Systems &amp; Planets.</b> Search a solar system to load its planets from ESI, drop in planet screenshots, or type them. Scan values are yours to enter — or let Quick estimate assume your security band's typical density until you do.</li>
+        <li><b>Section 4 — Costs &amp; Market.</b> Taxes, fees, freight, and Jita prices (fetch what's available live, type in the rest) — one tap fills typical High/Low/Null/Wormhole rates — including whether you sell instantly or list orders, which changes real money.</li>
+        <li><b>Section 5 — Results.</b> Hit Solve and get per-character build sheets plus the analytics: what's bottlenecking you, what the next character or skill is worth, and why each input was extracted, refined, or bought — every suggested choice named with its reason.</li>
       </ol>
       <p class="quickstart-note">Numbers here come from CCP's published formulas and the game's own data, verified — where something can't be known (like another player's POCO tax), you set it and the tool says what it assumed. It never silently guesses.</p>
     </div>
@@ -494,7 +495,10 @@
         priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
         weekly amount), <b>a login budget</b> (best net within your sessions per week), or
         <b>compare everything</b> (the profit ranking across every product your operation could
-        make). Pick one and the rest of the section appears &mdash; only what that goal needs.</p>
+        make). Pick one and the rest of the section appears &mdash; only what that goal needs.
+        <b>Compare</b> works in two steps: first the ranked list, then you pick a product
+        (&ldquo;Plan this&rdquo;) and get its full best path &mdash; colonies, build sheet and
+        analytics &mdash; with your goal switched to that product so the choice stays visible.</p>
       <p><b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
         <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
         the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
@@ -560,6 +564,10 @@
         <b>answer quality</b> (exact, or within a measured percentage of the best possible),
         and reconciles every ISK to one ledger you can open and read line by line. A plan
         that loses money says so with a minus sign &mdash; losses are never hidden.</p>
+      <p>Results also disclose their honesty about YOUR inputs: a <b>Sourcing — chosen for
+        you</b> card names every suggested extract/refine/buy choice with its reason, and any
+        number built on a stand-in (assumed densities, preset costs) carries an amber
+        <b>ESTIMATE</b> banner listing exactly what was assumed and where to replace it.</p>
 
       <h3>The reference sections</h3>
       <ul>

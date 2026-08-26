@@ -268,6 +268,30 @@ function place(
   return { extractPicks, sites };
 }
 
+/** Integer facility needs at rate x, per schematic — the ONLY correct way to
+ * size factory colonies. Aggregating fractional facility totals undercounts:
+ * a P4 chain has ~10 advanced schematics, and the sum of per-schematic ceils
+ * exceeds the ceil of the sum by up to (schematics − 1) facilities. Sizing
+ * colonies from the aggregate made buildPlan's packing overflow (found by the
+ * matrix test: "pack-overflow: 3 Transmitter facilities did not fit"). */
+function facilityNeeds(unit: ChainNeeds, x: number): {
+  adv: number; ht: number;
+  perSchem: Array<{ schematic: string; facilities: number; kind: 'advanced' | 'hightech' }>;
+} {
+  let adv = 0, ht = 0;
+  const perSchem: Array<{ schematic: string; facilities: number; kind: 'advanced' | 'hightech' }> = [];
+  for (const [name, qtyPerUnit] of Object.entries(unit.outputsPerWeek)) {
+    const s = SCHEMATICS.get(name)!;
+    if (s.facility !== 'advanced' && s.facility !== 'hightech') continue;
+    const perFac = s.outQty * ((168 * 3600) / s.cycleSeconds);
+    const fac = Math.ceil((qtyPerUnit * x) / perFac - 1e-9);
+    if (fac <= 0) continue;
+    perSchem.push({ schematic: name, facilities: fac, kind: s.facility });
+    if (s.facility === 'hightech') ht += fac; else adv += fac;
+  }
+  return { adv, ht, perSchem };
+}
+
 /** Role counts needed to hit rate X (all-ceil), using best-first extraction. */
 function countsFor(world: SolveWorld, unit: ChainNeeds, x: number): RoleCounts | { error: string } {
   const extract: Record<string, number> = {};
@@ -296,11 +320,13 @@ function countsFor(world: SolveWorld, unit: ChainNeeds, x: number): RoleCounts |
   for (const [p1, perUnit] of Object.entries(unit.refineP1PerWeek)) {
     refine[p1] = Math.ceil((perUnit * x) / (REFINERY_BASICS * P1_PER_BASIC_PER_WEEK) - 1e-9);
   }
+  // Size factory colonies from INTEGER per-schematic needs (see facilityNeeds).
+  const needs = facilityNeeds(unit, x);
   return {
     extract,
     refine,
-    advanced: Math.ceil((unit.advancedFacilities * x) / ADV_PER_COLONY - 1e-9),
-    ht: Math.ceil((unit.htFacilities * x) / HT_PER_COLONY - 1e-9),
+    advanced: Math.ceil(needs.adv / ADV_PER_COLONY - 1e-9),
+    ht: Math.ceil(needs.ht / HT_PER_COLONY - 1e-9),
   };
 }
 
@@ -356,15 +382,28 @@ function buildPlan(
   counts: RoleCounts,
   placed: { extractPicks: ExtractionOption[]; sites: Array<{ planet: PlanetInfo }> },
   realized: number,
-): { plan: OperationPlan; slotsUsed: number } | { error: string } {
-  // Facility distribution across advanced/HT colonies, per schematic.
-  const facPerSchem: Array<{ schematic: string; facilities: number; kind: 'advanced' | 'hightech' }> = [];
-  for (const [name, qtyPerUnit] of Object.entries(unit.outputsPerWeek)) {
-    const s = SCHEMATICS.get(name)!;
-    const perFac = s.outQty * ((168 * 3600) / s.cycleSeconds);
-    const fac = Math.ceil((qtyPerUnit * realized) / perFac - 1e-9);
-    if (fac > 0) facPerSchem.push({ schematic: name, facilities: fac, kind: s.facility === 'hightech' ? 'hightech' : 'advanced' });
+): { plan: OperationPlan; slotsUsed: number; realized: number } | { error: string } {
+  // Facility distribution across advanced/HT colonies, per schematic — at a
+  // rate the colonies can actually PACK. The aggregate rate the search used
+  // is an upper bound; integer per-schematic ceils can exceed it (matrix
+  // finding). Honesty over optimism: shrink the rate to the largest value
+  // whose integer facility needs fit the built colonies, and report that.
+  const advCap = counts.advanced * ADV_PER_COLONY;
+  const htCap = counts.ht * HT_PER_COLONY;
+  const packs = (x: number): boolean => {
+    const n = facilityNeeds(unit, x);
+    return n.adv <= advCap && n.ht <= htCap;
+  };
+  if (!packs(realized)) {
+    let lo = 0, hi = realized;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (packs(mid)) lo = mid; else hi = mid;
+    }
+    realized = lo;
   }
+  if (realized <= 0) return { error: 'pack-overflow: no positive rate fits the built colonies' };
+  const facPerSchem = facilityNeeds(unit, realized).perSchem;
 
   interface Draft {
     role: string;
@@ -428,6 +467,7 @@ function buildPlan(
   drafts.forEach((d, i) => {
     const producedHere = new Map<string, number>(); // per hour
     const requiredHere = new Map<string, number>();
+    const uPerSchem = new Map<string, number>();
     for (const [schem, fac] of d.factories) {
       const s = SCHEMATICS.get(schem)!;
       const cyclesPerHour = 3600 / s.cycleSeconds;
@@ -439,6 +479,7 @@ function buildPlan(
         : d.role === 'refine'
           ? Math.min(1, ((unit.refineP1PerWeek[schem] ?? 0) * realized) / (refineCap || 1))
           : utilization(schem);
+      uPerSchem.set(schem, u);
       producedHere.set(schem, (producedHere.get(schem) ?? 0) + u * fac * s.outQty * cyclesPerHour);
       for (const [input, perCycle] of Object.entries(s.inputs)) {
         requiredHere.set(input, (requiredHere.get(input) ?? 0) + u * fac * perCycle * cyclesPerHour);
@@ -453,7 +494,13 @@ function buildPlan(
       const short = req - local;
       if (short > 1e-9) imports.push({ commodity: input, qtyPerHour: short });
     }
-    const factories = [...d.factories.entries()].map(([schematic, count]) => ({ schematic, count }));
+    // Routed utilization travels WITH the plan (game truth: routes partition
+    // inputs between facility groups) so the flow model runs each group at its
+    // planned share instead of letting early groups overeat shared pools.
+    const factories = [...d.factories.entries()].map(([schematic, count]) => {
+      const u = uPerSchem.get(schematic) ?? 1;
+      return u < 1 - 1e-12 ? { schematic, count, utilization: u } : { schematic, count };
+    });
     const assign = dealt.assignments[i]!;
     colonies.push({
       id: `col-${i}`, characterName: assign.characterName, planetName: d.planet.name,
@@ -470,7 +517,7 @@ function buildPlan(
     purchases.push({ commodity, qtyPerHour: (perUnit * realized) / HOURS_PER_WEEK });
   }
   const plan: OperationPlan = { operation: world.operation, colonies, logistics: { purchases } };
-  return { plan, slotsUsed: colonies.length };
+  return { plan, slotsUsed: colonies.length, realized };
 }
 
 /**
@@ -491,10 +538,20 @@ function placeDealable(world: SolveWorld, counts: RoleCounts): Placed | { error:
 }
 
 /** Solve: max weekly rate of `product` from `world` under `sourcing`. */
+export interface SolveOptions {
+  /** 'auto' (default) picks exhaustive when the space is small; 'greedy'
+   * forces the fast solver — used for RANKING passes (compare mode, sourcing
+   * refinement) where ~100 solves must stay interactive. The picked/final
+   * plan always runs 'auto'. Greedy answers still carry their upper-bound
+   * certificate, so ranking honesty is preserved. */
+  readonly method?: 'auto' | 'greedy';
+}
+
 export function solveMax(
   world: SolveWorld,
   product: string,
   sourcing: Readonly<Record<string, Sourcing>>,
+  options: SolveOptions = {},
 ): SolveResult | { error: string } {
   checkWorld(world);
   const unit = unitNeeds(product, sourcing);
@@ -526,7 +583,8 @@ export function solveMax(
   let best: { counts: RoleCounts; rate: number } | null = null;
   let method: 'exhaustive' | 'greedy';
 
-  if (slots <= EXHAUSTIVE_SLOT_LIMIT && tupleEstimate <= EXHAUSTIVE_TUPLE_LIMIT && classKeys.length > 0) {
+  if (options.method !== 'greedy'
+    && slots <= EXHAUSTIVE_SLOT_LIMIT && tupleEstimate <= EXHAUSTIVE_TUPLE_LIMIT && classKeys.length > 0) {
     method = 'exhaustive';
     const current: number[] = new Array(classKeys.length).fill(0);
     const rec = (idx: number, left: number): void => {
@@ -590,8 +648,11 @@ export function solveMax(
   if (!verdict.legal) {
     return { error: `judge-rejected: ${verdict.violations.map((v) => v.rule).join(', ')} — the allocator refuses to emit an illegal plan` };
   }
+  if (built.realized < chosen.rate * (1 - 1e-9)) {
+    notes.push(`rate adjusted ${Math.round(chosen.rate)} → ${Math.round(built.realized)}/wk so integer facility counts pack into the built colonies`);
+  }
   return {
-    product, sourcing, realizedPerWeek: chosen.rate,
+    product, sourcing, realizedPerWeek: built.realized,
     upperBoundPerWeek: upperBound(world, product, sourcing),
     method, slotsUsed: built.slotsUsed, plan: built.plan, verdict,
     builtExtractP1: builtExtract, notes,
@@ -631,7 +692,7 @@ export function solveQuota(
   const verdict = validatePlan(built.plan);
   if (!verdict.legal) return { error: `judge-rejected: ${verdict.violations.map((v) => v.rule).join(', ')}` };
   return {
-    product, sourcing, realizedPerWeek: Math.min(realized, targetPerWeek),
+    product, sourcing, realizedPerWeek: Math.min(built.realized, targetPerWeek),
     upperBoundPerWeek: upperBound(world, product, sourcing),
     method: 'greedy', slotsUsed: built.slotsUsed, plan: built.plan, verdict,
     builtExtractP1: builtExtract,

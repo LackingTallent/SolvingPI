@@ -32,6 +32,13 @@ export interface ImportSpec {
 export interface FactoryGroup {
   readonly schematic: string; // output commodity name
   readonly count: number;     // number of facilities running it
+  /** Routed utilization cap, 0..1 (default 1 = run at capacity). GAME TRUTH:
+   * in-game routes send fixed quantities to specific facilities, so a group
+   * only receives what the plan routes to it. Without this cap, a group that
+   * shares an input pool with a later group would greedily overeat it in the
+   * model (matrix finding: Polyaramids starved to 0.696 utilization while
+   * Supertensile Plastics ran at 1.0 against a pool sized for 0.899 each). */
+  readonly utilization?: number;
 }
 
 export interface ColonyPlan {
@@ -43,7 +50,7 @@ export interface ColonyPlan {
 const PLAN_KEYS = ['extractors', 'imports', 'factories'] as const;
 const EXTRACTOR_KEYS = ['resource', 'w', 'programHours', 'extraction'] as const;
 const IMPORT_KEYS = ['commodity', 'qtyPerHour'] as const;
-const FACTORY_KEYS = ['schematic', 'count'] as const;
+const FACTORY_KEYS = ['schematic', 'count', 'utilization'] as const;
 
 function rejectUnknown(what: string, obj: object, allowed: ReadonlyArray<string>): void {
   const unknown = Object.keys(obj).filter((k) => !allowed.includes(k));
@@ -67,6 +74,8 @@ export function colonyPlan(spec: ColonyPlan): ColonyPlan {
     rejectUnknown('factory group', f, FACTORY_KEYS as ReadonlyArray<string>);
     if (!Number.isInteger(f.count) || f.count < 1)
       throw new Error(`factory group ${f.schematic}: count must be a positive integer, got ${f.count}`);
+    if (f.utilization !== undefined && (!Number.isFinite(f.utilization) || f.utilization < 0 || f.utilization > 1))
+      throw new Error(`factory group ${f.schematic}: utilization must be in [0,1], got ${f.utilization}`);
   }
   return spec;
 }
@@ -127,19 +136,22 @@ export function steadyState(planSpec: ColonyPlan): FlowResult {
   for (const { f, idx } of ordered) {
     const s = SCHEMATICS.get(f.schematic)!;
     const cyclesPerHour = 3600 / s.cycleSeconds;
-    let utilization = 1;
+    // Routed cap first (game truth: routes partition inputs between groups),
+    // then availability may push it lower.
+    const routedCap = f.utilization ?? 1;
+    let utilization = routedCap;
     let limitedBy: StageReport['limitedBy'] = 'capacity';
     for (const [input, perCycle] of Object.entries(s.inputs)) {
       const reqPerHour = f.count * perCycle * cyclesPerHour;
       const availNow = available.get(input) ?? 0;
-      const u = reqPerHour === 0 ? 1 : availNow / reqPerHour;
+      const u = reqPerHour === 0 ? routedCap : availNow / reqPerHour;
       if (u < utilization) {
         utilization = u;
         limitedBy = { input };
       }
     }
     utilization = Math.min(1, Math.max(0, utilization));
-    if (utilization >= 1) limitedBy = 'capacity';
+    if (utilization >= routedCap - 1e-12) limitedBy = 'capacity';
     for (const [input, perCycle] of Object.entries(s.inputs)) {
       const used = utilization * f.count * perCycle * cyclesPerHour;
       bump(consumed, input, used);

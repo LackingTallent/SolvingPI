@@ -1,7 +1,7 @@
 {
   "name": "solving-pi-v9",
   "version": "0.1.0",
-  "description": "Solving PI v9 — EVE Online Planetary Industry planner. Ground-up rebuild: verified game physics, one universal ledger, judge-validated plans.",
+  "description": "Solving PI v9 \u2014 EVE Online Planetary Industry planner. Ground-up rebuild: verified game physics, one universal ledger, judge-validated plans.",
   "type": "module",
   "private": true,
   "scripts": {
@@ -12,7 +12,8 @@
     "smoke": "node tools/smoke.mjs",
     "gate7": "npm run gate1 && npm run build && npm run smoke",
     "typecheck": "tsc --noEmit",
-    "gate1": "npm run typecheck && npm run test"
+    "gate1": "npm run typecheck && npm run test",
+    "matrix": "tsx tools/matrix.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

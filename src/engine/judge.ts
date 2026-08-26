@@ -228,7 +228,12 @@ export function validatePlan(opPlan: OperationPlan): Verdict {
     }
     for (const [commodity, qty] of imported) {
       const backing = (purchased.get(commodity) ?? 0) + (ownSurplus.get(commodity) ?? 0);
-      if (qty > backing + 1e-9) {
+      // Relative + absolute tolerance: imports and backing are the same exact
+      // quantity computed along two float paths (consumer-side vs producer-side
+      // utilization), so at large rates the difference is pure rounding — a few
+      // parts in 1e10 (matrix finding: 45.000000005 vs 45). Real violations are
+      // orders of magnitude beyond this.
+      if (qty > backing + 1e-9 + 1e-9 * qty) {
         push('material-balance', null,
           `${commodity}: ${qty}/h imported but only ${backing}/h backed by purchases + other colonies' surplus`);
       }

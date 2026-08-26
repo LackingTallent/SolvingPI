@@ -232,7 +232,7 @@ document.querySelectorAll('.selector-item').forEach(btn=>{
      * cannot extract and a refined product you simply have not chosen to make
      * are different situations needing different actions. */
     const emptyMsg = (tier === 'P0' || tier === 'P1')
-      ? `No planet you have entered extracts this. Add a planet that has it, or buy it in (section 4).`
+      ? `No planet you have entered extracts this. Add a planet that has it (section 3) — or leave sourcing on Suggested (section 1) and the planner will buy it in.`
       : `Your planets do not extract the raw materials for this. It is made from P0/P1 inputs — check those first.`;
     selectorPopup.innerHTML = `<div class="sp-title">${iconHtml}${name}${tier?` <span style="color:var(--text-faint); font-size:18.4px;">${tier}${volTxt?' · '+volTxt:''}</span>`:''}</div>` +
       (rows.length ? rows.map(r=>`<div class="sp-row"><span style="color:var(--amber);">${r.system}</span><span>${r.planet} · ${r.dir}</span></div>`).join('')

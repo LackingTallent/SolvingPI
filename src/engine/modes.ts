@@ -180,7 +180,11 @@ export function comparative(
   for (const product of candidates) {
     try {
       const sourcing = defaultSourcing(world, product);
-      const result = solveMax(world, product, sourcing);
+      // RANKING pass: the fast solver keeps ~100 candidate solves interactive
+      // even on small worlds where 'auto' would go exhaustive per product.
+      // The product the user picks gets a full 'auto' solve — and greedy
+      // answers carry their upper-bound certificate, so the ranking is honest.
+      const result = solveMax(world, product, sourcing, { method: 'greedy' });
       if ('error' in result) { excluded.push({ product, reason: result.error }); continue; }
       const eco = economics(result, market, world.programHours);
       ranked.push({ product, result, economics: eco });

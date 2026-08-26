@@ -60,6 +60,31 @@ export function suggestSourcing(
     else reasons.set(p1, `no scanned ${oreOf(p1)} in your systems — buy it finished`);
   }
 
+  // Feasibility ladder: when the extract-what-you-have heuristic cannot fit
+  // this operation AT ALL (deep chains need many colonies; small operations
+  // have few slots), fall back to buying the inputs in — the smallest
+  // physical chain — exactly as a real operator would. Disclosed per input.
+  {
+    const withOverrides = { ...sourcing };
+    for (const [p1, mode] of Object.entries(overrides)) if (p1 in withOverrides) withOverrides[p1] = mode;
+    const probe = solveMax(world, product, withOverrides, { method: 'greedy' });
+    if ('error' in probe) {
+      const allBuy: Record<string, Sourcing> = {};
+      for (const p1 of Object.keys(sourcing)) {
+        allBuy[p1] = p1 === product ? 'refine' : 'buy';
+        if (p1 in overrides) allBuy[p1] = overrides[p1]!;
+      }
+      const probeBuy = solveMax(world, product, allBuy, { method: 'greedy' });
+      if (!('error' in probeBuy)) {
+        for (const p1 of Object.keys(sourcing)) {
+          if (p1 in overrides || allBuy[p1] === sourcing[p1]) continue;
+          sourcing[p1] = allBuy[p1]!;
+          reasons.set(p1, `the fuller chain does not fit this operation (${probe.error}) — ${allBuy[p1] === 'refine' ? 'buying ore and refining' : 'buying it in'} keeps the plan feasible`);
+        }
+      }
+    }
+  }
+
   const free = Object.keys(sourcing).filter((p1) => !(p1 in overrides)).sort();
   let refined = false;
   let refinementSkipped: string | undefined;
@@ -77,7 +102,9 @@ export function suggestSourcing(
       for (const mode of ['extract', 'refine', 'buy'] as const) {
         if (p1 === product && mode === 'buy') continue;
         try {
-          const r = solveMax(world, product, { ...sourcing, [p1]: mode });
+          // Fast solver: this is a ranking pass over alternatives (up to 18
+          // solves); the final plan itself is solved with 'auto'.
+          const r = solveMax(world, product, { ...sourcing, [p1]: mode }, { method: 'greedy' });
           if ('error' in r) continue;
           const net = economics(r, market, world.programHours).netPerWeek;
           if (best === null || net > best.net) best = { mode, net };

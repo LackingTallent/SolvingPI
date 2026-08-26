@@ -116,7 +116,13 @@ const market = (prices: MarketContext['prices']): MarketContext => ({
   freightOutPerM3: 10, freightInPerM3: 10,
 });
 
-const bothOres = world([{ name: 'S-1', type: 'Storm', resources: { 'Aqueous Liquids': 13000, 'Ionic Solutions': 12000 } }]);
+// Multiple planets: one planet cannot host a whole P2 chain, and a structurally
+// infeasible heuristic would (correctly) trigger the buy-fallback ladder.
+const bothOres = world([
+  { name: 'S-1', type: 'Storm', resources: { 'Aqueous Liquids': 13000, 'Ionic Solutions': 12000 } },
+  { name: 'S-2', type: 'Gas', resources: { 'Aqueous Liquids': 9000, 'Ionic Solutions': 11000 } },
+  { name: 'S-3', type: 'Barren', resources: {} },
+]);
 
 test('heuristic (no prices): extract what is scanned, with a named reason; skip is disclosed', () => {
   const s = suggestSourcing(bothOres, 'Coolant', market({}));
@@ -129,7 +135,11 @@ test('heuristic (no prices): extract what is scanned, with a named reason; skip 
 
 test('heuristic: a missing ore falls to buy, named', () => {
   const s = suggestSourcing(
-    world([{ name: 'S-1', type: 'Storm', resources: { 'Aqueous Liquids': 13000 } }]),
+    world([
+      { name: 'S-1', type: 'Storm', resources: { 'Aqueous Liquids': 13000 } },
+      { name: 'S-2', type: 'Gas', resources: { 'Aqueous Liquids': 9000 } },
+      { name: 'S-3', type: 'Barren', resources: {} },
+    ]),
     'Coolant', market({}));
   assert.equal(s.sourcing['Water'], 'extract');
   assert.equal(s.sourcing['Electrolytes'], 'buy');

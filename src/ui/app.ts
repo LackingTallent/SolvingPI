@@ -191,7 +191,7 @@ function neededCommodities(s: UiState): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Section 1 — Operation
+// Section 2 on the page — Operation
 // ---------------------------------------------------------------------------
 
 function numInput(value: number, min: number, max: number, step: number, onchange: (v: number) => void): HTMLElement {
@@ -260,7 +260,7 @@ function renderOperation(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Section 2 — Planets (renders into #v9PlanetList; batch panel is shell markup)
+// Section 3 on the page — Planets (renders into #v9PlanetList; batch panel is shell markup)
 // ---------------------------------------------------------------------------
 
 function planetRow(p: UiPlanet, i: number): HTMLElement {
@@ -353,7 +353,7 @@ function renderPlanets(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Section 3 — Costs & market
+// Section 4 on the page — Costs & market
 // ---------------------------------------------------------------------------
 
 function basisSelect(value: 'immediate' | 'patient', set: (v: 'immediate' | 'patient') => void): HTMLElement {
@@ -492,7 +492,7 @@ function renderMarket(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Section 4 — Goal
+// Section 1 on the page — Goal (physically #sec3; ordered first)
 // ---------------------------------------------------------------------------
 
 function renderGoal(): void {
@@ -660,7 +660,7 @@ function renderGoal(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Section 5 — Results
+// Section 5 on the page — Results
 // ---------------------------------------------------------------------------
 
 function colonyTemplate(r: SolveResult): string {
@@ -684,6 +684,45 @@ function colonyTemplate(r: SolveResult): string {
     lines.push(`BUY ${fmt(p.qtyPerHour * 168)} ${p.commodity} per week`);
   }
   return lines.join('\n');
+}
+
+/** Character-by-character, planet-by-planet dashboard of the solved plan —
+ * the same facts as the copy-paste build sheet, rendered as cards. */
+function characterDashboard(r: SolveResult): HTMLElement {
+  const byChar = new Map<string, Array<typeof r.plan.colonies[number]>>();
+  for (const c of r.plan.colonies) {
+    const arr = byChar.get(c.characterName) ?? [];
+    arr.push(c);
+    byChar.set(c.characterName, arr);
+  }
+  const charCards = [...byChar.entries()].map(([name, cols]) =>
+    el('div', { class: 'v9-card v9-char' },
+      el('h4', {}, `${name} — ${cols.length} colon${cols.length === 1 ? 'y' : 'ies'}`),
+      ...cols.map((c) => el('div', { class: 'v9-colony' },
+        el('div', { class: 'v9-colony-head' },
+          el('b', {}, c.planetName), ` (${c.planetType}) · CC L${c.ccLevel}`),
+        el('ul', { class: 'v9-colony-lines' },
+          ...c.plan.extractors.map((e) => el('li', {},
+            `ECU → ${e.resource} @ ${e.programHours}h (${fmt1(densityPctFromW(e.w))}%)`)),
+          ...c.plan.factories.map((f) => el('li', {},
+            `${f.count}× ${SCHEMATICS.get(f.schematic)!.facility} → ${f.schematic}`)),
+          c.layout.launchpads > 0
+            ? el('li', {}, `${c.layout.launchpads}× launchpad${c.layout.storage > 0 ? ` · ${c.layout.storage}× storage` : ''}`)
+            : null,
+          ...c.plan.imports.map((i) => el('li', { class: 'v9-import' },
+            `import ${fmt1(i.qtyPerHour)}/h ${i.commodity}`)),
+        ),
+      )),
+    ));
+  const buys = r.plan.logistics?.purchases ?? [];
+  return el('div', {},
+    el('h3', {}, 'Plan by character'),
+    el('div', { class: 'v9-cards v9-char-grid' }, ...charCards),
+    buys.length > 0
+      ? el('div', { class: 'v9-card' }, el('h4', {}, 'Weekly shopping list'),
+        ...buys.map((p) => el('p', {}, `BUY ${fmt(p.qtyPerHour * 168)} ${p.commodity} per week`)))
+      : null,
+  );
 }
 
 function insightCard(i: Insight): HTMLElement {
@@ -723,6 +762,8 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
       ),
     ));
   }
+
+  box.append(characterDashboard(r));
 
   const quick = [optimalityInsight(r), ...bottleneckReport(r), runwayInsight(r)];
   box.append(el('h3', {}, 'Insights'), el('div', { class: 'v9-cards' }, ...quick.map(insightCard)));
@@ -794,7 +835,7 @@ function suggestionCard(s: SourcingSuggestion): HTMLElement {
     ...s.notes.map((n) => el('p', {}, el('b', {}, `${n.p1}: ${n.mode}`), ` — ${n.reason}`)),
     el('p', { class: 'v9-muted' },
       s.refined
-        ? 'Choices were price-compared: each alternative fully re-solved and settled through the one ledger (single deterministic pass).'
+        ? 'Choices were price-compared: each alternative re-solved (fast solver) and settled through the one ledger, single deterministic pass — the plan below is the full solve of the winner.'
         : `Heuristic choice${s.refinementSkipped !== undefined ? ` — ${s.refinementSkipped}` : ''}.`,
     ),
     pinned > 0 ? el('p', { class: 'v9-muted' }, `${pinned} input${pinned === 1 ? '' : 's'} pinned by you (never overruled).`) : null,
@@ -824,17 +865,31 @@ function runSolve(): void {
         const { ranked, excluded } = comparative(world, toMarket(state));
         if (summary) summary.textContent = `${ranked.length} viable products ranked${banner !== null ? ' (estimate)' : ''}`;
         announce(`Comparison complete: ${ranked.length} viable products ranked.`);
+        // Rank order first; the user picks/confirms a product, THEN gets the
+        // full best-path plan for it (goal switches to max output of that
+        // product, so the choice is visible and revisitable in section 1).
+        const pickPlan = (product: string): void => {
+          state.product = product;
+          state.mode = 'max';
+          state.modeChosen = true;
+          state.sourcingOverrides = {};
+          persist(); rerender();
+          announce(`${product} picked from the comparison — planning its best path.`);
+          runSolve();
+        };
         resultsBox.replaceChildren(
           ...(banner !== null ? [banner] : []),
           // Audit B3: never truncate silently.
           el('p', { class: 'v9-muted' },
-            ranked.length > 15 ? `Top 15 shown of ${ranked.length} viable products.` : `${ranked.length} viable product${ranked.length === 1 ? '' : 's'}.`),
+            (ranked.length > 15 ? `Top 15 shown of ${ranked.length} viable products. ` : `${ranked.length} viable product${ranked.length === 1 ? '' : 's'}. `)
+            + 'Ranked with the fast solver (each answer carries its optimality bound); pick one and it is re-solved exactly — full plan, colonies, build sheet and analytics.'),
           el('table', { class: 'v9-table' },
-            el('tr', {}, ...['#', 'Product', 'Net ISK/wk', 'Output/wk', 'Method'].map((h) => el('th', {}, h))),
+            el('tr', {}, ...['#', 'Product', 'Net ISK/wk', 'Output/wk', 'Method', ''].map((h) => el('th', {}, h))),
             ...ranked.slice(0, 15).map((r, i) => el('tr', {},
               el('td', {}, String(i + 1)), el('td', {}, r.product),
               el('td', {}, fmt(r.economics.netPerWeek)), el('td', {}, fmt(r.result.realizedPerWeek)),
               el('td', {}, r.result.method),
+              el('td', {}, el('button', { class: 'btn small', click: () => pickPlan(r.product) }, 'Plan this →')),
             )),
           ),
           el('details', {},
