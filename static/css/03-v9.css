@@ -40,8 +40,14 @@
 .v9-insight p { margin: 3px 0; font-size: .88rem; }
 .v9-mode { display: block; margin: 4px 0; }
 #stickyCalc { display: flex; }
-/* audit #15: the skin's body.has-sticky padding never gets its class; reserve it here. */
+/* audit #15: the skin's body.has-sticky padding never gets its class; reserve it here.
+ * (JS refines this to the bar's measured height — this is the no-JS fallback.) */
 body { padding-bottom: 96px; }
+
+/* --- Refusals in English (review P1): sentence first, engine text tucked away --- */
+.v9-refusal-msg { font-weight: 600; margin: 2px 0 6px; }
+.v9-refusal-raw summary { cursor: pointer; color: var(--text-dim); font-size: .85rem; }
+.v9-refusal-raw code { display: block; margin-top: 4px; font-size: .82rem; opacity: .85; white-space: pre-wrap; }
 input.v9-num { width: 6.2em; }
 input.v9-text { width: 11em; }
 details.v9-ledger summary { color: var(--cyan); cursor: pointer; margin: 8px 0; }

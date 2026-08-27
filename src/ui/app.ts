@@ -970,6 +970,61 @@ function suggestionCard(s: SourcingSuggestion): HTMLElement {
   );
 }
 
+/** Review P1: refusals speak English. Engine refusal strings are precise but
+ * read like a stack trace ("quota-unreachable: place-extract: ..."); map the
+ * known codes to plain sentences and keep the raw text one click away. */
+function friendlyRefusal(raw: string): string {
+  const quota = raw.startsWith('quota-unreachable: ');
+  const inner = quota ? raw.slice('quota-unreachable: '.length) : raw;
+  let m: RegExpMatchArray | null;
+  if ((m = inner.match(/^place-extract: only (\d+)\/(\d+) colonies placeable for (.+)$/)) !== null)
+    return `This target doesn't fit: ${m[3]} needs ${m[2]} extraction colonies, but only ${m[1]} can be placed — no more of your planets carry its ore.`;
+  if (inner.startsWith('place-ht:'))
+    return 'No Barren or Temperate planet has room for the high-tech colony this plan needs.';
+  if (inner.startsWith('place-factory:'))
+    return 'No planet capacity is left to place a factory colony.';
+  if ((m = inner.match(/^needs (\d+) colonies, operation has (\d+) slots$/)) !== null)
+    return `This target needs ${m[1]} colonies, but your characters have ${m[2]} colony slots between them.`;
+  if ((m = inner.match(/^the buildable plan realizes (.+?)\/wk, short of (.+?)\/wk$/)) !== null)
+    return `The best buildable plan makes ${m[1]}/wk — short of the ${m[2]}/wk target.`;
+  if ((m = inner.match(/^no-planet-for: (.+?) \((.+?)\)/)) !== null)
+    return `No accessible planet carries ${m[2]}, which the plan needs to extract for ${m[1]}.`;
+  if ((m = inner.match(/^no-capacity-for: (.+)$/)) !== null)
+    return `Your planets don't have enough extraction capacity for ${m[1]}.`;
+  if (inner.startsWith('quota-invalid:'))
+    return 'The weekly target must be a number above zero.';
+  if ((m = inner.match(/^infeasible: (.+) cannot be produced/)) !== null)
+    return `${m[1]} can't be produced from these planets — no combination of them covers its whole chain.`;
+  if (inner.startsWith('infeasible:'))
+    return 'Nothing can be produced from this setup — check that your planets carry the resources this chain needs.';
+  if ((m = inner.match(/^duplicate planet name "(.+)"/)) !== null)
+    return `Two planets share the name “${m[1]}” — duplicate names make a plan ambiguous. Rename one in section 3.`;
+  if (inner.startsWith('pack-overflow'))
+    return 'The plan’s facilities don’t physically fit its colonies — this shouldn’t happen; please report it with your save file.';
+  if (inner.startsWith('judge-rejected:'))
+    return 'The independent judge rejected this plan, so the tool refuses to show it — this shouldn’t happen; please report it with your save file.';
+  return quota ? `This quota can't be met: ${inner}` : inner;
+}
+
+/** One refusal block: plain sentence, optional one-click achievable target,
+ * raw engine text behind a summary for bug reports. */
+function refusalBox(raw: string, opts?: { achievable?: number | undefined; onSetTarget?: ((n: number) => void) | undefined }): HTMLElement {
+  const kids: (HTMLElement | null)[] = [el('p', { class: 'v9-refusal-msg' }, friendlyRefusal(raw))];
+  if (opts?.achievable !== undefined && Number.isFinite(opts.achievable) && opts.achievable > 0) {
+    const n = Math.floor(opts.achievable);
+    kids.push(el('p', {},
+      `Best achievable with your current setup: ${fmt(opts.achievable)}/wk. `,
+      ...(opts.onSetTarget !== undefined && n > 0
+        ? [el('button', { class: 'btn small', click: () => opts.onSetTarget!(n) }, `Set target to ${fmt(n)}/wk`)]
+        : []),
+    ));
+  }
+  kids.push(el('details', { class: 'v9-refusal-raw' },
+    el('summary', {}, 'Engine detail'),
+    el('code', {}, raw)));
+  return el('div', { class: 'v9-warn' }, ...kids);
+}
+
 function runSolve(): void {
   const resultsBox = byId('resultsPanel');
   const gate = currentReadiness();
@@ -1034,19 +1089,21 @@ function runSolve(): void {
       if (state.mode === 'quota') {
         const q = solveQuota(world, state.product, state.quotaPerWeek, sourcing);
         if ('error' in q) {
-          resultsBox.replaceChildren(el('div', { class: 'v9-warn' },
-            `${q.error}${q.achievablePerWeek !== undefined ? ` — achievable: ${fmt(q.achievablePerWeek)}/wk` : ''}`));
+          resultsBox.replaceChildren(refusalBox(q.error, {
+            achievable: q.achievablePerWeek,
+            onSetTarget: (n) => { state.quotaPerWeek = n; persist(); rerender(); runSolve(); },
+          }));
           return;
         }
         result = q;
       } else if (state.mode === 'qol') {
         const q = qolSolve(world, state.product, toMarket(state), state.qolSessions, sourcing);
-        if ('error' in q) { resultsBox.replaceChildren(el('div', { class: 'v9-warn' }, q.error)); return; }
+        if ('error' in q) { resultsBox.replaceChildren(refusalBox(q.error)); return; }
         result = q.result;
         extra.push(el('p', { class: 'v9-muted' }, `Chosen cadence: ${q.programHours}h programs (${fmt1(168 / q.programHours)} sessions/wk).`));
       } else {
         const r = solveMax(world, state.product, sourcing);
-        if ('error' in r) { resultsBox.replaceChildren(el('div', { class: 'v9-warn' }, r.error)); return; }
+        if ('error' in r) { resultsBox.replaceChildren(refusalBox(r.error)); return; }
         result = r;
       }
       if (summary) summary.textContent = `${fmt(result.realizedPerWeek)} ${result.product}/wk · ${result.method}${banner !== null ? ' (estimate)' : ''}`;
@@ -1055,7 +1112,7 @@ function runSolve(): void {
       if (banner !== null) rendered.prepend(banner);
       resultsBox.replaceChildren(rendered);
     } catch (e) {
-      resultsBox.replaceChildren(el('div', { class: 'v9-warn' }, (e as Error).message));
+      resultsBox.replaceChildren(refusalBox((e as Error).message));
       announce('Solve failed — see the results section for the reason.');
     }
   }, 30);
@@ -1076,6 +1133,21 @@ function wireShell(): void {
   document.getElementById('stickyCalcBtn')?.addEventListener('click', runSolve);
   const info = document.getElementById('stickyCalcInfo');
   if (info) info.textContent = 'Judge-checked plans · one ledger · answers carry their optimality bound';
+
+  // Review P1: the fixed bottom bar must reserve its REAL height (it varies
+  // with wrapping, zoom and the bigger SOLVE button) so it never covers the
+  // last rows of a section; scroll-padding keeps focused controls above it.
+  const bar = document.getElementById('stickyCalc');
+  if (bar !== null) {
+    const reserve = (): void => {
+      const h = Math.ceil(bar.getBoundingClientRect().height) + 16;
+      document.body.style.paddingBottom = `${h}px`;
+      document.documentElement.style.scrollPaddingBottom = `${h}px`;
+    };
+    reserve();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(reserve).observe(bar);
+    window.addEventListener('resize', reserve);
+  }
 
   document.getElementById('saveDataBtn')?.addEventListener('click', () => {
     const blob = new Blob([JSON.stringify({ solvingPiV9: 1, state }, null, 2)], { type: 'application/json' });
