@@ -91,4 +91,4 @@ export const BAND_LABELS: Readonly<Record<SpaceBand, string>> = {
 };
 
 export const QUICK_DENSITY_DISCLOSURE =
-  'Typical-yield assumptions, not scans. CCP publishes no density table; these anchor on community-reported yields (null-sec ≈ 3× high-sec) against this build’s calibrated 100% reference. Scan your planets for real numbers.';
+  'Typical-yield assumptions, not scans. FC/CCP publishes no density table; these anchor on community-reported yields (null-sec ≈ 3× high-sec) against this build’s calibrated 100% reference. Scan your planets for real numbers.';
