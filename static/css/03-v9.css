@@ -91,3 +91,35 @@ details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0
   color: var(--text-dim, #9aa); white-space:nowrap; cursor:pointer; }
 .v9-planet-min { padding: 6px 12px; opacity: .82; }
 .v9-planet-min .v9-row { margin: 0; }
+
+/* --- Complete & Collapse on the right; system group headers --- */
+.v9-done-right { margin-left: auto; }
+.v9-sys-head {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 0 6px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--panel-border);
+  letter-spacing: .06em;
+}
+.v9-sys-head .v9-collapse-all { margin-left: auto; }
+
+/* --- Top-right cluster stays at the top of the page (no scroll-follow) --- */
+.top-cluster { position: absolute; }
+
+/* --- SOLVE: bigger, radiant gold — sticky bar and Goal section alike --- */
+#stickyCalcBtn, #sec3Body .btn.primary {
+  font-size: 1.3rem; font-weight: 800; letter-spacing: .05em;
+  padding: 14px 44px; border-radius: 12px;
+  color: #231900; border: 1px solid #ffd75e;
+  background: linear-gradient(135deg, #fff3c4 0%, #ffd75e 28%, #e8a611 62%, #ffde7a 100%);
+  box-shadow: 0 0 16px rgba(255, 205, 80, .55), 0 0 44px rgba(255, 190, 60, .30),
+              inset 0 1px 0 rgba(255, 255, 255, .6);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .45);
+}
+#stickyCalcBtn:hover:not([disabled]), #sec3Body .btn.primary:hover:not([disabled]) {
+  filter: brightness(1.08);
+  box-shadow: 0 0 22px rgba(255, 205, 80, .75), 0 0 60px rgba(255, 190, 60, .40),
+              inset 0 1px 0 rgba(255, 255, 255, .6);
+}
+#stickyCalcBtn[disabled], #sec3Body .btn.primary[disabled] {
+  filter: grayscale(.6) brightness(.75); opacity: .6; box-shadow: none; cursor: not-allowed;
+}

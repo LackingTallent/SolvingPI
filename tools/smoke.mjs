@@ -95,7 +95,8 @@ const checks = [
   ['systems panel headings are caps, explainer removed',
     dom.includes('ADD A SOLAR SYSTEM') && dom.includes('FLAT DENSITY')
     && !dom.includes('what ESI does <b>not</b> publish')],
-  ['planet completion checkbox rendered', dom.includes('class="v9-done"')],
+  ['Complete & Collapse checkbox + per-system collapse-all rendered',
+    /Complete (&amp;|&) Collapse/.test(dom) && /Complete (&amp;|&) Collapse All/.test(dom)],
   ['security-band density buttons present', dom.includes('data-band="nullsec"')],
   ['cost presets + confirm-own-rates rendered', dom.includes('These are my real rates')],
   ['price fetch can resolve type ids beyond the partial registry (legacy fallback)', dom.includes('data-typeids="pass"')],

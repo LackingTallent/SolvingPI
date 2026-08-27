@@ -304,16 +304,22 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
     ),
   );
   const unscanned = p.resources.filter((r) => !(r.w > 0)).length;
-  // Completion checkbox: checked = this planet is done, card renders minimized.
-  const doneBox = el('label', { class: 'v9-done', title: 'Mark this planet done to minimize it' },
+  // Completion checkbox: checked = THIS planet renders minimized. Sits on the
+  // RIGHT of the header row; the handler stops propagation so nothing else
+  // interprets the click, and it only ever touches this one planet.
+  const doneBox = el('label', { class: 'v9-done v9-done-right', title: 'Mark this planet complete to collapse it' },
     (() => {
       const cb = el('input', {
         type: 'checkbox',
-        change: (ev) => { p.minimized = (ev.target as HTMLInputElement).checked; persist(); rerender(); },
+        change: (ev) => {
+          ev.stopPropagation();
+          p.minimized = (ev.target as HTMLInputElement).checked;
+          persist(); rerender();
+        },
       });
       if (p.minimized === true) cb.setAttribute('checked', 'checked');
       return cb;
-    })(), ' done');
+    })(), ' Complete & Collapse');
 
   if (p.minimized === true) {
     const scanned = p.resources.filter((r) => r.w > 0);
@@ -321,19 +327,18 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
       ? scanned.reduce((a, r) => a + densityPctFromW(r.w), 0) / scanned.length : 0;
     return el('div', { class: 'v9-planet v9-planet-min' },
       el('div', { class: 'v9-row' },
-        doneBox,
         el('b', {}, p.name),
         el('span', { class: 'v9-muted' }, `(${p.type})`),
         p.system ? el('span', { class: 'v9-muted' }, p.system) : null,
         el('span', { class: 'v9-muted' },
           `${p.resources.length} resource${p.resources.length === 1 ? '' : 's'}${scanned.length > 0 ? ` · avg ${fmt1(avg)}%` : ''}${unscanned > 0 ? ` · ${unscanned} awaiting scan` : ''}`),
+        doneBox,
       ),
     );
   }
 
   return el('div', { class: 'v9-planet' },
     el('div', { class: 'v9-row' },
-      doneBox,
       el('input', {
         class: 'v9-text', type: 'text', value: p.name,
         change: (ev) => { p.name = (ev.target as HTMLInputElement).value; persist(); rerender(); },
@@ -343,6 +348,7 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
       p.scannedAt ? el('span', { class: 'v9-scan-tag', title: `Screenshot capture time: ${p.scannedAt}` }, `📷 ${p.scannedAt.slice(0, 10)}`) : null,
       unscanned > 0 ? el('span', { class: 'v9-scan-tag' }, `${unscanned} awaiting scan`) : null,
       el('button', { class: 'btn small', click: () => { state.planets.splice(i, 1); persist(); rerender(); } }, 'remove planet'),
+      doneBox,
     ),
     ...resRows,
     (() => {
@@ -369,10 +375,32 @@ function renderPlanets(): void {
   const mount = byId('v9PlanetList');
   const summary = document.getElementById('sec1Summary');
   if (summary) summary.textContent = `${state.planets.length} planet${state.planets.length === 1 ? '' : 's'}`;
+  // Planets grouped by solar system; each group header carries its own
+  // right-aligned Complete & Collapse All for just that system's planets.
+  const groups = new Map<string, Array<{ p: UiPlanet; i: number }>>();
+  state.planets.forEach((p, i) => {
+    const key = p.system && p.system.trim() !== '' ? p.system : 'NO SYSTEM SET';
+    const arr = groups.get(key) ?? [];
+    arr.push({ p, i });
+    groups.set(key, arr);
+  });
+  const groupBlocks: HTMLElement[] = [];
+  for (const [sys, members] of groups) {
+    groupBlocks.push(el('div', { class: 'v9-sys-head' },
+      el('b', {}, sys.toUpperCase()),
+      el('span', { class: 'v9-muted' }, `${members.length} planet${members.length === 1 ? '' : 's'}`),
+      el('button', {
+        class: 'btn small v9-collapse-all', type: 'button',
+        title: `Mark every planet in ${sys} complete and collapse it`,
+        click: () => { for (const m of members) m.p.minimized = true; persist(); rerender(); },
+      }, 'Complete & Collapse All'),
+    ));
+    for (const m of members) groupBlocks.push(planetRow(m.p, m.i));
+  }
   mount.replaceChildren(
     el('p', { class: 'section-sub' },
-      'Planets load with every resource at the 70% default density — replace each with the raw per-cycle survey value from your scan (the familiar percentage appears alongside). Values above 100% are real and never capped — but output never exceeds what the buildings can process. Tick a planet done to minimize it.'),
-    ...state.planets.map((p, i) => planetRow(p, i)),
+      'Planets load with every resource at the 70% default density — replace each with the raw per-cycle survey value from your scan (the familiar percentage appears alongside). Values above 100% are real and never capped — but output never exceeds what the buildings can process. Tick Complete & Collapse on a planet to minimize just that planet.'),
+    ...groupBlocks,
     el('button', {
       class: 'btn',
       click: () => { state.planets.push({ name: `Planet ${state.planets.length + 1}`, type: 'Barren', resources: defaultResources('Barren'), minimized: false }); persist(); rerender(); },

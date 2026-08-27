@@ -227,15 +227,54 @@ check('quick: band demanded while something is unscanned',
 await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
 check('planets: all minimized but the first', await page.locator('.v9-planet-min').count() === 8
   && await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1);
+check('planets: grouped by system with a header per system', await page.locator('.v9-sys-head').count() === 2
+  && await page.locator('.v9-sys-head .v9-collapse-all').count() === 2);
+check('planets: Complete & Collapse sits on the right', await page.evaluate(() => {
+  const row = document.querySelector('.v9-planet:not(.v9-planet-min) > .v9-row');
+  const done = row?.querySelector('.v9-done');
+  return !!done && row.lastElementChild === done;
+}));
+// REGRESSION (owner report): collapsing one planet must collapse ONLY that
+// planet. Expand two more, collapse one, the other must stay expanded.
 // evaluate-clicks: the change handler rerenders (detaching the node), which
 // breaks Playwright's post-click verification on check()/uncheck().
-await page.evaluate(() => document.querySelector('.v9-planet:not(.v9-planet-min) .v9-done input')?.click());
-await page.waitForTimeout(250);
-check('planets: done checkbox minimizes the card', await page.locator('.v9-planet-min').count() === 9);
 await page.evaluate(() => document.querySelector('.v9-planet-min .v9-done input')?.click());
+await page.waitForTimeout(200);
+await page.evaluate(() => document.querySelector('.v9-planet-min .v9-done input')?.click());
+await page.waitForTimeout(200);
+check('planets: two more expanded (3 open)', await page.locator('.v9-planet:not(.v9-planet-min)').count() === 3);
+await page.evaluate(() => document.querySelector('.v9-planet:not(.v9-planet-min) .v9-done input')?.click());
+await page.waitForTimeout(200);
+check('planets: collapsing one collapses ONLY that one (2 stay open)',
+  await page.locator('.v9-planet:not(.v9-planet-min)').count() === 2);
+// Per-system Complete & Collapse All: the first system's planets all close;
+// other systems are untouched.
+await page.evaluate(() => document.querySelector('.v9-sys-head .v9-collapse-all')?.click());
 await page.waitForTimeout(250);
-check('planets: unchecking expands it again', await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1);
+check('planets: system collapse-all closes only its own system', await page.evaluate(() => {
+  const heads = [...document.querySelectorAll('.v9-sys-head')];
+  if (heads.length < 2) return false;
+  let n = heads[0].nextElementSibling;
+  while (n && !n.classList.contains('v9-sys-head')) {
+    if (n.classList.contains('v9-planet') && !n.classList.contains('v9-planet-min')) return false;
+    n = n.nextElementSibling;
+  }
+  return true;
+}));
 await page.evaluate(() => document.getElementById('sec1')?.classList.add('collapsed'));
+// Presentation: cluster pinned to page top (not scroll-following), SOLVE gold.
+check('top cluster no longer follows scroll (absolute, not fixed)',
+  await page.evaluate(() => getComputedStyle(document.querySelector('.top-cluster')).position) === 'absolute');
+check('SOLVE is big radiant gold in the sticky bar', await page.evaluate(() => {
+  const cs = getComputedStyle(document.getElementById('stickyCalcBtn'));
+  return cs.backgroundImage.includes('linear-gradient') && parseFloat(cs.fontSize) >= 19;
+}));
+check('SOLVE is big radiant gold in the Goal section', await page.evaluate(() => {
+  const b = document.querySelector('#sec3Body .btn.primary');
+  if (!b) return false;
+  const cs = getComputedStyle(b);
+  return cs.backgroundImage.includes('linear-gradient') && parseFloat(cs.fontSize) >= 19;
+}));
 await page.selectOption('#sec3 select >> nth=1', 'nullsec');
 await page.waitForTimeout(300);
 check('quick: preset prefilled + disclosed', /Typical costs were prefilled|Your own cost rates/.test(await page.locator('#sec3').textContent()));
