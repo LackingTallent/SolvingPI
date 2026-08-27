@@ -116,15 +116,20 @@ const solveAndWait = async () => {
 await page.goto(base);
 await page.waitForSelector('body[data-smoke="ok"]', { timeout: 60000 });
 
-// 1 ── Fresh visitor: goal first, sourcing hidden, sticky Solve gated.
-check('fresh: goal prompt shown', await page.locator('#sec3', { hasText: 'Pick a goal to continue' }).count() === 1);
-check('fresh: sourcing hidden', await page.locator('text=Adjust sourcing (optional').count() === 0);
-check('fresh: sticky Solve disabled with goal named', await page.locator('#stickyCalcBtn[disabled]').count() === 1
-  && /Pick your goal/.test(await page.locator('#stickyCalcInfo').textContent()));
-// "What do you want?" is the FIRST and ONLY question before a goal is picked —
-// no product dropdown exists yet.
-check('fresh: goal question first, no product dropdown', await page.locator('#sec3 select').count() === 0
-  && /What do you want\?/.test(await page.locator('#sec3').textContent()));
+// 1 ── Fresh visitor: owner defaults — goal options A-Z, Compare pre-selected.
+check('fresh: goal options listed A to Z', (await page.locator('#sec3 .v9-mode').first().textContent()).includes('Best net within a login budget'));
+check('fresh: Compare is the pre-selected default', await page.locator('input[name="v9mode"][value="compare"]:checked').count() === 1);
+check('fresh: no product dropdown in compare', !/Product /.test(await page.locator('#sec3 label:has(select)').allTextContents().then((a) => a.join(' '))));
+check('fresh: sourcing controls hidden in compare', await page.locator('text=Adjust sourcing (default').count() === 0);
+check('fresh: solve gated on a price (compare ranks by net)', await page.locator('#stickyCalcBtn[disabled]').count() === 1
+  && /price/.test(await page.locator('#stickyCalcInfo').textContent()));
+check('fresh: default planet loads at 70% density, expanded', (await page.locator('#v9PlanetList').textContent()).includes('= 70%')
+  && await page.locator('.v9-planet-min').count() === 0);
+// Mine-it sourcing defaults: pick a product goal and check the pins.
+await page.check('input[name="v9mode"][value="max"]');
+await page.click('summary:has-text("Adjust sourcing")');
+const pinVals = await page.locator('details.v9-sourcing select').evaluateAll((els) => els.map((e) => e.value));
+check('fresh: sourcing defaults to extract (mine it) for every input', pinVals.length >= 2 && pinVals.every((v) => v === 'extract'));
 await shoot('01-fresh-goal-first', page.locator('#sec3'));
 
 // Seed the full operation and reload (autosave storage key).
@@ -187,7 +192,7 @@ await shoot('06-qol-results', page.locator('#resultsPanel'));
 // 6 ── Compare: rank order → pick → best path.
 await page.check('input[name="v9mode"][value="compare"]');
 await page.waitForTimeout(200);
-check('compare: sourcing controls absent', await page.locator('text=Adjust sourcing (optional').count() === 0);
+check('compare: sourcing controls absent', await page.locator('text=Adjust sourcing (default').count() === 0);
 check('compare: product dropdown disappears', await page.locator('#sec3').textContent().then((t) => !/Product /.test(t)));
 await solveAndWait();
 check('compare: ranked table with pick buttons',
@@ -218,6 +223,19 @@ await page.reload();
 await page.waitForSelector('body[data-smoke="ok"]');
 check('quick: band demanded while something is unscanned',
   /security band/.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? ''));
+// Planet completion checkboxes: seeded planets load all-minimized but first.
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+check('planets: all minimized but the first', await page.locator('.v9-planet-min').count() === 8
+  && await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1);
+// evaluate-clicks: the change handler rerenders (detaching the node), which
+// breaks Playwright's post-click verification on check()/uncheck().
+await page.evaluate(() => document.querySelector('.v9-planet:not(.v9-planet-min) .v9-done input')?.click());
+await page.waitForTimeout(250);
+check('planets: done checkbox minimizes the card', await page.locator('.v9-planet-min').count() === 9);
+await page.evaluate(() => document.querySelector('.v9-planet-min .v9-done input')?.click());
+await page.waitForTimeout(250);
+check('planets: unchecking expands it again', await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1);
+await page.evaluate(() => document.getElementById('sec1')?.classList.add('collapsed'));
 await page.selectOption('#sec3 select >> nth=1', 'nullsec');
 await page.waitForTimeout(300);
 check('quick: preset prefilled + disclosed', /Typical costs were prefilled|Your own cost rates/.test(await page.locator('#sec3').textContent()));
@@ -240,7 +258,7 @@ await shoot('11-costs-presets', page.locator('#sec2'));
 // 9 ── Per-section reset: Goal reset returns to goal-first state.
 await page.locator('button[data-reset="sec3"]').click();
 await page.waitForTimeout(300);
-check('reset: goal section back to pick-a-goal', await page.locator('#sec3', { hasText: 'Pick a goal to continue' }).count() === 1);
+check('reset: goal section back to the Compare default', await page.locator('input[name="v9mode"][value="compare"]:checked').count() === 1);
 check('reset: other sections untouched (planets kept)', await page.evaluate(() =>
   JSON.parse(localStorage.getItem('solving-pi-v9-state')).planets.length) === 9);
 

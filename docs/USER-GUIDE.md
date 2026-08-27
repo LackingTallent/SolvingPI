@@ -15,9 +15,9 @@ silently: every assumption is named, on screen, next to the number it touched.
 
 ## Section 1 — Your Goal
 
-**"What do you want?" comes first.** The goal is the section's opening
-question, and the answer dictates what appears next: Max output, Quota and
-Login budget then ask for a product; **Compare shows no product dropdown at
+**"What do you want?" comes first.** Goals are listed A to Z with **Compare
+pre-selected**, and the answer dictates what appears next: Max output, Quota
+and Login budget ask for a product; **Compare shows no product dropdown at
 all** — it ranks every product itself. Four goals:
 
 | Goal | Question it answers | Needs prices? |
@@ -33,15 +33,16 @@ Compare is a two-step flow: first the ranked list of every viable product
 sheet and analytics. Your goal switches to that product so the choice stays
 visible in section 1 and you can re-solve or adjust it.
 
-Until a goal is picked, the rest of the section stays hidden — the goal is the
-only thing the tool cannot suggest.
+Change the goal at any time — the section reshapes itself around your answer,
+showing only what that goal needs.
 
-**Sourcing is suggested, not demanded.** Each input can be *extracted* (mined
-on your planets), *refined* (buy ore, 150:1), or *bought* finished. By default
-every input is on **Suggested (auto)**: the heuristic extracts what you have
-scanned and buys what you lack; when prices are loaded, the tool re-solves all
-three alternatives per input through the full engine and ledger and takes the
-best settled net. The result names every choice and its reason, including the
+**Sourcing defaults to mine-it.** Each input can be *extracted* (mined on
+your planets), *refined* (buy ore, 150:1), or *bought* finished — and every
+input starts pinned to **extract (mine it)**. Switch any input to **Suggested
+(auto)** under Adjust sourcing and the tool picks for it: the heuristic
+extracts what you have scanned and buys what you lack; when prices are
+loaded, it re-solves all three alternatives per input through the full engine
+and ledger and takes the best settled net. The result names every choice and its reason, including the
 ISK/week the losing alternatives were worth. Pin an input under *Adjust
 sourcing* only to overrule the tool — pins are never second-guessed. On very
 large worlds the interactive price comparison is skipped (and says so); the
@@ -78,6 +79,10 @@ logins (6h is full pace; 24h ≈ 81.5% of it; a week ≈ 34%).
   are game facts. Every planet of a given type carries the same fixed set of
   five raw resources, so those load too. What ESI does NOT publish is density:
   scan values are yours to enter (or Quick estimate stands them in).
+- **Planets load at a 70% default density** on every resource, so plans work
+  the moment a planet exists; replace the defaults with real scans for real
+  numbers. Each planet has a **done** checkbox that minimizes its card —
+  planets load minimized except the first.
 - **Scan values** are the raw per-cycle number your survey window shows; the
   familiar % appears alongside (100% = the calibrated reference). Values above
   100% are real and never capped — but output never exceeds what the buildings

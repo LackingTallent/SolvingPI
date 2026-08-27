@@ -85,3 +85,9 @@ details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0
 .v9-tpl-caution { color: var(--amber, #e5b567); font-weight: 600; }
 .v9-tpl-note { margin-top: 3px; font-size: .78rem; }
 .tpl-warn-inline { color: var(--amber, #e5b567); }
+
+/* --- Planet completion checkbox + minimized cards --- */
+.v9-done { display:inline-flex; align-items:center; gap:5px; font-size:.85rem;
+  color: var(--text-dim, #9aa); white-space:nowrap; cursor:pointer; }
+.v9-planet-min { padding: 6px 12px; opacity: .82; }
+.v9-planet-min .v9-row { margin: 0; }

@@ -6,7 +6,7 @@
  * legacy layer may call (deliverBatch, readPlanets).
  * Every number on screen comes from the engine's spec/solver/ledger modules.
  */
-import { loadState, saveState, defaultState, type UiState, type UiPlanet } from './state.js';
+import { loadState, saveState, defaultState, defaultResources, extractDefaults, type UiState, type UiPlanet } from './state.js';
 import { PLANET_TYPES, SCHEMATICS, tierOf, type PlanetType } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
 import { character, operation } from '../world/characters.js';
@@ -240,7 +240,7 @@ function renderOperation(): void {
       class: 'btn',
       click: () => {
         if (state.characters.length >= 50) { alert('Supported size is 1..50 characters.'); return; }
-        state.characters.push({ name: `Alt ${state.characters.length}`, icLevel: 0, ccuLevel: 5, customsCodeLevel: 0, accountingLevel: 0, brokerRelationsLevel: 0 });
+        state.characters.push({ name: `Alt ${state.characters.length}`, icLevel: 5, ccuLevel: 5, customsCodeLevel: 5, accountingLevel: 5, brokerRelationsLevel: 5 });
         persist(); rerender();
       },
     }, '+ Add character'),
@@ -304,8 +304,36 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
     ),
   );
   const unscanned = p.resources.filter((r) => !(r.w > 0)).length;
+  // Completion checkbox: checked = this planet is done, card renders minimized.
+  const doneBox = el('label', { class: 'v9-done', title: 'Mark this planet done to minimize it' },
+    (() => {
+      const cb = el('input', {
+        type: 'checkbox',
+        change: (ev) => { p.minimized = (ev.target as HTMLInputElement).checked; persist(); rerender(); },
+      });
+      if (p.minimized === true) cb.setAttribute('checked', 'checked');
+      return cb;
+    })(), ' done');
+
+  if (p.minimized === true) {
+    const scanned = p.resources.filter((r) => r.w > 0);
+    const avg = scanned.length > 0
+      ? scanned.reduce((a, r) => a + densityPctFromW(r.w), 0) / scanned.length : 0;
+    return el('div', { class: 'v9-planet v9-planet-min' },
+      el('div', { class: 'v9-row' },
+        doneBox,
+        el('b', {}, p.name),
+        el('span', { class: 'v9-muted' }, `(${p.type})`),
+        p.system ? el('span', { class: 'v9-muted' }, p.system) : null,
+        el('span', { class: 'v9-muted' },
+          `${p.resources.length} resource${p.resources.length === 1 ? '' : 's'}${scanned.length > 0 ? ` · avg ${fmt1(avg)}%` : ''}${unscanned > 0 ? ` · ${unscanned} awaiting scan` : ''}`),
+      ),
+    );
+  }
+
   return el('div', { class: 'v9-planet' },
     el('div', { class: 'v9-row' },
+      doneBox,
       el('input', {
         class: 'v9-text', type: 'text', value: p.name,
         change: (ev) => { p.name = (ev.target as HTMLInputElement).value; persist(); rerender(); },
@@ -343,11 +371,11 @@ function renderPlanets(): void {
   if (summary) summary.textContent = `${state.planets.length} planet${state.planets.length === 1 ? '' : 's'}`;
   mount.replaceChildren(
     el('p', { class: 'section-sub' },
-      'Enter the raw per-cycle survey value (what the scan window shows); the familiar percentage appears alongside. Values above 100% are real and never capped — but output never exceeds what the buildings can process.'),
+      'Planets load with every resource at the 70% default density — replace each with the raw per-cycle survey value from your scan (the familiar percentage appears alongside). Values above 100% are real and never capped — but output never exceeds what the buildings can process. Tick a planet done to minimize it.'),
     ...state.planets.map((p, i) => planetRow(p, i)),
     el('button', {
       class: 'btn',
-      click: () => { state.planets.push({ name: `Planet ${state.planets.length + 1}`, type: 'Barren', resources: [] }); persist(); rerender(); },
+      click: () => { state.planets.push({ name: `Planet ${state.planets.length + 1}`, type: 'Barren', resources: defaultResources('Barren'), minimized: false }); persist(); rerender(); },
     }, '+ Add planet'),
   );
 }
@@ -505,18 +533,19 @@ function renderGoal(): void {
         : `${state.product} · ${modeLabel}`;
   }
   const productSel = el('select', {
-    change: (ev) => { state.product = (ev.target as HTMLSelectElement).value; state.sourcingOverrides = {}; persist(); rerender(); },
+    change: (ev) => { state.product = (ev.target as HTMLSelectElement).value; state.sourcingOverrides = extractDefaults(state.product); persist(); rerender(); },
   }, ...[...SCHEMATICS.keys()].sort((a, b) => tierOf(a) - tierOf(b) || a.localeCompare(b)).map((name) => {
     const o = el('option', { value: name }, `P${tierOf(name)} — ${name}`);
     if (name === state.product) o.setAttribute('selected', 'selected');
     return o;
   }));
 
+  // Listed A to Z; Compare is the pre-selected default.
   const modes: Array<[UiState['mode'], string]> = [
-    ['max', 'Maximum output of my chosen product'],
-    ['quota', 'Hit a weekly quota with minimal colonies'],
     ['qol', 'Best net within a login budget'],
     ['compare', 'Compare every product (ranked frontier)'],
+    ['quota', 'Hit a weekly quota with minimal colonies'],
+    ['max', 'Maximum output of my chosen product'],
   ];
   const modeBlock = el('div', {}, ...modes.map(([m, label]) => el('label', { class: 'v9-mode' },
     (() => {
@@ -624,9 +653,9 @@ function renderGoal(): void {
       });
     } catch { /* product mid-edit */ }
     sourcingBlock = el('details', { class: 'v9-sourcing' },
-      el('summary', {}, 'Adjust sourcing (optional — Suggested by default)'),
+      el('summary', {}, 'Adjust sourcing (default: mine it)'),
       el('p', { class: 'v9-muted' },
-        'The tool picks the best sourcing for each input from your goal, your scanned systems and (when loaded) prices — and the result names each choice with its reason. Pin an input here only if you want to overrule it.'),
+        'Every input starts on extract (mine it). Set any input to Suggested (auto) and the tool picks for it — from your goal, your systems and (when loaded) prices — naming each choice with its reason.'),
       ...rows,
     );
   }
@@ -931,7 +960,7 @@ function runSolve(): void {
           state.product = product;
           state.mode = 'max';
           state.modeChosen = true;
-          state.sourcingOverrides = {};
+          state.sourcingOverrides = extractDefaults(product);
           persist(); rerender();
           announce(`${product} picked from the comparison — planning its best path.`);
           runSolve();
@@ -1047,10 +1076,10 @@ function wireShell(): void {
       what: 'your goal — product, mode, detail level, space band and sourcing pins',
       run: () => {
         const d = defaultState();
-        state.product = d.product; state.mode = d.mode; state.modeChosen = false;
-        state.detailLevel = d.detailLevel; state.spaceBand = null;
+        state.product = d.product; state.mode = d.mode; state.modeChosen = d.modeChosen;
+        state.detailLevel = d.detailLevel; state.spaceBand = d.spaceBand;
         state.quotaPerWeek = d.quotaPerWeek; state.qolSessions = d.qolSessions;
-        state.sourcingOverrides = {};
+        state.sourcingOverrides = d.sourcingOverrides;
       },
     },
     sec0: { what: 'your operation — all characters and their skills', run: () => { state.characters = defaultState().characters; } },
@@ -1179,9 +1208,10 @@ function wireSystemSearch(): void {
           name: p.name,
           type: p.type,
           system: imported.system,
-          // Game truth (library 11): the resource SET is fixed by planet type;
-          // only densities vary, and those exist only in your scan view.
-          resources: resourcesOf(p.type).map((p0) => ({ p0, w: 0 })),
+          // Game truth (library 11): the resource SET is fixed by planet type.
+          // Densities load at the 70% site default until the user changes them.
+          resources: defaultResources(p.type),
+          minimized: state.planets.length > 0,
         });
         added++;
       }
@@ -1191,7 +1221,7 @@ function wireSystemSearch(): void {
       if (status) {
         status.textContent = `${imported.system}: ${added} planet${added === 1 ? '' : 's'} added` +
           (skipped > 0 ? `, ${skipped} already present` : '') +
-          '. Names and types are ESI facts; now enter each scan value (or use the batch import).';
+          '. Names and types are ESI facts; densities loaded at the 70% default — replace them with your scans (or use the batch import).';
       }
       announce(`${imported.system}: ${added} planets loaded from ESI.`);
       input.value = '';
@@ -1248,7 +1278,7 @@ function deliverBatch(planets: BatchPlanet[]): {
       existing.system = bp.system;
       if (bp.capturedAt) existing.scannedAt = bp.capturedAt;
     } else {
-      const planet: UiPlanet = { name, type, resources, system: bp.system };
+      const planet: UiPlanet = { name, type, resources, system: bp.system, minimized: state.planets.length > 0 };
       if (bp.capturedAt) planet.scannedAt = bp.capturedAt;
       state.planets.push(planet);
     }

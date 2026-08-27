@@ -85,10 +85,17 @@ const checks = [
   ['solve gate blocks/passes correctly incl. accuracy ladder (in-page check)', dom.includes('data-gate="pass"')],
   ['every planner section has a reset button',
     ['sec3', 'sec0', 'sec1', 'sec2', 'sec4'].every((id) => dom.includes(`data-reset="${id}"`))],
-  // Progressive disclosure: a fresh visitor has not picked a goal, so the
-  // sourcing/detail controls must NOT be rendered yet — only the goal prompt.
-  ['sourcing stays hidden until a goal is picked',
-    dom.includes('Pick a goal to continue') && !dom.includes('Adjust sourcing (optional')],
+  // Owner defaults: Compare pre-selected (A-Z listing), so no product
+  // dropdown and no sourcing controls render on a fresh visit.
+  ['compare is the pre-selected default goal',
+    /name="v9mode" value="compare" checked/.test(dom)
+    && !dom.includes('<label>Product <')
+    && !dom.includes('Adjust sourcing (default')],
+  ['planets load at the 70% default density', dom.includes('= 70%')],
+  ['systems panel headings are caps, explainer removed',
+    dom.includes('ADD A SOLAR SYSTEM') && dom.includes('FLAT DENSITY')
+    && !dom.includes('what ESI does <b>not</b> publish')],
+  ['planet completion checkbox rendered', dom.includes('class="v9-done"')],
   ['security-band density buttons present', dom.includes('data-band="nullsec"')],
   ['cost presets + confirm-own-rates rendered', dom.includes('These are my real rates')],
   ['price fetch can resolve type ids beyond the partial registry (legacy fallback)', dom.includes('data-typeids="pass"')],

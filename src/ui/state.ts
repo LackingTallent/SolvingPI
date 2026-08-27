@@ -7,6 +7,8 @@ import type { PlanetType } from '../spec/schematics.js';
 import { PLANET_TYPES } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
 import { SPACE_BANDS, type SpaceBand } from './presets.js';
+import { wFromDensityPct } from '../world/density.js';
+import { p1InputsOf } from '../engine/chain.js';
 
 export interface UiCharacter {
   name: string;
@@ -23,6 +25,9 @@ export interface UiPlanet {
   name: string;
   type: PlanetType;
   resources: UiResource[];
+  /** Completion checkbox: a checked planet renders minimized. Planets load
+   * minimized by default except the first. */
+  minimized?: boolean;
   /** Solar system this planet is in (screenshot imports set it; optional for manual entry). */
   system?: string;
   /** ISO capture time when the values came from a screenshot import. */
@@ -65,10 +70,29 @@ export interface UiState {
   sourcingOverrides: Record<string, 'extract' | 'refine' | 'buy'>;
 }
 
+/** Default density for freshly loaded planets: 70% until the user changes it. */
+export const DEFAULT_DENSITY_PCT = 70;
+export function defaultResourceW(): number {
+  return Math.round(wFromDensityPct(DEFAULT_DENSITY_PCT) * 10) / 10;
+}
+export function defaultResources(type: PlanetType): UiResource[] {
+  return resourcesOf(type).map((p0) => ({ p0, w: defaultResourceW() }));
+}
+
+/** Owner default: every input starts on extract ("mine it"); Suggested and
+ * the other modes remain one click away under Adjust sourcing. */
+export function extractDefaults(product: string): Record<string, 'extract' | 'refine' | 'buy'> {
+  try {
+    return Object.fromEntries(p1InputsOf(product).map((p1) => [p1, 'extract' as const]));
+  } catch {
+    return {};
+  }
+}
+
 export function defaultState(): UiState {
   return {
     characters: [{ name: 'Main', icLevel: 5, ccuLevel: 5, customsCodeLevel: 5, accountingLevel: 5, brokerRelationsLevel: 5 }],
-    planets: [{ name: 'Planet I', type: 'Storm', resources: [{ p0: 'Aqueous Liquids', w: 13000 }] }],
+    planets: [{ name: 'Planet I', type: 'Storm', resources: defaultResources('Storm'), minimized: false }],
     prices: {},
     priceNote: 'No prices loaded yet — enter quotes below or fetch live Jita data.',
     fees: { salesTaxPct: 3.375, brokerPct: 1.5, customsPct: 10, hisecNpc: false },
@@ -76,15 +100,15 @@ export function defaultState(): UiState {
     sellBasis: 'immediate',
     buyBasis: 'immediate',
     programHours: 6,
-    mode: 'max',
-    modeChosen: false,
+    mode: 'compare',
+    modeChosen: true,
     detailLevel: 'quick',
     spaceBand: null,
     costsSource: 'default',
     product: 'Coolant',
     quotaPerWeek: 5000,
     qolSessions: 7,
-    sourcingOverrides: {},
+    sourcingOverrides: extractDefaults('Coolant'),
   };
 }
 
@@ -109,6 +133,10 @@ export function loadState(): UiState {
     // Game truth: each planet carries each of its type's 5 resources at most
     // once — sanitize saves made before the UI enforced it (keep the first
     // scanned entry per resource, drop illegal-for-type entries).
+    // Planets load minimized except the first (older saves lack the flag).
+    merged.planets.forEach((p, i) => {
+      if (typeof p.minimized !== 'boolean') p.minimized = i > 0;
+    });
     for (const p of merged.planets) {
       const legal = resourcesOf(p.type);
       const seen = new Set<string>();

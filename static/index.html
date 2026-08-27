@@ -207,7 +207,7 @@
     <div class="quickstart-body">
       <p><b>What this does:</b> you tell it what planets you can reach and how many characters you have; it tells you what to build, how to split your colonies between extraction and factories, and what you'd actually clear per week after tax, shipping and customs. Every answer says how good it is: small operations get a <b>provably optimal</b> plan; big ones get a measured "within X% of the best possible" bound.</p>
       <ol>
-        <li><b>Section 1 — Your Goal.</b> First question: <b>what do you want?</b> (max output, a quota, a login budget, or compare everything). Your answer decides what appears next — a product dropdown for the first three; Compare asks for no product at all, it ranks every one. Sourcing is <b>suggested for you</b>, and the <b>detail level</b> lets typical values stand in until you provide your own — Quick estimates are clearly labeled, Exact numbers carry no assumptions.</li>
+        <li><b>Section 1 — Your Goal.</b> First question: <b>what do you want?</b> — goals listed A to Z with <b>Compare pre-selected</b>. Your answer decides what appears next: a product dropdown for the other three goals; Compare asks for none, it ranks every product. Sourcing starts on <b>mine it</b> (Suggested is one click away), and the <b>detail level</b> lets typical values stand in until you provide your own.</li>
         <li><b>Section 2 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
         <li><b>Section 3 — Your Systems &amp; Planets.</b> Search a solar system to load its planets from ESI, drop in planet screenshots, or type them. Scan values are yours to enter — or let Quick estimate assume your security band's typical density until you do.</li>
         <li><b>Section 4 — Costs &amp; Market.</b> Taxes, fees, freight, and Jita prices (fetch what's available live, type in the rest) — one tap fills typical High/Low/Null/Wormhole rates — including whether you sell instantly or list orders, which changes real money.</li>
@@ -256,12 +256,7 @@
   <div class="sec-body" id="sec1Body">
     <div class="quickrate-panel" id="sysSearchPanel">
       <div class="qr-head">
-        <b>&#128269; Add a solar system</b>
-        <span class="qr-sub">Type a system name and pick it from the list. Planet names and
-          types load straight from <b>ESI</b>, CCP&rsquo;s own API &mdash; facts, not guesses. Every planet
-          of a given type carries the same fixed set of raw resources, so those load too; what ESI
-          does <b>not</b> publish is density &mdash; enter each scan value yourself or use the
-          screenshot batch import below.</span>
+        <b>&#128269; ADD A SOLAR SYSTEM</b>
       </div>
       <div class="qr-row">
         <label for="sysSearch">System</label>
@@ -291,7 +286,7 @@
 
     <div class="quickrate-panel">
       <div class="qr-head">
-        <b>&#9889; Flat density</b>
+        <b>&#9889; FLAT DENSITY</b>
         <span class="qr-sub">Set every resource on every planet to one flat density &mdash;
           or tap a security band for its typical value. Useful for a fast ballpark before
           you scan anything, but the result is an estimate, not your real numbers.
@@ -306,7 +301,7 @@
       </div>
       <div class="qr-row">
         <label for="flatRate">Flat density</label>
-        <span class="val-field"><input type="number" id="flatRate" min="1" max="500" step="0.1" value="65"
+        <span class="val-field"><input type="number" id="flatRate" min="1" max="500" step="0.1" value="70"
                aria-label="Flat density to apply to every planet"><span class="val-unit">%</span></span>
         <button class="btn small" id="applyFlatRate" type="button">Apply to all planets</button>
         <button class="btn small" id="clearFlatRate" type="button" title="Restore the densities you had before applying a flat rate">Undo</button>
@@ -482,11 +477,10 @@
       <h3>The short version</h3>
       <ol class="help-steps">
         <li>Pick your goal &mdash; how you define &ldquo;best&rdquo; &mdash; then the product it asks
-          for (Compare asks for none; it ranks them all). That is all the tool demands &mdash;
-          sourcing is <b>suggested for you</b> and typical values can stand in for the rest
-          until you provide your own.</li>
+          for. <b>Compare comes pre-selected</b> and asks for none: it ranks them all. Typical
+          values stand in for everything else until you provide your own.</li>
         <li>Enter your characters — each one individually, with their real skills.</li>
-        <li>Enter your planets and their scanned resource values (search a system, drop in screenshots, or type them).</li>
+        <li>Add your planets (search a system, drop in screenshots, or type them) — they load at a 70% default density until you enter real scans.</li>
         <li>Enter your costs &mdash; tax, fees, shipping (or apply a typical space-type preset) &mdash; and load or enter Jita prices.</li>
         <li>Press Solve (it unlocks once everything your goal and detail level need is defined) — you get a build sheet per character, plus the analytics that explain it.</li>
       </ol>
@@ -496,19 +490,20 @@
         priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
         weekly amount), <b>a login budget</b> (best net within your sessions per week), or
         <b>compare everything</b> (the profit ranking across every product your operation could
-        make). The goal is the FIRST question, and your answer dictates the rest of the
-        section: the first three goals then ask for a product; <b>Compare shows no product
-        dropdown at all</b> &mdash; it searches every product itself.
+        make), listed A to Z with <b>Compare pre-selected</b> &mdash; the tool starts ready to
+        tell you what to build. Your answer dictates the rest of the section: the other three
+        goals ask for a product; <b>Compare shows no product dropdown at all</b> &mdash; it
+        searches every product itself.
         <b>Compare</b> works in two steps: first the ranked list, then you pick a product
         (&ldquo;Plan this&rdquo;) and get its full best path &mdash; colonies, build sheet and
         analytics &mdash; with your goal switched to that product so the choice stays visible.</p>
       <p><b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
         <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
         the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
-        You do not have to decide this: it defaults to <b>Suggested</b> &mdash; the tool picks per
-        input from your goal, your scanned systems and (when loaded) prices, and the result
-        names every choice with its reason and what the alternatives were worth. Pin an input
-        under <i>Adjust sourcing</i> only to overrule it.</p>
+        Every input starts on <b>extract (mine it)</b>. Switch any input to <b>Suggested</b>
+        under <i>Adjust sourcing</i> and the tool picks for it &mdash; from your goal, your
+        systems and (when loaded) prices &mdash; naming every choice with its reason and what
+        the alternatives were worth.</p>
       <p><b>Detail level</b> is the accuracy-for-convenience dial. <b>Quick estimate</b> answers
         immediately: unscanned densities assume your security band&rsquo;s typical value and
         typical costs are prefilled &mdash; every such number is clearly labeled an estimate with
@@ -534,6 +529,10 @@
         week <i>and</i> ISK per login, so you can pick what fits your life.</p>
 
       <h3>Step 3 &mdash; Your systems &amp; planets</h3>
+      <p>Planets load with every resource at a <b>70% default density</b>, so plans work
+        immediately; replace the defaults with your real scans for real numbers. Tick a
+        planet&rsquo;s <b>done</b> box to minimize it &mdash; planets load minimized except the
+        first.</p>
       <p><b>Resource values come from your in-game planet scan.</b> Enter the raw per-cycle
         value the survey shows; the familiar percentage appears alongside. Values above 100%
         are real and the tool never caps them &mdash; but it also never claims output your
