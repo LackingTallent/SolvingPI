@@ -6,7 +6,7 @@
  * legacy layer may call (deliverBatch, readPlanets).
  * Every number on screen comes from the engine's spec/solver/ledger modules.
  */
-import { loadState, saveState, defaultState, defaultResources, extractDefaults, type UiState, type UiPlanet } from './state.js';
+import { loadState, saveState, defaultState, defaultResources, extractDefaults, sanitizeState, type UiState, type UiPlanet } from './state.js';
 import { PLANET_TYPES, SCHEMATICS, tierOf, type PlanetType } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
 import { character, operation } from '../world/characters.js';
@@ -223,7 +223,18 @@ function renderOperation(): void {
       el('td', {}, numInput(c.accountingLevel, 0, 5, 1, (v) => { c.accountingLevel = v; })),
       el('td', {}, numInput(c.brokerRelationsLevel, 0, 5, 1, (v) => { c.brokerRelationsLevel = v; })),
       el('td', {}, `${1 + c.icLevel} planet${c.icLevel === 0 ? '' : 's'}`),
-      el('td', {}, el('button', { class: 'btn small', click: () => { state.characters.splice(i, 1); persist(); rerender(); } }, '✕')),
+      el('td', {}, (() => {
+        const del = el('button', {
+          class: 'btn small',
+          title: state.characters.length === 1 ? 'An operation needs at least one character.' : 'Remove this character',
+          click: () => {
+            if (state.characters.length === 1) return; // never delete the last one
+            state.characters.splice(i, 1); persist(); rerender();
+          },
+        }, '✕');
+        if (state.characters.length === 1) del.setAttribute('disabled', 'disabled');
+        return del;
+      })()),
     ),
   );
   const slots = state.characters.reduce((a, c) => a + 1 + c.icLevel, 0);
@@ -1084,7 +1095,9 @@ function wireShell(): void {
     try {
       const parsed = JSON.parse(await f.text()) as { solvingPiV9?: number; state?: UiState };
       if (parsed.solvingPiV9 !== 1 || parsed.state === undefined) throw new Error('not a Solving PI v9 save file');
-      state = { ...defaultState(), ...parsed.state };
+      // Same sanitizer as the autosave path — a hand-edited or corrupt file
+      // must never smuggle illegal planets/modes past validation.
+      state = sanitizeState(parsed.state);
       persist(); rerender();
       const s = document.getElementById('saveLoadStatus');
       if (s) s.textContent = `Loaded ${f.name}.`;

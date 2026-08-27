@@ -114,22 +114,26 @@ export function defaultState(): UiState {
 
 const KEY = 'solving-pi-v9-state';
 
-export function loadState(): UiState {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw === null) return defaultState();
-    const parsed = JSON.parse(raw) as Partial<UiState>;
-    const base = defaultState();
+/** Sanitize any externally-sourced partial state (localStorage OR a loaded
+ * save file — both funnels MUST share this; the file path once skipped it and
+ * accepted garbage wholesale, an edge-suite finding). */
+export function sanitizeState(parsed: Partial<UiState>): UiState {
+  const base = defaultState();
     // Merge conservatively: unknown/missing fields fall back to defaults.
     const merged: UiState = { ...base, ...parsed, fees: { ...base.fees, ...parsed.fees }, freight: { ...base.freight, ...parsed.freight } };
     if (!Array.isArray(merged.characters) || merged.characters.length === 0) merged.characters = base.characters;
     if (!Array.isArray(merged.planets)) merged.planets = base.planets;
+    if (!['max', 'quota', 'qol', 'compare'].includes(merged.mode)) merged.mode = base.mode;
     if (!['quick', 'refined', 'exact'].includes(merged.detailLevel)) merged.detailLevel = base.detailLevel;
+    for (const [k, v] of Object.entries(merged.sourcingOverrides ?? {})) {
+      if (!['extract', 'refine', 'buy'].includes(v)) delete merged.sourcingOverrides[k];
+    }
     if (merged.spaceBand !== null && !(SPACE_BANDS as readonly string[]).includes(merged.spaceBand)) merged.spaceBand = null;
     if (typeof merged.modeChosen !== 'boolean') merged.modeChosen = false;
     if (merged.costsSource !== 'default' && merged.costsSource !== 'user'
       && !SPACE_BANDS.some((b) => merged.costsSource === `preset-${b}`)) merged.costsSource = base.costsSource;
-    merged.planets = merged.planets.filter((p) => (PLANET_TYPES as readonly string[]).includes(p.type));
+    merged.planets = merged.planets.filter((p) => p && (PLANET_TYPES as readonly string[]).includes(p.type));
+    for (const p of merged.planets) { if (!Array.isArray(p.resources)) p.resources = []; }
     // Game truth: each planet carries each of its type's 5 resources at most
     // once — sanitize saves made before the UI enforced it (keep the first
     // scanned entry per resource, drop illegal-for-type entries).
@@ -147,6 +151,13 @@ export function loadState(): UiState {
       });
     }
     return merged;
+}
+
+export function loadState(): UiState {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw === null) return defaultState();
+    return sanitizeState(JSON.parse(raw) as Partial<UiState>);
   } catch {
     return defaultState();
   }

@@ -683,12 +683,25 @@ export function solveQuota(
     };
   }
   const placed = placeDealable(world, counts);
-  if ('error' in placed) return { error: `quota-unreachable: ${placed.error}` };
+  if ('error' in placed) {
+    // Edge-matrix finding: EVERY refusal names what IS achievable when a max
+    // solve exists — not just the too-many-colonies branch.
+    return { error: `quota-unreachable: ${placed.error}`, ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }) };
+  }
   const builtExtract: Record<string, number> = {};
   for (const pick of placed.extractPicks) builtExtract[pick.p1] = (builtExtract[pick.p1] ?? 0) + pick.p1PerWeek;
   const realized = realizedRate(unit, builtExtract, counts.refine, counts.advanced, counts.ht);
+  if (realized < targetPerWeek * (1 - 1e-9)) {
+    // Edge-matrix finding: the ceil-built colonies exist but their realized
+    // rate lands short of the target (placement/supply granularity). Refuse
+    // honestly instead of returning a plan that silently misses the quota.
+    return {
+      error: `quota-unreachable: the buildable plan realizes ${Math.floor(realized)}/wk, short of ${targetPerWeek}/wk`,
+      ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }),
+    };
+  }
   const built = buildPlan(world, unit, counts, placed, Math.min(realized, targetPerWeek * (1 + 1e-9)));
-  if ('error' in built) return { error: built.error };
+  if ('error' in built) return { error: built.error, ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }) };
   const verdict = validatePlan(built.plan);
   if (!verdict.legal) return { error: `judge-rejected: ${verdict.violations.map((v) => v.rule).join(', ')}` };
   return {
