@@ -119,9 +119,15 @@ logins (6h is full pace; 24h ≈ 81.5% of it; a week ≈ 34%).
 - **Customs** — the game taxes fixed base values per tier, not market price.
   High sec adds an NPC portion computed from your Customs Code Expertise;
   everywhere else only the POCO owner's rate applies.
-- **Prices** — fetch live Jita order books, or type quotes. *Instant* hits
-  existing orders (no broker fee, worse price); *patient* lists orders
-  (broker fee, better price, if they fill). Both are priced honestly.
+- **Prices** — fetch live Jita order books, or type quotes. **Fetch before
+  you solve**: rankings and net are built from prices, and most "it won't
+  solve / the numbers look empty" reports are market data that hadn't
+  populated yet. Prices also **auto-refresh in the background** as you
+  change product, goal, or planets — the auto-refresh only fills gaps and
+  refreshes stale live data; quotes you typed yourself are never
+  overwritten. *Instant* hits existing orders (no broker fee, worse price);
+  *patient* lists orders (broker fee, better price, if they fill). Both are
+  priced honestly.
 - **Freight** — ISK per m³ on real cargo volume, both directions.
 
 ## Section 5 — Results
@@ -169,12 +175,16 @@ Additional honesty on every result:
 
 Autosaves to your browser as you type; **Save My Data** downloads a file,
 **Load My Data** restores it. Nothing is uploaded anywhere and the tool never
-asks for your EVE login. **Report a bug** pre-fills your build version, mode
-and detail level. Reference sections are lookups, not steps: the **All PI
-Chains Flow Visualization Tool** (pick any commodity → its full P0→P4 chain
-drawn in four switchable layouts — Ladder, River, Radial, Planet lanes —
-with the smallest planet-type set covering its ores; click any node to
-re-root; nodes and planet chips wear the real in-game icons, fetched live
-from CCP's image server via the same verified type-ID table the Market
+asks for your EVE login. **If something isn't working**: press the ⟲ Reset
+on the section involved (or Reset Everything at the top), re-fetch Jita
+prices in section 4, and solve again — that clears most stuck states.
+**Report a bug** pre-fills your build version, mode and detail level.
+Reference sections are lookups, not steps: **All PI Visualized** (pick any
+commodity → its full P0→P4 chain drawn in four switchable layouts —
+Ladder, River, Radial, Planet lanes — with the smallest planet-type set
+covering its ores, each commodity's per-unit m³ and live Jita price, and
+per-cycle units + cargo volume on every edge; click any node to re-root;
+nodes and planet chips wear the real in-game icons, fetched live from
+CCP's image server via the same verified type-ID table the Market
 Reference uses, with schematic-style glyphs standing in while they load or
 offline), Market Reference, Price History, PI Templates, and System Status.

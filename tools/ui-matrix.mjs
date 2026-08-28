@@ -170,6 +170,10 @@ const copyBtn = await page.locator('.v9-tpl button', { hasText: 'Copy template' 
 await copyBtn.click();
 await page.waitForTimeout(300);
 check('templates: copy confirms on the button', /Copied — import in game/.test(await copyBtn.textContent()));
+check('templates: copy button shrunk to a quiet chip (~60% smaller)', await page.evaluate(() => {
+  const b = document.querySelector('.v9-tpl .btn.small');
+  return b !== null && parseFloat(getComputedStyle(b).fontSize) <= 12;
+}));
 const clip = await page.evaluate(() => navigator.clipboard.readText());
 check('templates: clipboard holds a real EVE template (CmdCtrLv + pins + routes)',
   /"CmdCtrLv"/.test(clip) && /"P": \[/.test(clip) && /"R": \[/.test(clip) && /"Pln"/.test(clip));
@@ -178,10 +182,19 @@ await shoot('12-colony-templates', page.locator('.v9-char').first());
 await shoot('04-max-dashboard', page.locator('#resultsPanel').locator('xpath=.//h3[contains(text(),"Plan by character")]/..'));
 
 // 3b ── All PI Chains Flow Visualization Tool (first reference card).
-check('chains viz: first reference card, exact title', await page.evaluate(() => {
+check('chains viz: first reference card, titled "All PI Visualized"', await page.evaluate(() => {
   const refs = [...document.querySelectorAll('section.card.reference')];
   return refs[0]?.id === 'secChains'
-    && /All PI Chains Flow Visualization Tool/.test(refs[0]?.querySelector('.st-label')?.textContent ?? '');
+    && /All PI Visualized/.test(refs[0]?.querySelector('.st-label')?.textContent ?? '');
+}));
+check('chains viz: every node shows per-unit m³, and live prices from section 4', await page.evaluate(() => {
+  const subs = [...document.querySelectorAll('#vzBody .vz-sub')];
+  return subs.length > 0 && subs.every((s) => /m³/.test(s.textContent))
+    && subs.some((s) => /ISK/.test(s.textContent)); // suite seeds Jita quotes
+}));
+check('chains viz: edge labels carry units AND step cargo volume', await page.evaluate(() => {
+  const qs = [...document.querySelectorAll('#vzBody .vz-qty')];
+  return qs.length > 0 && qs.every((q) => /·\s*[\d,.]+\s*m³/.test(q.textContent));
 }));
 check('chains viz: renders a diagram with 68 selectable products',
   await page.locator('#vzBody svg[role="img"]').count() === 1
@@ -230,6 +243,45 @@ await page.unroute('https://images.evetech.net/**');
 await page.evaluate(() => { document.getElementById('secChains')?.scrollIntoView(); });
 await shoot('13-chains-viz', page.locator('#secChains'));
 await page.evaluate(() => document.getElementById('secChains')?.classList.add('collapsed'));
+
+// 3c ── Market data populates ITSELF (simulated ESI): fetch-first prompt when
+// unpriced, then a product change auto-fills the gaps within seconds.
+const esiOrders = JSON.stringify([
+  { is_buy_order: true, price: 100, volume_remain: 5000, location_id: 60003760 },
+  { is_buy_order: false, price: 120, volume_remain: 5000, location_id: 60003760 },
+]);
+await page.route('https://esi.evetech.net/**', (r) =>
+  r.fulfill({ contentType: 'application/json', body: /history/.test(r.request().url()) ? '[]' : esiOrders }));
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.prices = {}; s.mode = 'max'; s.modeChosen = true;
+  s.product = 'Water'; s.sourcingOverrides = { Water: 'extract' };
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+check('sequencing: ready-but-unpriced gate says fetch in COSTS & MARKET first',
+  /COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.selectOption('#sec3 select >> nth=0', 'Coolant');
+await page.waitForFunction(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return Object.values(s.prices ?? {}).some((q) => q && q.bid > 0 && q.ask > 0);
+}, { timeout: 15000 });
+check('auto-refresh: a product change repopulates market data by itself', true);
+check('auto-refresh: price note reports live + auto-refreshing', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return /Live: /.test(s.priceNote) && /Auto-refreshes/.test(s.priceNote);
+}));
+check('auto-refresh: gate tip clears once the chain is priced',
+  !/COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.unroute('https://esi.evetech.net/**');
+// Restore the seeded quotes + product so the sections that follow see the
+// exact state they always have.
+await page.evaluate((restore) => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.prices = restore.prices; s.product = restore.product; s.sourcingOverrides = restore.overrides;
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+}, { prices, product: seededState.product, overrides: seededState.sourcingOverrides ?? {} });
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
 
 // 4 ── Quota goal.
 await page.check('input[name="v9mode"][value="quota"]');

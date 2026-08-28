@@ -19,7 +19,7 @@ import { idRegistry } from '../data/ids.js';
 import { fetchPrices } from '../data/prices.js';
 import { defaultEsiJson, importSystem, loadSystemIndex, searchSystems, type SystemIndex } from './esi-universe.js';
 import { solveReadiness, type Readiness } from './readiness.js';
-import { initChainsViz } from './chains-viz.js';
+import { initChainsViz, refreshChainsViz } from './chains-viz.js';
 import { suggestSourcing, type SourcingSuggestion } from '../engine/suggest.js';
 import {
   BAND_LABELS, PRESETS_ARE_APPROXIMATIONS, QUICK_DENSITY_DISCLOSURE, QUICK_DENSITY_PCT,
@@ -69,6 +69,10 @@ function persist(): void {
   const a = document.getElementById('autosaveStatus');
   if (a) a.textContent = 'Autosaved to this browser just now.';
   markResultsStale();
+  // Any input change (re-)schedules the debounced Jita auto-refresh, so the
+  // market section keeps itself populated as the user works (product
+  // switches included — the needed-commodity set is recomputed at fire time).
+  scheduleAutoPriceRefresh();
 }
 
 /** Audit #11: a solved answer must never sit unmarked next to changed inputs. */
@@ -477,6 +481,88 @@ function ownCosts(set: (v: number) => void): (v: number) => void {
   return (v) => { set(v); state.costsSource = 'user'; };
 }
 
+// ---------------------------------------------------------------------------
+// Live Jita prices: one fetch routine, used by the button AND auto-refresh.
+// Auto-refresh fires (debounced) whenever inputs change and the current
+// goal's chain has unpriced commodities, or live data is >10 min old — so
+// the market section keeps itself current as the user works. It never
+// overwrites a fully-priced manual set, backs off 5 min after a failure,
+// and never runs two fetches at once.
+// ---------------------------------------------------------------------------
+let priceFetchInFlight = false;
+let lastLiveFetchMs = 0;
+let lastAutoFailMs = 0;
+let autoFetchTimer: ReturnType<typeof setTimeout> | null = null;
+let applyingPrices = false; // persist() calls from inside the fetch don't re-schedule
+
+function refreshJitaPrices(onProgress?: (t: string) => void, opts?: { fillOnly?: boolean }): Promise<boolean> {
+  if (priceFetchInFlight) return Promise.resolve(false);
+  priceFetchInFlight = true;
+  const names = neededCommodities(state);
+  // fillOnly (the auto path): only quotes that were MISSING before the fetch
+  // are written, so nothing the user typed is ever overwritten unasked.
+  const fillTargets = opts?.fillOnly === true ? new Set(names.filter((n) => !priced(n))) : null;
+  let fetched = 0;
+  return fetchPrices(names, {
+    ids: mergedIds(),
+    now: () => new Date().toISOString(),
+    fetchJson: async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status} from ESI`);
+      fetched++;
+      onProgress?.(`Fetching Jita order books… (${Math.min(Math.ceil(fetched / 2), names.length)}/${names.length})`);
+      return { body: await res.json(), headers: {} };
+    },
+  }).then((snap) => {
+    for (const [name, quote] of Object.entries(snap.prices)) {
+      if (fillTargets === null || fillTargets.has(name)) state.prices[name] = { ...quote };
+    }
+    // Audit B2: developer error text ("run tools/gen-sde.mjs") means nothing
+    // to a site visitor — translate it at the display boundary.
+    const friendly = (reason: string): string =>
+      reason.startsWith('missing-typeid')
+        ? 'no type ID in this build — enter its quote manually'
+        : reason;
+    state.priceNote = `Live: ${snap.source} at ${snap.fetchedAt}. Auto-refreshes as your inputs change.` +
+      (snap.unpriced.length > 0 ? ` UNPRICED: ${snap.unpriced.map((u) => `${u.name} (${friendly(u.reason)})`).join('; ')}` : '');
+    lastLiveFetchMs = Date.now();
+    priceFetchInFlight = false;
+    applyingPrices = true;
+    try { persist(); rerender(); } finally { applyingPrices = false; }
+    return true;
+  }).catch((e: Error) => {
+    state.priceNote = `Live fetch failed: ${e.message} — enter quotes manually. If this section looks stuck, press its ⟲ Reset and try again.`;
+    lastAutoFailMs = Date.now();
+    priceFetchInFlight = false;
+    applyingPrices = true;
+    try { persist(); rerender(); } finally { applyingPrices = false; }
+    return false;
+  });
+}
+
+const priced = (name: string): boolean => {
+  const q = state.prices[name];
+  return q !== undefined && q.bid > 0 && q.ask > 0;
+};
+function unpricedNeeded(): string[] {
+  return neededCommodities(state).filter((n) => !priced(n));
+}
+function scheduleAutoPriceRefresh(): void {
+  if (applyingPrices) return;
+  if (autoFetchTimer !== null) clearTimeout(autoFetchTimer);
+  autoFetchTimer = setTimeout(() => {
+    autoFetchTimer = null;
+    if (priceFetchInFlight) return;
+    if (Date.now() - lastAutoFailMs < 300_000) return; // back off after a failure
+    const needFill = unpricedNeeded().length > 0;
+    const stale = lastLiveFetchMs > 0 && Date.now() - lastLiveFetchMs > 600_000;
+    if (!needFill && !stale) return;
+    // Gap-filling never touches quotes the user already has; only a staleness
+    // refresh of previously-live data rewrites existing quotes.
+    void refreshJitaPrices(undefined, { fillOnly: !stale });
+  }, 1500);
+}
+
 function renderMarket(): void {
   const body = byId('sec2Body');
   const summary = document.getElementById('sec2Summary');
@@ -498,37 +584,14 @@ function renderMarket(): void {
   });
   const fetchBtn = el('button', {
     class: 'btn',
+    title: 'Step 1 of a solve: fetch prices first, then press SOLVE — rankings and net use them.',
     click: () => {
       fetchBtn.textContent = 'Fetching Jita order books…';
-      const names = neededCommodities(state);
-      let fetched = 0;
-      fetchPrices(names, {
-        ids: mergedIds(),
-        now: () => new Date().toISOString(),
-        fetchJson: async (url) => {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`HTTP ${res.status} from ESI`);
-          fetched++;
-          fetchBtn.textContent = `Fetching Jita order books… (${Math.min(Math.ceil(fetched / 2), names.length)}/${names.length})`;
-          return { body: await res.json(), headers: {} };
-        },
-      }).then((snap) => {
-        for (const [name, quote] of Object.entries(snap.prices)) state.prices[name] = { ...quote };
-        // Audit B2: developer error text ("run tools/gen-sde.mjs") means nothing
-        // to a site visitor — translate it at the display boundary.
-        const friendly = (reason: string): string =>
-          reason.startsWith('missing-typeid')
-            ? 'no type ID in this build — enter its quote manually'
-            : reason;
-        state.priceNote = `Live: ${snap.source} at ${snap.fetchedAt}.` +
-          (snap.unpriced.length > 0 ? ` UNPRICED: ${snap.unpriced.map((u) => `${u.name} (${friendly(u.reason)})`).join('; ')}` : '');
-        persist(); rerender();
-      }).catch((e: Error) => {
-        state.priceNote = `Live fetch failed: ${e.message} — enter quotes manually.`;
-        persist(); rerender();
-      });
+      void refreshJitaPrices((t) => { fetchBtn.textContent = t; });
     },
   }, 'Fetch live Jita prices (ESI)');
+  const autoNote = el('p', { class: 'v9-muted v9-autonote' },
+    'Prices auto-refresh in the background when you change product, goal, or planets (and when live data goes stale) — the button forces a refresh right now. Manual quotes you have entered are never overwritten by an auto-refresh.');
   body.replaceChildren(
     el('p', { class: 'section-sub v9-muted' }, state.priceNote),
     el('table', { class: 'v9-table' },
@@ -536,6 +599,7 @@ function renderMarket(): void {
       ...priceRows,
     ),
     fetchBtn,
+    autoNote,
     el('div', { class: 'v9-row fin-presets' },
       el('span', { class: 'fin-preset-label' }, 'Typical costs for:'),
       ...SPACE_BANDS.map((b) => {
@@ -1044,6 +1108,8 @@ function refusalBox(raw: string, opts?: { achievable?: number | undefined; onSet
   kids.push(el('details', { class: 'v9-refusal-raw' },
     el('summary', {}, 'Engine detail'),
     el('code', {}, raw)));
+  kids.push(el('p', { class: 'v9-muted v9-reset-hint' },
+    'Something not working? Press the ⟲ Reset on the section involved (or RESET EVERYTHING at the top) and try again — then re-fetch Jita prices in section 4 before solving.'));
   return el('div', { class: 'v9-warn' }, ...kids);
 }
 
@@ -1466,6 +1532,7 @@ function rerender(): void {
       renderMarket();
       renderGoal();
       updateSolveGate();
+      refreshChainsViz(); // keep node price/m³ tags in step with section 4
     } while (renderQueued);
   } finally {
     rendering = false;
@@ -1481,8 +1548,16 @@ function updateSolveGate(): void {
   const readiness = currentReadiness();
   if (readiness.ready) {
     btn.removeAttribute('disabled');
-    btn.removeAttribute('title');
-    if (info) info.textContent = 'Judge-checked plans · one ledger · answers carry their optimality bound';
+    const gaps = unpricedNeeded();
+    if (gaps.length > 0) {
+      // Sequencing nudge: solvable, but ISK numbers will be missing/partial.
+      const tip = `For the most accurate numbers: press “Fetch live Jita prices” in 4. COSTS & MARKET first — then SOLVE (${gaps.length} commodit${gaps.length === 1 ? 'y is' : 'ies are'} unpriced).`;
+      btn.setAttribute('title', tip);
+      if (info) info.textContent = tip;
+    } else {
+      btn.removeAttribute('title');
+      if (info) info.textContent = 'Judge-checked plans · one ledger · answers carry their optimality bound';
+    }
   } else {
     btn.setAttribute('disabled', 'disabled');
     btn.setAttribute('title', readiness.missing.join('\n'));
@@ -1556,6 +1631,6 @@ function selfTest(): void {
 window.__v9 = { deliverBatch, readPlanets: readPlanetsForLegacy };
 wireShell();
 rerender();
-initChainsViz();
+initChainsViz((name) => state.prices[name]);
 selfTest();
 document.body.dataset['smoke'] = 'ok';

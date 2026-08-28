@@ -180,6 +180,8 @@ await page.evaluate(() => {
   localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...(s || {}), mode: 'max', modeChosen: true }));
 });
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+check('fresh default: gate nudges the sequence — fetch prices in section 4 FIRST',
+  /COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
 await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
 await page.waitForTimeout(2500);
 const freshTxt = await page.locator('#resultsPanel').textContent();

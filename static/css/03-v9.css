@@ -79,6 +79,7 @@ html[data-theme="daylight"] {
 .vz-lnk.vz-hi { stroke: var(--amber); stroke-width: 2.4; }
 .vz-lnk.vz-dim { opacity: .15; }
 .vz-qty { font: 10px var(--font-mono, monospace); fill: var(--text-faint); }
+.vz-sub { font: 10px var(--font-mono, monospace); fill: var(--text-faint); }
 .vz-lane-lbl { font: 600 12px var(--font-display, sans-serif); letter-spacing: .1em; text-transform: uppercase; fill: var(--text-faint); }
 .vz-lane { stroke: var(--panel-border); stroke-dasharray: 3 5; }
 .vz-hint { margin-top: 8px; }
@@ -129,7 +130,9 @@ details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0
 
 /* --- Per-colony one-click templates in the character dashboard --- */
 .v9-tpl { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--panel-border); font-size: .82rem; }
-.v9-tpl .btn.small { margin-right: 8px; }
+/* Owner request: the copy button read as the loudest thing on every colony
+ * card — shrunk ~60% into a quiet chip. */
+.v9-tpl .btn.small { margin-right: 8px; font-size: 11.5px; padding: 3px 8px; border-radius: 4px; letter-spacing: 0; }
 .v9-tpl-src { color: var(--text-dim, #9aa); margin-left: 4px; }
 .v9-tpl-caution { color: var(--amber, #e5b567); font-weight: 600; }
 .v9-tpl-note { margin-top: 3px; font-size: .78rem; }

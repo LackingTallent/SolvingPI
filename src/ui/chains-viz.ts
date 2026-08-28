@@ -15,7 +15,9 @@
  * fallback (ICON_IMG stays available as a manual per-name override).
  */
 import { SCHEMATICS, PLANET_TYPES, type PlanetType } from '../spec/schematics.js';
+import { TIER_VOLUME_M3, type Tier } from '../spec/constants.js';
 import { resourcesOf } from '../world/planets.js';
+import type { UiQuote } from './state.js';
 
 interface VizItem { tier: number; outQty: number; inputs: Readonly<Record<string, number>> }
 
@@ -176,16 +178,18 @@ const TILE = 46;
 function nodeG(name: string, x: number, y: number): string {
   const it = ITEMS[name]!;
   const label = name.length > 20 ? `${name.slice(0, 19)}…` : name;
+  const sub = nodeSub(name);
   let planets = '';
   if (it.tier === 0) {
     const ps = P0P[name] ?? [];
-    planets = `<g transform="translate(${-(ps.length * 13) / 2 + 1},${TILE / 2 + 22})">${ps.map((p, i) =>
+    planets = `<g transform="translate(${-(ps.length * 13) / 2 + 1},${TILE / 2 + 32})">${ps.map((p, i) =>
       `<g transform="translate(${i * 13},0)"><title>${p}</title><circle cx="5" cy="5" r="4.6" fill="${PLANET_BASE[p]}" stroke="rgba(0,0,0,.35)"/></g>`).join('')}</g>`;
   }
   return `<g class="vz-node" data-n="${name}" transform="translate(${x},${y})">
-    <title>${name} — ${TIER_NAME[it.tier]}${it.tier === 0 ? ` · spawns on: ${(P0P[name] ?? []).join(', ')}` : ''}. Click to re-root.</title>
+    <title>${name} — ${TIER_NAME[it.tier]} · ${sub.title}${it.tier === 0 ? ` · spawns on: ${(P0P[name] ?? []).join(', ')}` : ''}. Click to re-root.</title>
     <g transform="translate(${-TILE / 2},${-TILE / 2})">${iconSvg(name, TILE)}</g>
-    <text text-anchor="middle" y="${TILE / 2 + 13}">${label}</text>${planets}</g>`;
+    <text text-anchor="middle" y="${TILE / 2 + 13}">${label}</text>
+    <text class="vz-sub" text-anchor="middle" y="${TILE / 2 + 26}">${sub.text}</text>${planets}</g>`;
 }
 
 function layoutLayered(dag: Dag, horizontal: boolean): string {
@@ -205,16 +209,16 @@ function layoutLayered(dag: Dag, horizontal: boolean): string {
       arr.forEach((n, i) => pos.set(n, i));
     }
   }
-  const GAPX = 118, GAPY = 108, PADX = 70, PADY = 56;
+  const GAPX = 122, GAPY = 124, PADX = 70, PADY = 56;
   const maxRow = Math.max(...order.map((t) => tiers.get(t)!.length));
   const span = (maxRow - 1) * GAPX;
   const xy = new Map<string, [number, number]>();
   if (horizontal) {
-    const H = maxRow * 92;
+    const H = maxRow * 106;
     order.forEach((t, ti) => {
       const arr = tiers.get(t)!;
-      const colH = arr.length * 92;
-      arr.forEach((n, i) => xy.set(n, [(order.length - 1 - ti) * 175 + 95, (H - colH) / 2 + 58 + i * 92]));
+      const colH = arr.length * 106;
+      arr.forEach((n, i) => xy.set(n, [(order.length - 1 - ti) * 180 + 95, (H - colH) / 2 + 60 + i * 106]));
     });
   } else {
     order.forEach((t, ti) => {
@@ -223,22 +227,26 @@ function layoutLayered(dag: Dag, horizontal: boolean): string {
       arr.forEach((n, i) => xy.set(n, [PADX + (span - rowSpan) / 2 + i * GAPX, PADY + ti * GAPY]));
     });
   }
-  const W = horizontal ? order.length * 175 + 40 : span + PADX * 2;
-  const H = horizontal ? maxRow * 92 + 80 : PADY * 2 + (order.length - 1) * GAPY + 70;
+  const W = horizontal ? order.length * 180 + 40 : span + PADX * 2;
+  const H = horizontal ? maxRow * 106 + 80 : PADY * 2 + (order.length - 1) * GAPY + 84;
   const links = dag.links.map((l) => {
     const [x1, y1] = xy.get(l.from)!;
     const [x2, y2] = xy.get(l.to)!;
     let d: string, lx: number, ly: number;
+    // Labels sit 30% along the edge from its SOURCE, not at the midpoint —
+    // edges converging on one node share a midpoint and the labels collided.
     if (horizontal) {
       const mx = (x1 + x2) / 2;
       d = `M${x1 + TILE / 2 + 4},${y1} C${mx},${y1} ${mx},${y2} ${x2 - TILE / 2 - 6},${y2}`;
-      lx = mx; ly = (y1 + y2) / 2 - 5;
+      lx = x1 + (x2 - x1) * 0.3; ly = y1 + (y2 - y1) * 0.3 - 5;
     } else {
       const my = (y1 + y2) / 2;
       d = `M${x1},${y1 - TILE / 2 - 6} C${x1},${my} ${x2},${my} ${x2},${y2 + TILE / 2 + 4}`;
-      lx = (x1 + x2) / 2; ly = my - 3;
+      lx = x1 + (x2 - x1) * 0.22; ly = y1 + (y2 - y1) * 0.3 - 2;
     }
-    return `<path class="vz-lnk" data-from="${l.from}" data-to="${l.to}" d="${d}"/><text class="vz-qty" x="${lx}" y="${ly}" text-anchor="middle">${l.q}</text>`;
+    // Edge label: units consumed per cycle AND the cargo volume that step moves.
+    const stepM3 = l.q * volOf(l.from);
+    return `<path class="vz-lnk" data-from="${l.from}" data-to="${l.to}" d="${d}"/><text class="vz-qty" x="${lx}" y="${ly}" text-anchor="middle">${l.q} · ${fmtM3(stepM3)} m³</text>`;
   }).join('');
   const nodes = [...dag.nodes].map((n) => { const [x, y] = xy.get(n)!; return nodeG(n, x, y); }).join('');
   // Natural size — the wrapper scrolls horizontally, so big P4 chains stay
@@ -273,7 +281,7 @@ function layoutRadial(dag: Dag): string {
 function layoutLanes(dag: Dag): string {
   const { cover } = planetCover(dag);
   const laneNames: string[] = ['Factory colonies', ...cover.map((c) => c.planet)];
-  const LH = 128, PAD = 30, LBL = 138;
+  const LH = 148, PAD = 30, LBL = 138;
   const fac = [...dag.nodes].filter((n) => ITEMS[n]!.tier > 0).sort((a, b) => ITEMS[a]!.tier - ITEMS[b]!.tier);
   const xy = new Map<string, [number, number]>();
   fac.forEach((n, i) => xy.set(n, [LBL + 80 + i * 128, PAD + LH / 2]));
@@ -303,6 +311,30 @@ type Lay = 'ladder' | 'river' | 'radial' | 'lanes';
 let curProduct = 'Robotics';
 let curLay: Lay = 'ladder';
 
+/* Live Jita prices, supplied by the app (the same state section 4 fills and
+ * auto-refreshes). Optional: without a quote a node just shows its m³. */
+let getQuote: ((name: string) => UiQuote | undefined) | null = null;
+function volOf(name: string): number { return TIER_VOLUME_M3[ITEMS[name]!.tier as Tier]; }
+function fmtM3(v: number): string {
+  return v >= 100 ? `${Math.round(v).toLocaleString('en-US')}` : v >= 1 ? `${Math.round(v * 10) / 10}` : `${v}`;
+}
+function fmtIsk(v: number): string {
+  if (v >= 1e9) return `${(v / 1e9).toFixed(1)}b`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}m`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`;
+  return `${Math.round(v * 10) / 10}`;
+}
+function nodeSub(name: string): { text: string; title: string } {
+  const vol = volOf(name);
+  const q = getQuote?.(name);
+  const hasQ = q !== undefined && q.bid > 0;
+  const text = `${fmtM3(vol)} m³${hasQ ? ` · ${fmtIsk(q.bid)} ISK` : ''}`;
+  const title = `${vol} m³ per unit${q !== undefined && (q.bid > 0 || q.ask > 0)
+    ? ` · Jita: bid ${q.bid.toLocaleString('en-US')} / ask ${q.ask.toLocaleString('en-US')} ISK`
+    : ' · no live price yet — fetch Jita prices in section 4'}`;
+  return { text, title };
+}
+
 function wire(svg: SVGElement, onPick: (n: string) => void): void {
   svg.querySelectorAll<SVGGElement>('.vz-node').forEach((g) => {
     const name = g.dataset['n']!;
@@ -326,9 +358,16 @@ function wire(svg: SVGElement, onPick: (n: string) => void): void {
   });
 }
 
-export function initChainsViz(): void {
+/** Re-render the visualizer with current data (the app calls this after live
+ * prices land, so node price tags stay in step with section 4). */
+export function refreshChainsViz(): void {
+  rerenderViz?.();
+}
+
+export function initChainsViz(quotes?: (name: string) => UiQuote | undefined): void {
   const host = document.getElementById('chainsViz');
   if (host === null) return;
+  getQuote = quotes ?? null;
   const buildable = Object.keys(ITEMS).filter((n) => ITEMS[n]!.tier > 0);
   const groups = [4, 3, 2, 1].map((t) => [t, buildable.filter((n) => ITEMS[n]!.tier === t).sort()] as const);
   host.innerHTML = `
@@ -344,7 +383,7 @@ export function initChainsViz(): void {
     </div>
     <div class="vz-needs" id="vzNeeds"></div>
     <div class="vz-body" id="vzBody"></div>
-    <p class="v9-muted vz-hint">Click any node to re-root the diagram on it · hover a node to light its branch · numbers on edges are units consumed per factory cycle · planet dots under each raw material show every planet type it spawns on.</p>`;
+    <p class="v9-muted vz-hint">Click any node to re-root the diagram on it · hover a node to light its branch · under each name: per-unit size (m³) and live Jita best-bid price (fetch prices in section 4 — they auto-refresh as you work; hover for bid/ask) · edge labels are units consumed per factory cycle and the cargo volume that step moves · planet dots under each raw material show every planet type it spawns on.</p>`;
   const sel = host.querySelector<HTMLSelectElement>('#vzProduct')!;
   const body = host.querySelector<HTMLElement>('#vzBody')!;
   const needs = host.querySelector<HTMLElement>('#vzNeeds')!;

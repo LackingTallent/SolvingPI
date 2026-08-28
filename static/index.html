@@ -210,8 +210,8 @@
         <li><b>Section 1 — Your Goal.</b> First question: <b>what do you want?</b> — goals listed A to Z with <b>Compare pre-selected</b>. Your answer decides what appears next: a product dropdown for the other three goals; Compare asks for none, it ranks every product. Sourcing starts on <b>mine it</b> (Suggested is one click away), and the <b>detail level</b> lets typical values stand in until you provide your own.</li>
         <li><b>Section 2 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
         <li><b>Section 3 — Your Systems &amp; Planets.</b> Three starter planets are ready so your first Solve works out of the box — search a solar system to load its planets from ESI, drop in planet screenshots, or type your own. Scan values are yours to enter — or let Quick estimate assume your security band's typical density until you do.</li>
-        <li><b>Section 4 — Costs &amp; Market.</b> Taxes, fees, freight, and Jita prices (fetch what's available live, type in the rest) — one tap fills typical High/Low/Null/Wormhole rates — including whether you sell instantly or list orders, which changes real money.</li>
-        <li><b>Section 5 — Results.</b> Hit Solve and get per-character build sheets plus the analytics: what's bottlenecking you, what the next character or skill is worth, and why each input was extracted, refined, or bought — every suggested choice named with its reason.</li>
+        <li><b>Section 4 — Costs &amp; Market.</b> <b>Press "Fetch live Jita prices" BEFORE you solve</b> — rankings and net numbers are built from them (they also auto-refresh in the background as you change things). Then taxes, fees, freight — one tap fills typical High/Low/Null/Wormhole rates — and whether you sell instantly or list orders, which changes real money.</li>
+        <li><b>Section 5 — Results.</b> With prices fetched, hit Solve: per-character build sheets plus the analytics — what's bottlenecking you, what the next character or skill is worth, and why each input was extracted, refined, or bought. If anything looks stuck or wrong, press that section's &#10226; Reset and try again.</li>
       </ol>
       <p class="quickstart-note">Numbers here come from FC/CCP's published formulas and the game's own data, verified — where something can't be known (like another player's POCO tax), you set it and the tool says what it assumed. It never silently guesses.</p>
     </div>
@@ -364,11 +364,11 @@
 
 <section class="card reference collapsed" id="secChains">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">All PI Chains Flow Visualization Tool</span><span class="sec-summary">Every P0 &rarr; P4 chain &middot; planets needed</span></h2>
+    <h2 class="section-title"><span class="st-label">All PI Visualized</span><span class="sec-summary">Every P0 &rarr; P4 chain &middot; planets &middot; m&sup3; &middot; live prices</span></h2>
     <button class="btn collapse-btn" data-target="secChains" title="Collapse or expand this section">&#9660;</button>
   </div>
   <div class="sec-body" id="secChainsBody">
-    <p class="section-sub">Pick any commodity and see its whole production chain drawn — every input edge from raw P0 materials up, in four switchable layouts, with the smallest set of planet types that covers all its ores. Built from the same verified schematic data the planner solves with, wearing the real in-game icons (loaded live from CCP's image server; clean schematic glyphs stand in until they arrive or when you're offline).</p>
+    <p class="section-sub">Pick any commodity and see its whole production chain drawn — every input edge from raw P0 materials up, in four switchable layouts, with the smallest set of planet types that covers all its ores. Every node shows its per-unit size (m&sup3;) and live Jita price (fetched in section 4 — prices auto-refresh as you work), and every edge shows the units and cargo volume moved per factory cycle. Built from the same verified schematic data the planner solves with, wearing the real in-game icons (loaded live from CCP's image server; clean schematic glyphs stand in until they arrive or when you're offline).</p>
     <div id="chainsViz"></div>
   </div>
 </section>
@@ -605,11 +605,13 @@
 
       <h3>The reference sections</h3>
       <ul>
-        <li><b>All PI Chains Flow Visualization Tool</b> &mdash; pick any commodity and see its whole
+        <li><b>All PI Visualized</b> &mdash; pick any commodity and see its whole
           P0&rarr;P4 chain drawn in four switchable layouts, with the smallest planet set that covers
-          its ores. Click any node to re-root the diagram. Nodes wear the real in-game icons
-          (fetched live from CCP&rsquo;s image server, like the Market Reference); schematic-style
-          glyphs stand in while they load and whenever you&rsquo;re offline.</li>
+          its ores, each commodity&rsquo;s per-unit m&sup3; and live Jita price, and the units + cargo
+          volume moved per factory cycle on every edge. Click any node to re-root the diagram.
+          Nodes wear the real in-game icons (fetched live from CCP&rsquo;s image server, like the
+          Market Reference); schematic-style glyphs stand in while they load and whenever
+          you&rsquo;re offline.</li>
         <li><b>Market Reference</b> &mdash; live Jita prices for all 101 items with trends.</li>
         <li><b>Price History</b> &mdash; the same data charted, plus live order-book depth.</li>
         <li><b>PI Templates</b> &mdash; ready-made colony layouts. Copy, paste in game, done.</li>
@@ -630,8 +632,12 @@
       </ul>
 
       <h3>If something looks wrong</h3>
-      <p>Use the <b>Contact / Report a Bug</b> button. It opens an email with your build
-        version already filled in. Tell us what you expected and what happened instead.</p>
+      <p>First try the two-step fix: press the <b>&#10226; Reset</b> on the section that's
+        misbehaving (or <b>RESET EVERYTHING</b> at the top), then <b>Fetch live Jita
+        prices</b> in section 4 and solve again — most "it won't solve" reports turn out to
+        be market data that hadn't populated yet. Still wrong? Use the <b>Contact / Report
+        a Bug</b> button. It opens an email with your build version already filled in. Tell
+        us what you expected and what happened instead.</p>
     </div>
   </div>
 </div>
