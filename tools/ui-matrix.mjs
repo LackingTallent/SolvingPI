@@ -177,6 +177,34 @@ await shoot('03-max-results-top', page.locator('#resultsPanel'));
 await shoot('12-colony-templates', page.locator('.v9-char').first());
 await shoot('04-max-dashboard', page.locator('#resultsPanel').locator('xpath=.//h3[contains(text(),"Plan by character")]/..'));
 
+// 3b ── All PI Chains Flow Visualization Tool (first reference card).
+check('chains viz: first reference card, exact title', await page.evaluate(() => {
+  const refs = [...document.querySelectorAll('section.card.reference')];
+  return refs[0]?.id === 'secChains'
+    && /All PI Chains Flow Visualization Tool/.test(refs[0]?.querySelector('.st-label')?.textContent ?? '');
+}));
+check('chains viz: renders a diagram with 68 selectable products',
+  await page.locator('#vzBody svg[role="img"]').count() === 1
+  && await page.locator('#vzProduct option').count() === 68);
+await page.evaluate(() => document.getElementById('secChains')?.classList.remove('collapsed'));
+for (const lay of ['river', 'radial', 'lanes', 'ladder']) {
+  await page.click(`.vz-lay[data-lay="${lay}"]`);
+  await page.waitForTimeout(200);
+}
+check('chains viz: all four layouts render without error',
+  await page.locator('#vzBody svg[role="img"]').count() === 1);
+await page.selectOption('#vzProduct', 'Robotics');
+await page.waitForTimeout(250);
+check('chains viz: planets-needed computed (Robotics → 1 planet type)',
+  /1 planet type covers all 4 ores/.test(await page.locator('#vzNeeds').textContent()));
+await page.locator('#vzBody .vz-node[data-n="Mechanical Parts"]').first().click({ force: true });
+await page.waitForTimeout(250);
+check('chains viz: clicking a node re-roots the diagram',
+  await page.locator('#vzProduct').inputValue() === 'Mechanical Parts');
+await page.evaluate(() => { document.getElementById('secChains')?.scrollIntoView(); });
+await shoot('13-chains-viz', page.locator('#secChains'));
+await page.evaluate(() => document.getElementById('secChains')?.classList.add('collapsed'));
+
 // 4 ── Quota goal.
 await page.check('input[name="v9mode"][value="quota"]');
 await page.waitForSelector('#sec3 >> text=Target/week');

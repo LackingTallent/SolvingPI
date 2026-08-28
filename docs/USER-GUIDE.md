@@ -170,5 +170,8 @@ Additional honesty on every result:
 Autosaves to your browser as you type; **Save My Data** downloads a file,
 **Load My Data** restores it. Nothing is uploaded anywhere and the tool never
 asks for your EVE login. **Report a bug** pre-fills your build version, mode
-and detail level. Reference sections (Market Reference, Price History, PI
-Templates, System Status) are lookups, not steps.
+and detail level. Reference sections are lookups, not steps: the **All PI
+Chains Flow Visualization Tool** (pick any commodity → its full P0→P4 chain
+drawn in four switchable layouts — Ladder, River, Radial, Planet lanes —
+with the smallest planet-type set covering its ores; click any node to
+re-root), Market Reference, Price History, PI Templates, and System Status.

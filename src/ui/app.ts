@@ -19,6 +19,7 @@ import { idRegistry } from '../data/ids.js';
 import { fetchPrices } from '../data/prices.js';
 import { defaultEsiJson, importSystem, loadSystemIndex, searchSystems, type SystemIndex } from './esi-universe.js';
 import { solveReadiness, type Readiness } from './readiness.js';
+import { initChainsViz } from './chains-viz.js';
 import { suggestSourcing, type SourcingSuggestion } from '../engine/suggest.js';
 import {
   BAND_LABELS, PRESETS_ARE_APPROXIMATIONS, QUICK_DENSITY_DISCLOSURE, QUICK_DENSITY_PCT,
@@ -1555,5 +1556,6 @@ function selfTest(): void {
 window.__v9 = { deliverBatch, readPlanets: readPlanetsForLegacy };
 wireShell();
 rerender();
+initChainsViz();
 selfTest();
 document.body.dataset['smoke'] = 'ok';

@@ -52,6 +52,41 @@ input.v9-text.v9-dup { border-color: #e8b03c; outline: 2px solid rgba(232, 176, 
 .v9-planet .v9-remove { opacity: .65; }
 .v9-planet .v9-remove:hover { opacity: 1; color: #e86a5f; border-color: #e86a5f; }
 
+/* --- All PI Chains Flow Visualization Tool (reference section) --- */
+:root {
+  --vzt0: #8fa8b8; --vzt1: #5fc98f; --vzt2: #e2af3a; --vzt3: #e8734a; --vzt4: #b07ae8;
+  --vztile: #171b23;
+}
+html[data-theme="daylight"] {
+  --vzt0: #5c7280; --vzt1: #22885a; --vzt2: #a37b0a; --vzt3: #c05532; --vzt4: #7d4bb5;
+  --vztile: #ffffff;
+}
+.vz-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 6px 0 10px; }
+.vz-bar label, .vz-bar-lbl { font-family: var(--font-mono, monospace); font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+.vz-bar select { max-width: 320px; }
+.vz-lay.vz-on { border-color: var(--amber); color: var(--amber); box-shadow: 0 0 10px rgba(255, 194, 51, .25); }
+.vz-needs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; font-size: .92rem; }
+.vz-needs-lbl { font-family: var(--font-mono, monospace); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--text-faint); }
+.vz-needs-note { font-size: .84rem; }
+.vz-pchip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-raised); border: 1px solid var(--panel-border); border-radius: 999px; padding: 3px 12px 3px 5px; }
+.vz-pchip svg { width: 20px; height: 20px; }
+.vz-body { overflow-x: auto; }
+.vz-body svg { display: block; margin: 0 auto; }
+.vz-node { cursor: pointer; }
+.vz-node text { font: 500 11.5px var(--font-body, sans-serif); fill: var(--text); }
+.vz-node.vz-dim { opacity: .22; }
+.vz-lnk { fill: none; stroke: var(--panel-border); stroke-width: 1.6; }
+.vz-lnk.vz-hi { stroke: var(--amber); stroke-width: 2.4; }
+.vz-lnk.vz-dim { opacity: .15; }
+.vz-qty { font: 10px var(--font-mono, monospace); fill: var(--text-faint); }
+.vz-lane-lbl { font: 600 12px var(--font-display, sans-serif); letter-spacing: .1em; text-transform: uppercase; fill: var(--text-faint); }
+.vz-lane { stroke: var(--panel-border); stroke-dasharray: 3 5; }
+.vz-hint { margin-top: 8px; }
+@media (prefers-reduced-motion: no-preference) {
+  .vz-node { transition: opacity .15s; }
+  .vz-lnk { transition: opacity .15s, stroke .15s; }
+}
+
 /* --- Refusals in English (review P1): sentence first, engine text tucked away --- */
 .v9-refusal-msg { font-weight: 600; margin: 2px 0 6px; }
 .v9-refusal-raw summary { cursor: pointer; color: var(--text-dim); font-size: .85rem; }
