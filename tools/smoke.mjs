@@ -91,7 +91,10 @@ const checks = [
     /name="v9mode" value="compare" checked/.test(dom)
     && !dom.includes('<label>Product <')
     && !dom.includes('Adjust sourcing (default')],
-  ['planets load at the 70% default density', dom.includes('= 70%')],
+  // Owner spec: ZERO starter planets; the 70% default applies to ADDED
+  // planets (covered in ui-edge/ui-matrix by pressing + Add planet).
+  ['starter world is empty; explainer still teaches the 70% default',
+    !dom.includes('v9-planet"') && dom.includes('70% default density')],
   ['systems panel headings are caps, explainer removed',
     dom.includes('ADD A SOLAR SYSTEM') && dom.includes('FLAT DENSITY')
     && !dom.includes('what ESI does <b>not</b> publish')],

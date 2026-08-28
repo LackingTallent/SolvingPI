@@ -48,9 +48,10 @@ body { padding-bottom: 96px; }
 input.v9-text.v9-dup { border-color: #e8b03c; outline: 2px solid rgba(232, 176, 60, .45); }
 .v9-dup-tag { color: #e8b03c; font-size: .85rem; font-weight: 600; white-space: nowrap; }
 
-/* --- Planet removal demoted to a quiet ✕ (review #5) --- */
-.v9-planet .v9-remove { opacity: .65; }
-.v9-planet .v9-remove:hover { opacity: 1; color: #e86a5f; border-color: #e86a5f; }
+/* --- Planet removal: small labeled chip (review #5 + visibility follow-up:
+ * the bare dim ✕ read as a missing button) --- */
+.v9-planet .v9-remove { font-size: 11.5px; padding: 3px 8px; border-radius: 4px; letter-spacing: 0; }
+.v9-planet .v9-remove:hover { color: #e86a5f; border-color: #e86a5f; }
 
 /* --- All PI Chains Flow Visualization Tool (reference section) --- */
 :root {

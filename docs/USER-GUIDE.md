@@ -86,21 +86,20 @@ logins (6h is full pace; 24h ≈ 81.5% of it; a week ≈ 34%).
   are game facts. Every planet of a given type carries the same fixed set of
   five raw resources, so those load too. What ESI does NOT publish is density:
   scan values are yours to enter (or Quick estimate stands them in).
-- **The starter world is three planets** — Storm, Gas and Barren — because
-  one character places only one colony per planet, and even a small chain
-  needs three colonies (two extractors and a factory). A fresh visit can
-  therefore Solve out of the box; swap the starters for your real planets as
-  you go.
+- **You start with no planets** — add your own (system search, screenshot
+  import, or + Add planet). Worth knowing: one character places only one
+  colony per planet, and even a small chain needs three colonies (two
+  extractors and a factory), so most goals want at least three planets.
 - **Planets load at a 70% default density** on every resource, so plans work
   the moment a planet exists; replace the defaults with real scans for real
-  numbers. Each planet has a **Complete & Collapse** checkbox on the right
-  that minimizes just that card — planets load minimized except the first,
-  and each system header has a **Complete & Collapse All**.
+  numbers. Each planet has a **Complete** checkbox on the right that
+  collapses just that card; each system header has a **Complete & Collapse
+  All**.
 - **Duplicate names are flagged as you type.** Two planets with the same name
   make a plan ambiguous, so the offending cards get an amber ⚠ tag the moment
   it happens instead of a refusal at solve time.
-- **Removing a planet** is the small ✕ on its header row; it asks first and
-  names the planet, since scans go with it.
+- **Removing a planet** is the small **✕ remove planet** chip on its header
+  row; it asks first and names the planet, since scans go with it.
 - **Scan values** are the raw per-cycle number your survey window shows; the
   familiar % appears alongside (100% = the calibrated reference). Values above
   100% are real and never capped — but output never exceeds what the buildings

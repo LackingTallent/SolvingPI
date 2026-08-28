@@ -167,11 +167,15 @@ check('duplicate planet names: refused in words on screen (no crash)',
 check('duplicate planet names: inline ⚠ tag on the offending cards',
   await page.locator('.v9-dup-tag').count() >= 2 && await page.locator('input.v9-dup').count() >= 1);
 // Review #5: removal is a quiet confirmed ✕, not a labeled pill.
-check('remove planet is a ✕ with a confirm (no "remove planet" pill left)',
+check('remove planet is a small labeled chip with a confirm',
   await page.locator('#v9PlanetList button[title="Remove this planet"]').count() >= 1
-  && !/remove planet/i.test(await page.locator('#v9PlanetList').textContent() ?? ''));
+  && await page.evaluate(() => {
+    const b = document.querySelector('#v9PlanetList button[title="Remove this planet"]');
+    return b !== null && /remove planet/i.test(b.textContent) && parseFloat(getComputedStyle(b).fontSize) <= 12;
+  }));
 
-// 5b ── Review #9: a FRESH first visit must solve in Max mode out of the box.
+// 5b ── Owner spec: a FRESH first visit has ZERO planets; the gate names the
+// step, and the first added planet arrives expanded at the 70% defaults.
 await page.evaluate(() => localStorage.clear());
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
 await page.evaluate(() => {
@@ -180,16 +184,20 @@ await page.evaluate(() => {
   localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...(s || {}), mode: 'max', modeChosen: true }));
 });
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
-check('fresh default: gate nudges the sequence — fetch prices in section 4 FIRST',
+check('fresh default world: ZERO planets, SOLVE gated with "Add at least one planet"',
+  await page.locator('.v9-planet').count() === 0
+  && await page.locator('#stickyCalcBtn[disabled]').count() === 1
+  && /Add at least one planet/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
+await page.waitForTimeout(300);
+check('added planet: expanded at 70% defaults, labeled remove chip, "Complete" box',
+  await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1
+  && /= 70%/.test(await page.locator('#v9PlanetList').textContent() ?? '')
+  && /remove planet/i.test(await page.locator('button[title="Remove this planet"]').first().textContent() ?? '')
+  && /Complete(?!\s*&)/.test(await page.locator('.v9-done').first().textContent() ?? ''));
+check('fresh default: gate now nudges the sequence — fetch prices in section 4 FIRST',
   /COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
-await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
-await page.waitForTimeout(2500);
-const freshTxt = await page.locator('#resultsPanel').textContent();
-check('fresh default world: Max mode SOLVES the starter product (no refusal)',
-  /\/wk/.test(freshTxt ?? '') && /colonies/i.test(freshTxt ?? '')
-  && await page.locator('#resultsPanel .v9-refusal-msg').count() === 0);
-check('fresh default world: three starter planets, first expanded, rest collapsed',
-  await page.locator('.v9-planet').count() === 3 && await page.locator('.v9-planet-min').count() === 2);
 
 // 5c ── Blur-mid-rerender trap (bug-hunt find): focus a planet-name input,
 // then click a control that rerenders. The detached input's blur→change

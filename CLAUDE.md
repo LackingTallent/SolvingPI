@@ -22,9 +22,11 @@
 - Refusals render as plain sentences via friendlyRefusal(); raw engine text
   stays behind the "Engine detail" disclosure. Quota refusals with an
   achievable rate offer one-click "Set target to N/wk".
-- Starter world is 3 planets (Storm/Gas/Barren, first expanded) so a fresh
-  Max/Quota solve WORKS out of the box — never ship a default world that
-  refuses its own default product.
+- Starter world is EMPTY — zero planets (owner decision 2026-08-28,
+  reversing the earlier 3-planet starter). The solve gate must name the fix
+  ("Add at least one planet, section 3"); added planets arrive at 70%
+  density, expanded, with a labeled "✕ remove planet" chip and a "Complete"
+  collapse checkbox.
 - Duplicate planet names flag inline (.v9-dup-tag) as typed.
 - Planet removal is a confirmed ✕ (title "Remove this planet"), never a
   labeled pill.

@@ -121,12 +121,26 @@ check('fresh: goal options listed A to Z', (await page.locator('#sec3 .v9-mode')
 check('fresh: Compare is the pre-selected default', await page.locator('input[name="v9mode"][value="compare"]:checked').count() === 1);
 check('fresh: no product dropdown in compare', !/Product /.test(await page.locator('#sec3 label:has(select)').allTextContents().then((a) => a.join(' '))));
 check('fresh: sourcing controls hidden in compare', await page.locator('text=Adjust sourcing (default').count() === 0);
-check('fresh: solve gated on a price (compare ranks by net)', await page.locator('#stickyCalcBtn[disabled]').count() === 1
-  && /price/.test(await page.locator('#stickyCalcInfo').textContent()));
-check('fresh: starter planets load at 70% density, first expanded, rest collapsed',
-  (await page.locator('#v9PlanetList').textContent()).includes('= 70%')
-  && await page.locator('.v9-planet').count() === 3
-  && await page.locator('.v9-planet-min').count() === 2);
+check('fresh: solve gated — planets AND a price both named', await page.locator('#stickyCalcBtn[disabled]').count() === 1
+  && /Add at least one planet/.test(await page.locator('#stickyCalcInfo').textContent())
+  && /price/.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? ''));
+check('fresh: ZERO starter planets (owner spec); first added planet is 70%, expanded', await (async () => {
+  if (await page.locator('.v9-planet').count() !== 0) return false;
+  await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+  await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
+  await page.waitForTimeout(250);
+  const ok = await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1
+    && (await page.locator('#v9PlanetList').textContent()).includes('= 70%')
+    && /remove planet/i.test(await page.locator('button[title="Remove this planet"]').first().textContent() ?? '');
+  // put the fresh state back for the checks that follow
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+    s.planets = [];
+    localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+  });
+  await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+  return ok;
+})());
 // Mine-it sourcing defaults: pick a product goal and check the pins.
 await page.check('input[name="v9mode"][value="max"]');
 await page.click('summary:has-text("Adjust sourcing")');

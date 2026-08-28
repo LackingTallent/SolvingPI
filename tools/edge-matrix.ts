@@ -180,11 +180,14 @@ cell('save/load round trip is lossless for a real state', () => {
 // ---------------------------------------------------------------------------
 // Defaults invariants (owner spec)
 // ---------------------------------------------------------------------------
-cell('default state: compare pre-selected, mine-it pins, 70% planet, all-V main', () => {
+cell('default state: compare pre-selected, mine-it pins, ZERO planets, all-V main', () => {
   const d = defaultState();
   assert(d.mode === 'compare' && d.modeChosen === true, 'compare not default');
   assert(Object.values(d.sourcingOverrides).every((v) => v === 'extract'), 'pins not mine-it');
-  assert(d.planets[0]!.resources.length === 5 && d.planets[0]!.resources.every((r) => r.w > 0), 'planet not 70% x5');
+  assert(d.planets.length === 0, 'starter world must be empty (owner spec)');
+  // Added planets still get the 70% default on every resource.
+  const added = defaultResources('Barren');
+  assert(added.length === 5 && added.every((r) => r.w > 0), 'added planet not 70% x5');
   const c = d.characters[0]!;
   assert(c.icLevel === 5 && c.ccuLevel === 5 && c.customsCodeLevel === 5 && c.accountingLevel === 5 && c.brokerRelationsLevel === 5, 'not all V');
 });
@@ -194,18 +197,13 @@ cell('extractDefaults covers every chain input for every product', () => {
     for (const p1 of p1InputsOf(product)) assert(pins[p1] === 'extract', `${product}: ${p1} unpinned`);
   }
 });
-cell('starter world can actually produce the starter product (review #9)', () => {
-  // The default state must never refuse its own default product in Max mode:
-  // a fresh user's first Max/Quota solve has to WORK.
+cell('empty starter world: gate names "Add at least one planet" (owner spec)', () => {
+  // Owner decision: fresh visits start with ZERO planets. The gate must say
+  // exactly what to do, not let a solve run into an engine refusal.
   const d = defaultState();
-  const w = {
-    operation: operation(d.characters.map((c) => character({ ...c }))),
-    planets: d.planets.map((p) => ({ name: p.name, type: p.type, resources: Object.fromEntries(p.resources.map((r) => [r.p0, r.w])) })),
-    programHours: d.programHours,
-  };
-  const r = solveMax(w, d.product, d.sourcingOverrides);
-  if ('error' in r) throw new Error(`default world refuses default product: ${r.error}`);
-  assert(r.realizedPerWeek > 0, 'starter world produces nothing');
+  assert(d.planets.length === 0, 'starter world is not empty');
+  const r = solveReadiness({ planets: d.planets, product: d.product, sourcing: d.sourcingOverrides, mode: 'max', prices: {} });
+  assert(!r.ready && r.missing.some((s) => s.includes('Add at least one planet')), 'gate does not name the missing planet step');
 });
 cell('quick band demanded only for ores the goal can use (review #2)', () => {
   const planets = [

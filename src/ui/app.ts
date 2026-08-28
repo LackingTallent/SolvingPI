@@ -354,7 +354,7 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
       });
       if (p.minimized === true) cb.setAttribute('checked', 'checked');
       return cb;
-    })(), ' Complete & Collapse');
+    })(), ' Complete');
 
   if (p.minimized === true) {
     const scanned = p.resources.filter((r) => r.w > 0);
@@ -384,15 +384,15 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
       p.system ? el('span', { class: 'v9-muted' }, p.system) : null,
       p.scannedAt ? el('span', { class: 'v9-scan-tag', title: `Screenshot capture time: ${p.scannedAt}` }, `📷 ${p.scannedAt.slice(0, 10)}`) : null,
       unscanned > 0 ? el('span', { class: 'v9-scan-tag' }, `${unscanned} awaiting scan`) : null,
-      // Review #5: removal is rare and destructive — a quiet ✕ with a confirm,
-      // not the loudest control on the card.
+      // Review #5 + follow-up: small and quiet, but LABELED — a bare ✕ read
+      // as missing entirely. Confirmed before anything is deleted.
       el('button', {
         class: 'btn small v9-remove', title: 'Remove this planet',
         click: () => {
           if (!window.confirm(`Remove ${p.name} (${p.type}) and its scan values?`)) return;
           state.planets.splice(i, 1); persist(); rerender();
         },
-      }, '✕'),
+      }, '✕ remove planet'),
       doneBox,
     ),
     ...resRows,
@@ -444,7 +444,7 @@ function renderPlanets(): void {
   }
   mount.replaceChildren(
     el('p', { class: 'section-sub' },
-      'Planets load with every resource at the 70% default density — replace each with the raw per-cycle survey value from your scan (the familiar percentage appears alongside). Values above 100% are real and never capped — but output never exceeds what the buildings can process. Tick Complete & Collapse on a planet to minimize just that planet.'),
+      'Planets load with every resource at the 70% default density — replace each with the raw per-cycle survey value from your scan (the familiar percentage appears alongside). Values above 100% are real and never capped — but output never exceeds what the buildings can process. Tick Complete on a planet to collapse just that planet.'),
     ...groupBlocks,
     el('button', {
       class: 'btn',

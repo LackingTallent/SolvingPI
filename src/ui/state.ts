@@ -92,16 +92,10 @@ export function extractDefaults(product: string): Record<string, 'extract' | 're
 export function defaultState(): UiState {
   return {
     characters: [{ name: 'Main', icLevel: 5, ccuLevel: 5, customsCodeLevel: 5, accountingLevel: 5, brokerRelationsLevel: 5 }],
-    // Review #9: the starter world must be able to actually PRODUCE something.
-    // One character places one colony per planet, and even a P2 chain needs
-    // three colonies (two extractors + a factory) — so a single-planet starter
-    // refused every Max/Quota solve out of the box. Storm + Gas cover both
-    // Coolant ores; Barren is the factory floor.
-    planets: [
-      { name: 'Planet I', type: 'Storm', resources: defaultResources('Storm'), minimized: false },
-      { name: 'Planet II', type: 'Gas', resources: defaultResources('Gas'), minimized: true },
-      { name: 'Planet III', type: 'Barren', resources: defaultResources('Barren'), minimized: true },
-    ],
+    // Owner decision (2026-08-28, reversing the earlier starter trio): a
+    // fresh visit starts with ZERO planets — the user adds their own, and
+    // the solve gate names the step ("Add at least one planet, section 3").
+    planets: [],
     prices: {},
     priceNote: 'No prices loaded yet — enter quotes below or fetch live Jita data.',
     fees: { salesTaxPct: 3.375, brokerPct: 1.5, customsPct: 10, hisecNpc: false },
