@@ -27,7 +27,11 @@ all** — it ranks every product itself. Four goals:
 | Login budget | "Best net within my sessions per week?" | Whole chain |
 | Compare everything | "What SHOULD I be making?" | At least one |
 
-Compare is a two-step flow: first the ranked list of every viable product
+In Compare, "fetch live Jita prices" covers **every product and input** so
+the whole board ranks — anything still unpriced is summarized in one line
+("N products are not ranked yet — no Jita price is loaded") with the fix,
+never a wall of per-product errors. Compare is a two-step flow: first the
+ranked list of every viable product
 (with the excluded ones named, each with its reason), then you pick one —
 **Plan this** — and get its full best path: per-character colonies, build
 sheet and analytics. Your goal switches to that product so the choice stays

@@ -184,14 +184,26 @@ function mergedIds(): IdRegistry {
 }
 
 function neededCommodities(s: UiState): string[] {
-  const names = new Set<string>([s.product]);
-  try {
-    const src = currentSourcing(s);
-    for (const p1 of p1InputsOf(s.product)) {
-      names.add(p1);
-      if (src[p1] === 'refine') names.add(oreOf(p1));
+  const names = new Set<string>();
+  if (s.mode === 'compare') {
+    // Compare ranks EVERY product by net, so it needs a price for every
+    // product (and its P1 inputs, which cost the buy side). With only the
+    // current product's chain fetched, dozens of products fell out of the
+    // ranking as "missing-price" — the confusing wall users reported.
+    for (const product of SCHEMATICS.keys()) {
+      names.add(product);
+      try { for (const p1 of p1InputsOf(product)) names.add(p1); } catch { /* no chain */ }
     }
-  } catch { /* product invalid mid-edit */ }
+  } else {
+    names.add(s.product);
+    try {
+      const src = currentSourcing(s);
+      for (const p1 of p1InputsOf(s.product)) {
+        names.add(p1);
+        if (src[p1] === 'refine') names.add(oreOf(p1));
+      }
+    } catch { /* product invalid mid-edit */ }
+  }
   return [...names];
 }
 
@@ -1079,6 +1091,8 @@ function friendlyRefusal(raw: string): string {
     return `Your planets don't have enough extraction capacity for ${m[1]}.${placementNudge}`;
   if (inner.startsWith('quota-invalid:'))
     return 'The weekly target must be a number above zero.';
+  if ((m = inner.match(/^missing-price: (.+?) — refusing to (?:value|cost) it silently$/)) !== null)
+    return `No Jita price is loaded for ${m[1]} yet — press “Fetch live Jita prices” in section 4 (or enter its quote) and try again.`;
   if ((m = inner.match(/^infeasible: (.+) cannot be produced/)) !== null)
     return `${m[1]} can't be produced from these planets — no combination of them covers its whole chain.`;
   if (inner.startsWith('infeasible:'))
@@ -1147,8 +1161,21 @@ function runSolve(): void {
           announce(`${product} picked from the comparison — planning its best path.`);
           runSolve();
         };
+        // Split the exclusions: "no price loaded" is a fixable data gap, not
+        // a verdict — one clear line with the fix, never a 40-bullet wall of
+        // "missing-price: … refusing to value it silently" (user report).
+        const priceMissing = excluded.filter((x) => x.reason.startsWith('missing-price:'));
+        const otherExcluded = excluded.filter((x) => !x.reason.startsWith('missing-price:'));
         resultsBox.replaceChildren(
           ...(banner !== null ? [banner] : []),
+          ...(priceMissing.length > 0 ? [el('div', { class: 'v9-warn' },
+            el('p', { class: 'v9-refusal-msg' },
+              `${priceMissing.length} product${priceMissing.length === 1 ? ' is' : 's are'} not ranked yet — no Jita price is loaded for ${priceMissing.length === 1 ? 'it' : 'them'}.`),
+            el('p', {}, 'Press “Fetch live Jita prices” in 4. COSTS & MARKET (or enter quotes there), then Solve again for the full ranking. Prices also auto-refresh in the background a moment after you change anything.'),
+            el('details', {},
+              el('summary', {}, 'Which products are waiting on a price'),
+              el('p', { class: 'v9-muted' }, priceMissing.map((x) => x.product).join(' · '))),
+          )] : []),
           // Audit B3: never truncate silently.
           el('p', { class: 'v9-muted' },
             (ranked.length > 15 ? `Top 15 shown of ${ranked.length} viable products. ` : `${ranked.length} viable product${ranked.length === 1 ? '' : 's'}. `)
@@ -1162,9 +1189,9 @@ function runSolve(): void {
               el('td', {}, el('button', { class: 'btn small', click: () => pickPlan(r.product) }, 'Plan this →')),
             )),
           ),
-          el('details', {},
-            el('summary', {}, `${excluded.length} products excluded (each with a named reason)${excluded.length > 40 ? ' — first 40 shown' : ''}`),
-            el('ul', {}, ...excluded.slice(0, 40).map((x) => el('li', {}, `${x.product}: ${x.reason}`)))),
+          ...(otherExcluded.length > 0 ? [el('details', {},
+            el('summary', {}, `${otherExcluded.length} product${otherExcluded.length === 1 ? '' : 's'} excluded — each with its reason${otherExcluded.length > 40 ? ' (first 40 shown)' : ''}`),
+            el('ul', {}, ...otherExcluded.slice(0, 40).map((x) => el('li', {}, `${x.product}: ${friendlyRefusal(x.reason)}`))))] : []),
         );
         return;
       }

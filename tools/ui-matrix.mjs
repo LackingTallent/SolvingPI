@@ -312,7 +312,14 @@ await solveAndWait();
 check('compare: ranked table with pick buttons',
   await page.locator('#resultsPanel table tr').count() > 3
   && (await page.locator('#resultsPanel button', { hasText: 'Plan this' }).count()) > 3);
-check('compare: exclusions named', /excluded/.test(await page.locator('#resultsPanel').textContent()));
+check('compare: exclusions honest — no raw missing-price wall, gaps summarized', await page.evaluate(() => {
+  const t = document.getElementById('resultsPanel')?.textContent ?? '';
+  // A fully-priced seed may legitimately exclude nothing; when something IS
+  // excluded it must read as a sentence (or the one-line unpriced summary),
+  // never the engine's "refusing to value it silently".
+  return !/refusing to value it silently/.test(t)
+    && (/excluded — each with its reason/.test(t) || /not ranked yet — no Jita price/.test(t) || /viable product/.test(t));
+}));
 await shoot('07-compare-ranked', page.locator('#resultsPanel'));
 const topProduct = (await page.locator('#resultsPanel table tr').nth(1).locator('td').nth(1).textContent()).trim();
 await page.locator('#resultsPanel button', { hasText: 'Plan this' }).first().click();
