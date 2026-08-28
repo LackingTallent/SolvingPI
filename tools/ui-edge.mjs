@@ -163,6 +163,8 @@ await page.waitForTimeout(1200);
 const dupMsg = await page.locator('#resultsPanel').textContent();
 check('duplicate planet names: refused in words on screen (no crash)',
   pageErrors.length === 0 && /duplicate/i.test(dupMsg ?? ''));
+check('refusals: no raw engine codes visible on screen (Engine detail stays tucked)',
+  await page.evaluate(() => !/quota-unreachable:|place-extract:|no-capacity-for:|refusing to (value|cost) it silently|missing-price:/.test(document.body.innerText)));
 // Review #1: the duplicate is ALSO flagged inline, before any solve.
 check('duplicate planet names: inline ⚠ tag on the offending cards',
   await page.locator('.v9-dup-tag').count() >= 2 && await page.locator('input.v9-dup').count() >= 1);

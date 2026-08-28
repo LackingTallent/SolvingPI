@@ -967,7 +967,9 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
   try {
     eco = economics(r, toMarket(s), s.programHours);
   } catch (e) {
-    box.append(el('div', { class: 'v9-warn' }, `Not priced: ${(e as Error).message}`));
+    // No raw engine text on screen — "missing-price: X — refusing to value
+    // it silently" was reaching this card verbatim (user report).
+    box.append(el('div', { class: 'v9-warn' }, `Output solved, ISK not shown: ${friendlyRefusal((e as Error).message)}`));
   }
   if (eco !== null) {
     box.append(el('div', { class: 'v9-cards' },
@@ -1012,7 +1014,7 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
             el('h3', {}, 'Cadence: ISK/week vs ISK/login'), cadence,
           ));
         } catch (e) {
-          deepBtn.replaceWith(el('div', { class: 'v9-warn' }, `Deep analytics needs prices: ${(e as Error).message}`));
+          deepBtn.replaceWith(el('div', { class: 'v9-warn' }, `Deep analytics could not run: ${friendlyRefusal((e as Error).message)}`));
         }
       }, 30);
     },
@@ -1093,6 +1095,12 @@ function friendlyRefusal(raw: string): string {
     return 'The weekly target must be a number above zero.';
   if ((m = inner.match(/^missing-price: (.+?) — refusing to (?:value|cost) it silently$/)) !== null)
     return `No Jita price is loaded for ${m[1]} yet — press “Fetch live Jita prices” in section 4 (or enter its quote) and try again.`;
+  if (inner.startsWith('no-viable-product:'))
+    return 'No product could be ranked — usually prices are missing. Fetch Jita prices in section 4, then try again.';
+  if (inner.startsWith('qol-invalid:'))
+    return 'The sessions-per-week budget must be a number above zero (and at least one program length must fit inside it).';
+  if ((m = inner.match(/^qol-infeasible: (.+) cannot be produced/)) !== null)
+    return `${m[1]} can't be produced from these planets at any program length — no combination covers its chain.`;
   if ((m = inner.match(/^infeasible: (.+) cannot be produced/)) !== null)
     return `${m[1]} can't be produced from these planets — no combination of them covers its whole chain.`;
   if (inner.startsWith('infeasible:'))
@@ -1290,7 +1298,9 @@ function wireShell(): void {
       if (s) s.textContent = `Loaded ${f.name}.`;
     } catch (e) {
       const s = document.getElementById('saveLoadStatus');
-      if (s) s.textContent = `Could not load that file: ${(e as Error).message}`;
+      // JSON parser noise ("Unexpected token …") means nothing to a user.
+      const msg = (e as Error).message;
+      if (s) s.textContent = `Could not load that file: ${/Unexpected|JSON|token/i.test(msg) ? 'it is not valid save-file data' : msg}. Use a file made by “Save My Data”.`;
     }
   });
   document.getElementById('resetAllBtn')?.addEventListener('click', () => {

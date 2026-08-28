@@ -46,6 +46,14 @@ const fmt = (n: number): string => Math.round(n).toLocaleString('en-US');
 export const REFINE_MAX_PLANETS = 24;
 export const REFINE_MAX_INPUTS = 6;
 
+/** Engine refusal codes → the short plain-words phrase suggestion cards use. */
+function shortWhy(err: string): string {
+  if (err.startsWith('place-') || err.startsWith('no-capacity')) return 'not enough planets or colonies for all its extractors';
+  if (err.startsWith('no-planet-for')) return 'no accessible planet carries its ore';
+  if (err.startsWith('infeasible')) return 'it cannot be produced from these planets';
+  return 'it does not fit this operation';
+}
+
 export function suggestSourcing(
   world: SolveWorld,
   product: string,
@@ -79,7 +87,8 @@ export function suggestSourcing(
         for (const p1 of Object.keys(sourcing)) {
           if (p1 in overrides || allBuy[p1] === sourcing[p1]) continue;
           sourcing[p1] = allBuy[p1]!;
-          reasons.set(p1, `the fuller chain does not fit this operation (${probe.error}) — ${allBuy[p1] === 'refine' ? 'buying ore and refining' : 'buying it in'} keeps the plan feasible`);
+          // Plain words on the card, never raw engine codes (place-extract:…).
+          reasons.set(p1, `the fuller chain does not fit this operation (${shortWhy(probe.error)}) — ${allBuy[p1] === 'refine' ? 'buying ore and refining' : 'buying it in'} keeps the plan feasible`);
         }
       }
     }
