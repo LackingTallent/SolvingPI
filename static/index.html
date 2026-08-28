@@ -209,7 +209,7 @@
       <ol>
         <li><b>Section 1 — Your Goal.</b> First question: <b>what do you want?</b> — goals listed A to Z with <b>Compare pre-selected</b>. Your answer decides what appears next: a product dropdown for the other three goals; Compare asks for none, it ranks every product. Sourcing starts on <b>mine it</b> (Suggested is one click away), and the <b>detail level</b> lets typical values stand in until you provide your own.</li>
         <li><b>Section 2 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
-        <li><b>Section 3 — Your Systems &amp; Planets.</b> Search a solar system to load its planets from ESI, drop in planet screenshots, or type them. Scan values are yours to enter — or let Quick estimate assume your security band's typical density until you do.</li>
+        <li><b>Section 3 — Your Systems &amp; Planets.</b> Three starter planets are ready so your first Solve works out of the box — search a solar system to load its planets from ESI, drop in planet screenshots, or type your own. Scan values are yours to enter — or let Quick estimate assume your security band's typical density until you do.</li>
         <li><b>Section 4 — Costs &amp; Market.</b> Taxes, fees, freight, and Jita prices (fetch what's available live, type in the rest) — one tap fills typical High/Low/Null/Wormhole rates — including whether you sell instantly or list orders, which changes real money.</li>
         <li><b>Section 5 — Results.</b> Hit Solve and get per-character build sheets plus the analytics: what's bottlenecking you, what the next character or skill is worth, and why each input was extracted, refined, or bought — every suggested choice named with its reason.</li>
       </ol>
@@ -512,7 +512,9 @@
         scans entered, cost rates edited or confirmed &mdash; and only Exact prints unlabeled
         numbers. The band density assumptions (High sec 30%, Low sec 60%, Null sec 90%,
         Wormhole 100%) are typical-yield anchors, not game data &mdash; FC/CCP publishes no density
-        table &mdash; so replace them with scans when you commit.</p>
+        table &mdash; so replace them with scans when you commit. The band is only asked for when
+        an unscanned resource is one your chosen goal can actually use; Compare considers every
+        product, so there any unscanned resource counts.</p>
       <p>Each planner section has a <b>&#10226; Reset</b> button that clears only that
         section back to defaults, after asking.</p>
 
@@ -529,10 +531,18 @@
         week <i>and</i> ISK per login, so you can pick what fits your life.</p>
 
       <h3>Step 3 &mdash; Your systems &amp; planets</h3>
+      <p>You start with <b>three planets</b> (Storm, Gas, Barren) because one character
+        places only one colony per planet, and even a small chain needs three colonies
+        (two extractors and a factory) &mdash; so a fresh visit can Solve out of the box.
+        Swap the starters for your real planets as you go.</p>
       <p>Planets load with every resource at a <b>70% default density</b>, so plans work
         immediately; replace the defaults with your real scans for real numbers. Tick a
-        planet&rsquo;s <b>done</b> box to minimize it &mdash; planets load minimized except the
-        first.</p>
+        planet&rsquo;s <b>Complete &amp; Collapse</b> box (right side) to minimize just that
+        card &mdash; planets load minimized except the first, and each system header carries a
+        <b>Complete &amp; Collapse All</b>. Two planets with the same name make a plan
+        ambiguous, so duplicates are flagged with an amber &#9888; the moment you type one.
+        Removing a planet is the small &times; on its header row &mdash; it asks first, since
+        scans go with it.</p>
       <p><b>Resource values come from your in-game planet scan.</b> Enter the raw per-cycle
         value the survey shows; the familiar percentage appears alongside. Values above 100%
         are real and the tool never caps them &mdash; but it also never claims output your
@@ -566,6 +576,10 @@
         <b>answer quality</b> (exact, or within a measured percentage of the best possible),
         and reconciles every ISK to one ledger you can open and read line by line. A plan
         that loses money says so with a minus sign &mdash; losses are never hidden.</p>
+      <p>When a goal cannot be met, the refusal is <b>a plain sentence, not a code</b> &mdash;
+        what doesn&rsquo;t fit and why. A quota refusal that knows your best achievable rate
+        offers a one-click <b>Set target to N/wk</b> that re-solves immediately, and the raw
+        engine text stays one click away under <i>Engine detail</i> for bug reports.</p>
       <p>Results also disclose their honesty about YOUR inputs: a <b>Sourcing — chosen for
         you</b> card names every suggested extract/refine/buy choice with its reason, and any
         number built on a stand-in (assumed densities, preset costs) carries an amber

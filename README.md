@@ -43,8 +43,14 @@ docs/OPEN-QUESTIONS.md  numbers the engine refuses to guess + measurement recipe
 ## Running
 
 ```
-npm install        # typescript + tsx (+ @types/node)
-npm run gate1      # typecheck + all tests — must be green before Phase 2 work
+npm install               # typescript + tsx (+ @types/node)
+npm test                  # unit suites (157)
+npx tsx tools/matrix.ts   # engine matrix (148 cells)
+npx tsx tools/edge-matrix.ts   # adversarial engine/state edges (27 cells)
+node tools/build.mjs      # → dist/ (static site)
+node tools/smoke.mjs      # headless-browser smoke (24 checks)
+node tools/ui-matrix.mjs  # full UI flow sweep (45 checks)
+node tools/ui-edge.mjs    # UI edge attacks + review screenshots (20 checks)
 ```
 
 ## Status
@@ -61,6 +67,12 @@ npm run gate1      # typecheck + all tests — must be green before Phase 2 work
       (heuristic + full-re-solve price comparison, every choice disclosed with
       its reason), the Quick/Refined/Exact accuracy ladder with per-security-band
       density stand-ins, space-type cost presets, per-section resets
+- [x] Design-review hardening — refusals in plain English with one-click
+      achievable-target, sticky bar reserves its real height, inline
+      duplicate-name flagging, band demanded only for ores the goal uses,
+      confirmed ✕ planet removal, a three-planet starter world that solves
+      out of the box, rerender re-entrancy guard; two adversarial suites
+      added (tools/edge-matrix.ts, tools/ui-edge.mjs)
 
 ## Support documentation
 

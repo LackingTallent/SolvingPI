@@ -13,6 +13,25 @@
 ## Build
 - `node tools/build.mjs` → dist/ (static, no server); `npm run gate7` for the
   full gate; `npm run matrix` + `node tools/ui-matrix.mjs` for the deep sweeps.
+- Adversarial gates: `npx tsx tools/edge-matrix.ts` (engine/state edges) and
+  `node tools/ui-edge.mjs` (browser edge attacks; also regenerates the
+  design-review screenshots into ../shots/review/). Run ALL suites before
+  shipping zips.
+
+## UX invariants (owner-approved, keep true)
+- Refusals render as plain sentences via friendlyRefusal(); raw engine text
+  stays behind the "Engine detail" disclosure. Quota refusals with an
+  achievable rate offer one-click "Set target to N/wk".
+- Starter world is 3 planets (Storm/Gas/Barren, first expanded) so a fresh
+  Max/Quota solve WORKS out of the box — never ship a default world that
+  refuses its own default product.
+- Duplicate planet names flag inline (.v9-dup-tag) as typed.
+- Planet removal is a confirmed ✕ (title "Remove this planet"), never a
+  labeled pill.
+- Quick detail demands the security band only for ores the chosen goal can
+  use (Compare: any zero counts).
+- rerender() is re-entrancy-guarded — do not call render functions directly
+  from event handlers; always go through rerender().
 
 ## Non-negotiables
 - Footer credit "Fenris Creations (formerly CCP Games)" is CORRECT and

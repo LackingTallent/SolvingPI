@@ -55,7 +55,10 @@ Deep analytics button remains the thorough path.
   Wormhole 100% — see `docs/PRESET-SOURCES.md` for the defense of those
   figures) and typical costs are prefilled into section 4. Every result built
   on a stand-in carries an amber **ESTIMATE** banner listing exactly what was
-  assumed.
+  assumed. The band is only demanded when an unscanned resource is one your
+  chosen goal can actually use — a zero on an ore your product's chain never
+  touches doesn't gate the solve. (Compare considers every product, so there
+  any unscanned resource counts.)
 - **Refined** — your real scans are required for every extract-sourced input;
   typical cost presets are still allowed (results stay labeled).
 - **Exact** — everything is yours: scans entered, and the cost rates either
@@ -79,10 +82,21 @@ logins (6h is full pace; 24h ≈ 81.5% of it; a week ≈ 34%).
   are game facts. Every planet of a given type carries the same fixed set of
   five raw resources, so those load too. What ESI does NOT publish is density:
   scan values are yours to enter (or Quick estimate stands them in).
+- **The starter world is three planets** — Storm, Gas and Barren — because
+  one character places only one colony per planet, and even a small chain
+  needs three colonies (two extractors and a factory). A fresh visit can
+  therefore Solve out of the box; swap the starters for your real planets as
+  you go.
 - **Planets load at a 70% default density** on every resource, so plans work
   the moment a planet exists; replace the defaults with real scans for real
-  numbers. Each planet has a **done** checkbox that minimizes its card —
-  planets load minimized except the first.
+  numbers. Each planet has a **Complete & Collapse** checkbox on the right
+  that minimizes just that card — planets load minimized except the first,
+  and each system header has a **Complete & Collapse All**.
+- **Duplicate names are flagged as you type.** Two planets with the same name
+  make a plan ambiguous, so the offending cards get an amber ⚠ tag the moment
+  it happens instead of a refusal at solve time.
+- **Removing a planet** is the small ✕ on its header row; it asks first and
+  names the planet, since scans go with it.
 - **Scan values** are the raw per-cycle number your survey window shows; the
   familiar % appears alongside (100% = the calibrated reference). Values above
   100% are real and never capped — but output never exceeds what the buildings
@@ -116,6 +130,15 @@ Every solve reports: output/week, **answer quality** (exact for small
 operations, or a measured "within X% of the best possible" bound), the
 colonies used, and — when priced — net/week reconciled to a single ledger you
 can open line by line. Losses show with a minus sign.
+
+**When the answer is no, it's a sentence, not a code.** A goal the engine
+cannot meet is refused in plain English — what doesn't fit and why, e.g.
+"This target needs 12 colonies, but your characters have 6 colony slots
+between them." Placement refusals teach the rule behind them (one character,
+one colony per planet). A quota refusal that knows your best achievable rate
+says so and offers a one-click **Set target to N/wk** that re-solves
+immediately. The raw engine text stays one click away under *Engine detail*
+for bug reports.
 
 Additional honesty on every result:
 
