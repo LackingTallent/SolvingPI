@@ -62,7 +62,21 @@ export function solveReadiness(input: ReadinessInput): Readiness {
   if (level === 'quick') {
     // Anything unscanned will be assumed at the band's typical density — so
     // the band itself becomes the one requirement scans normally cover.
-    const anyUnscanned = input.planets.some((p) => p.resources.some((r) => !(r.w > 0)));
+    // Review #2: only demand the band for unscanned resources the chosen goal
+    // can actually USE. Compare considers every product, so any zero matters;
+    // a specific product only cares about the ores of inputs it might extract
+    // (pinned extract, or unpinned — Suggested may choose extract).
+    let relevant: ReadonlySet<string> | null = null; // null = every resource matters
+    if (input.mode !== 'compare') {
+      try {
+        const ores = p1InputsOf(input.product)
+          .filter((p1) => { const m = input.sourcing[p1]; return m === undefined || m === 'extract'; })
+          .flatMap((p1) => { try { return [oreOf(p1)]; } catch { return []; } });
+        relevant = new Set(ores);
+      } catch { relevant = null; /* product mid-edit — stay conservative */ }
+    }
+    const anyUnscanned = input.planets.some((p) => p.resources.some(
+      (r) => !(r.w > 0) && (relevant === null || relevant.has(r.p0))));
     if (anyUnscanned && (input.spaceBand === null || input.spaceBand === undefined)) {
       missing.push('Quick estimate needs your security band (section 1) so unscanned densities can assume typical values — or switch to Refined and enter scans.');
     }

@@ -315,6 +315,13 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
     ),
   );
   const unscanned = p.resources.filter((r) => !(r.w > 0)).length;
+  // Review #1: duplicate names are refused at solve time by the engine —
+  // surface them the moment they exist, right on the field that caused it.
+  const isDup = state.planets.some((q, qi) => qi !== i && q.name.trim() === p.name.trim());
+  const dupTag = isDup
+    ? el('span', { class: 'v9-dup-tag', title: 'The engine refuses ambiguous plans — give each planet a unique name.' },
+        '⚠ duplicate name — rename one')
+    : null;
   // Completion checkbox: checked = THIS planet renders minimized. Sits on the
   // RIGHT of the header row; the handler stops propagation so nothing else
   // interprets the click, and it only ever touches this one planet.
@@ -339,6 +346,7 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
     return el('div', { class: 'v9-planet v9-planet-min' },
       el('div', { class: 'v9-row' },
         el('b', {}, p.name),
+        dupTag,
         el('span', { class: 'v9-muted' }, `(${p.type})`),
         p.system ? el('span', { class: 'v9-muted' }, p.system) : null,
         el('span', { class: 'v9-muted' },
@@ -351,14 +359,23 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
   return el('div', { class: 'v9-planet' },
     el('div', { class: 'v9-row' },
       el('input', {
-        class: 'v9-text', type: 'text', value: p.name,
+        class: isDup ? 'v9-text v9-dup' : 'v9-text', type: 'text', value: p.name,
         change: (ev) => { p.name = (ev.target as HTMLInputElement).value; persist(); rerender(); },
       }),
+      dupTag,
       typeSel,
       p.system ? el('span', { class: 'v9-muted' }, p.system) : null,
       p.scannedAt ? el('span', { class: 'v9-scan-tag', title: `Screenshot capture time: ${p.scannedAt}` }, `📷 ${p.scannedAt.slice(0, 10)}`) : null,
       unscanned > 0 ? el('span', { class: 'v9-scan-tag' }, `${unscanned} awaiting scan`) : null,
-      el('button', { class: 'btn small', click: () => { state.planets.splice(i, 1); persist(); rerender(); } }, 'remove planet'),
+      // Review #5: removal is rare and destructive — a quiet ✕ with a confirm,
+      // not the loudest control on the card.
+      el('button', {
+        class: 'btn small v9-remove', title: 'Remove this planet',
+        click: () => {
+          if (!window.confirm(`Remove ${p.name} (${p.type}) and its scan values?`)) return;
+          state.planets.splice(i, 1); persist(); rerender();
+        },
+      }, '✕'),
       doneBox,
     ),
     ...resRows,
@@ -977,12 +994,16 @@ function friendlyRefusal(raw: string): string {
   const quota = raw.startsWith('quota-unreachable: ');
   const inner = quota ? raw.slice('quota-unreachable: '.length) : raw;
   let m: RegExpMatchArray | null;
+  // Review #9: placement refusals get the rule that explains them — one
+  // character places one colony per planet, so planets (or characters) are
+  // usually the unlock.
+  const placementNudge = ' One character can place only one colony per planet — adding planets (or characters) unlocks more colonies.';
   if ((m = inner.match(/^place-extract: only (\d+)\/(\d+) colonies placeable for (.+)$/)) !== null)
-    return `This target doesn't fit: ${m[3]} needs ${m[2]} extraction colonies, but only ${m[1]} can be placed — no more of your planets carry its ore.`;
+    return `This target doesn't fit: ${m[3]} needs ${m[2]} extraction colonies, but only ${m[1]} can be placed.${placementNudge}`;
   if (inner.startsWith('place-ht:'))
-    return 'No Barren or Temperate planet has room for the high-tech colony this plan needs.';
+    return `No Barren or Temperate planet has room for the high-tech colony this plan needs.${placementNudge}`;
   if (inner.startsWith('place-factory:'))
-    return 'No planet capacity is left to place a factory colony.';
+    return `No planet capacity is left to place a factory colony.${placementNudge}`;
   if ((m = inner.match(/^needs (\d+) colonies, operation has (\d+) slots$/)) !== null)
     return `This target needs ${m[1]} colonies, but your characters have ${m[2]} colony slots between them.`;
   if ((m = inner.match(/^the buildable plan realizes (.+?)\/wk, short of (.+?)\/wk$/)) !== null)
@@ -990,7 +1011,7 @@ function friendlyRefusal(raw: string): string {
   if ((m = inner.match(/^no-planet-for: (.+?) \((.+?)\)/)) !== null)
     return `No accessible planet carries ${m[2]}, which the plan needs to extract for ${m[1]}.`;
   if ((m = inner.match(/^no-capacity-for: (.+)$/)) !== null)
-    return `Your planets don't have enough extraction capacity for ${m[1]}.`;
+    return `Your planets don't have enough extraction capacity for ${m[1]}.${placementNudge}`;
   if (inner.startsWith('quota-invalid:'))
     return 'The weekly target must be a number above zero.';
   if ((m = inner.match(/^infeasible: (.+) cannot be produced/)) !== null)
@@ -1426,12 +1447,28 @@ declare global {
 // Boot
 // ---------------------------------------------------------------------------
 
+/** Re-entrancy guard (bug-hunt find): replacing a section's children while an
+ * input inside it holds focus fires blur→change on the detached node, whose
+ * handler calls rerender() AGAIN mid-replaceChildren — the browser then
+ * throws "node to be removed is no longer a child". One render runs at a
+ * time; a nested request coalesces into one trailing pass. */
+let rendering = false;
+let renderQueued = false;
 function rerender(): void {
-  renderOperation();
-  renderPlanets();
-  renderMarket();
-  renderGoal();
-  updateSolveGate();
+  if (rendering) { renderQueued = true; return; }
+  rendering = true;
+  try {
+    do {
+      renderQueued = false;
+      renderOperation();
+      renderPlanets();
+      renderMarket();
+      renderGoal();
+      updateSolveGate();
+    } while (renderQueued);
+  } finally {
+    rendering = false;
+  }
 }
 
 /** Keep the sticky Solve in step with the gate (the Goal section's button is

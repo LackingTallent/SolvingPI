@@ -44,6 +44,14 @@
  * (JS refines this to the bar's measured height — this is the no-JS fallback.) */
 body { padding-bottom: 96px; }
 
+/* --- Duplicate planet names flagged inline (review #1) --- */
+input.v9-text.v9-dup { border-color: #e8b03c; outline: 2px solid rgba(232, 176, 60, .45); }
+.v9-dup-tag { color: #e8b03c; font-size: .85rem; font-weight: 600; white-space: nowrap; }
+
+/* --- Planet removal demoted to a quiet ✕ (review #5) --- */
+.v9-planet .v9-remove { opacity: .65; }
+.v9-planet .v9-remove:hover { opacity: 1; color: #e86a5f; border-color: #e86a5f; }
+
 /* --- Refusals in English (review P1): sentence first, engine text tucked away --- */
 .v9-refusal-msg { font-weight: 600; margin: 2px 0 6px; }
 .v9-refusal-raw summary { cursor: pointer; color: var(--text-dim); font-size: .85rem; }

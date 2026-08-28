@@ -167,11 +167,12 @@ CORRUPT_SAVES.forEach((raw, i) => {
 });
 cell('save/load round trip is lossless for a real state', () => {
   const d = stateMod.defaultState();
+  const baseCount = d.planets.length;
   d.planets.push({ name: 'Extra', type: 'Gas', resources: stateMod.defaultResources('Gas'), minimized: true, system: 'Jita' });
   d.prices['Coolant'] = { bid: 11000, ask: 12500 };
   stateMod.saveState(d);
   const back = stateMod.loadState();
-  assert(back.planets.length === 2 && back.planets[1]!.minimized === true, 'planet flags lost');
+  assert(back.planets.length === baseCount + 1 && back.planets[baseCount]!.minimized === true, 'planet flags lost');
   assert(back.prices['Coolant']!.ask === 12500, 'prices lost');
   assert(back.mode === d.mode && back.modeChosen === d.modeChosen, 'goal state lost');
 });
@@ -192,6 +193,41 @@ cell('extractDefaults covers every chain input for every product', () => {
     const pins = extractDefaults(product);
     for (const p1 of p1InputsOf(product)) assert(pins[p1] === 'extract', `${product}: ${p1} unpinned`);
   }
+});
+cell('starter world can actually produce the starter product (review #9)', () => {
+  // The default state must never refuse its own default product in Max mode:
+  // a fresh user's first Max/Quota solve has to WORK.
+  const d = defaultState();
+  const w = {
+    operation: operation(d.characters.map((c) => character({ ...c }))),
+    planets: d.planets.map((p) => ({ name: p.name, type: p.type, resources: Object.fromEntries(p.resources.map((r) => [r.p0, r.w])) })),
+    programHours: d.programHours,
+  };
+  const r = solveMax(w, d.product, d.sourcingOverrides);
+  if ('error' in r) throw new Error(`default world refuses default product: ${r.error}`);
+  assert(r.realizedPerWeek > 0, 'starter world produces nothing');
+});
+cell('quick band demanded only for ores the goal can use (review #2)', () => {
+  const planets = [
+    { name: 'S', type: 'Storm' as const, resources: [
+      { p0: 'Aqueous Liquids', w: 9000 }, { p0: 'Ionic Solutions', w: 9000 },
+      { p0: 'Suspended Plasma', w: 0 }, // unscanned but IRRELEVANT to Coolant
+    ] },
+    { name: 'G', type: 'Gas' as const, resources: [{ p0: 'Aqueous Liquids', w: 8000 }] },
+    { name: 'B', type: 'Barren' as const, resources: [{ p0: 'Base Metals', w: 8000 }] },
+  ];
+  const base = { planets, product: 'Coolant', sourcing: { Electrolytes: 'extract', Water: 'extract' } as const,
+    prices: {}, detailLevel: 'quick' as const, spaceBand: null };
+  // Irrelevant zero, no band: Max must be ready (the old code nagged here).
+  const r1 = solveReadiness({ ...base, mode: 'max' });
+  assert(r1.ready, `irrelevant zero still nags: ${r1.missing.join('; ')}`);
+  // A zero on an ore the chain USES must still demand the band.
+  const r2 = solveReadiness({ ...base, mode: 'max',
+    planets: [{ ...planets[0]!, resources: [{ p0: 'Aqueous Liquids', w: 0 }, { p0: 'Ionic Solutions', w: 9000 }] }, planets[1]!, planets[2]!] });
+  assert(!r2.ready && r2.missing.some((s) => s.includes('security band')), 'used-ore zero no longer demands the band');
+  // Compare considers every product: ANY zero keeps demanding the band.
+  const r3 = solveReadiness({ ...base, mode: 'compare', prices: { Coolant: { bid: 100, ask: 120 } } });
+  assert(!r3.ready && r3.missing.some((s) => s.includes('security band')), 'compare lost its band requirement');
 });
 cell('stale overrides for another product are ignored by readiness (no ghost requirements)', () => {
   const r = solveReadiness({

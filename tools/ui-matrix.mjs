@@ -123,8 +123,10 @@ check('fresh: no product dropdown in compare', !/Product /.test(await page.locat
 check('fresh: sourcing controls hidden in compare', await page.locator('text=Adjust sourcing (default').count() === 0);
 check('fresh: solve gated on a price (compare ranks by net)', await page.locator('#stickyCalcBtn[disabled]').count() === 1
   && /price/.test(await page.locator('#stickyCalcInfo').textContent()));
-check('fresh: default planet loads at 70% density, expanded', (await page.locator('#v9PlanetList').textContent()).includes('= 70%')
-  && await page.locator('.v9-planet-min').count() === 0);
+check('fresh: starter planets load at 70% density, first expanded, rest collapsed',
+  (await page.locator('#v9PlanetList').textContent()).includes('= 70%')
+  && await page.locator('.v9-planet').count() === 3
+  && await page.locator('.v9-planet-min').count() === 2);
 // Mine-it sourcing defaults: pick a product goal and check the pins.
 await page.check('input[name="v9mode"][value="max"]');
 await page.click('summary:has-text("Adjust sourcing")');
@@ -217,6 +219,12 @@ await page.evaluate(() => {
   const legal = ['Aqueous Liquids', 'Heavy Metals', 'Micro Organisms', 'Noble Gas', 'Planktic Colonies'];
   s.planets[s.planets.length - 1].resources = legal.map((p0) => ({ p0, w: 0 }));
   s.detailLevel = 'quick'; s.spaceBand = null; s.costsSource = 'default';
+  // Deterministic product: Coolant's chain uses Aqueous Liquids (Water),
+  // which the Ice planet lists unscanned — so the band is demanded under the
+  // review-#2 scoping rule regardless of what section 6 picked. (Scoping
+  // itself — irrelevant zeros NOT nagging — is covered in edge-matrix.)
+  s.mode = 'max'; s.modeChosen = true; s.product = 'Coolant';
+  s.sourcingOverrides = { Electrolytes: 'extract', Water: 'extract' };
   localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
 });
 await page.reload();

@@ -106,7 +106,7 @@ await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
 await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
 for (let i = 0; i < 3; i++) {
   await page.evaluate(() => {
-    [...document.querySelectorAll('#v9PlanetList button')].find((b) => b.textContent.includes('remove planet'))?.click()
+    document.querySelector('#v9PlanetList button[title="Remove this planet"]')?.click()
       ?? [...document.querySelectorAll('.v9-planet-min .v9-done input')][0]?.click();
   });
   await page.waitForTimeout(150);
@@ -116,7 +116,7 @@ for (let i = 0; i < 3; i++) {
 }
 await page.evaluate(() => {
   let btn;
-  while ((btn = [...document.querySelectorAll('#v9PlanetList button')].find((b) => b.textContent.includes('remove planet')))) btn.click();
+  while ((btn = document.querySelector('#v9PlanetList button[title="Remove this planet"]'))) btn.click();
 });
 await page.waitForTimeout(250);
 check('remove-all planets: zero cards, zero group headers, no crash',
@@ -163,6 +163,44 @@ await page.waitForTimeout(1200);
 const dupMsg = await page.locator('#resultsPanel').textContent();
 check('duplicate planet names: refused in words on screen (no crash)',
   pageErrors.length === 0 && /duplicate/i.test(dupMsg ?? ''));
+// Review #1: the duplicate is ALSO flagged inline, before any solve.
+check('duplicate planet names: inline ⚠ tag on the offending cards',
+  await page.locator('.v9-dup-tag').count() >= 2 && await page.locator('input.v9-dup').count() >= 1);
+// Review #5: removal is a quiet confirmed ✕, not a labeled pill.
+check('remove planet is a ✕ with a confirm (no "remove planet" pill left)',
+  await page.locator('#v9PlanetList button[title="Remove this planet"]').count() >= 1
+  && !/remove planet/i.test(await page.locator('#v9PlanetList').textContent() ?? ''));
+
+// 5b ── Review #9: a FRESH first visit must solve in Max mode out of the box.
+await page.evaluate(() => localStorage.clear());
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state') || 'null');
+  // storage may be empty on a fresh visit — merge the mode switch into whatever the app persisted
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...(s || {}), mode: 'max', modeChosen: true }));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
+await page.waitForTimeout(2500);
+const freshTxt = await page.locator('#resultsPanel').textContent();
+check('fresh default world: Max mode SOLVES the starter product (no refusal)',
+  /\/wk/.test(freshTxt ?? '') && /colonies/i.test(freshTxt ?? '')
+  && await page.locator('#resultsPanel .v9-refusal-msg').count() === 0);
+check('fresh default world: three starter planets, first expanded, rest collapsed',
+  await page.locator('.v9-planet').count() === 3 && await page.locator('.v9-planet-min').count() === 2);
+
+// 5c ── Blur-mid-rerender trap (bug-hunt find): focus a planet-name input,
+// then click a control that rerenders. The detached input's blur→change
+// handler re-enters rerender(); without the guard, replaceChildren throws.
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+const trapInput = page.locator('.v9-planet:not(.v9-planet-min) input.v9-text').first();
+if (await trapInput.count()) {
+  await trapInput.focus();
+  await trapInput.fill('Planet Renamed Mid-Flight');
+  await page.evaluate(() => document.querySelector('.v9-planet-min .v9-done input')?.click());
+  await page.waitForTimeout(300);
+}
+check('blur-mid-rerender: no replaceChildren crash (re-entrancy guard)', pageErrors.length === 0);
 
 // 6 ── Rapid goal/product churn: 12 switches, zero errors, pins re-derived.
 await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify(s)), { ...seed, mode: 'max', modeChosen: true });
