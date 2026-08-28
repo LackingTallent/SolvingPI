@@ -201,6 +201,32 @@ await page.locator('#vzBody .vz-node[data-n="Mechanical Parts"]').first().click(
 await page.waitForTimeout(250);
 check('chains viz: clicking a node re-roots the diagram',
   await page.locator('#vzProduct').inputValue() === 'Mechanical Parts');
+
+// Real CCP icons: every name resolves a type id through the verified table;
+// offline the drawn glyphs hold; with the image server reachable (simulated —
+// this sandbox can't reach it) tiles and planet chips upgrade in place.
+check('chains viz: every commodity resolves a type id (tiles carry data-tid)', await page.evaluate(() => {
+  const opts = [...document.querySelectorAll('#vzProduct option')].map((o) => o.value);
+  const p0s = Object.values(PLANET_RESOURCES).flat();
+  return opts.every((n) => TYPE_IDS[n] > 0) && p0s.every((n) => TYPE_IDS[n] > 0)
+    && [...document.querySelectorAll('#vzBody .vz-tile')].every((t) => t.dataset.tid !== '');
+}));
+check('chains viz: offline — schematic glyphs hold, zero broken images',
+  await page.locator('#vzBody .vz-tile image').count() === 0 && consoleErrors.length === 0);
+const PNG1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+await page.route('https://images.evetech.net/**', (r) => r.fulfill({ contentType: 'image/png', body: PNG1 }));
+await page.reload();
+await page.waitForSelector('body[data-smoke="ok"]');
+await page.evaluate(() => document.getElementById('secChains')?.classList.remove('collapsed'));
+await page.waitForFunction(() => document.querySelectorAll('#vzBody .vz-tile image').length > 0, { timeout: 20000 });
+check('chains viz: real in-game icons load and tiles upgrade in place',
+  await page.locator('#vzBody .vz-tile image').count() > 0);
+check('chains viz: planet chips upgrade to real planet icons',
+  await page.locator('#vzNeeds .vz-ptile image').count() > 0);
+check('chains viz: icon URLs hit the CCP image server with the right shape', await page.evaluate(() =>
+  [...document.querySelectorAll('#vzBody .vz-tile image')]
+    .every((im) => /^https:\/\/images\.evetech\.net\/types\/\d+\/icon\?size=64$/.test(im.getAttribute('href')))));
+await page.unroute('https://images.evetech.net/**');
 await page.evaluate(() => { document.getElementById('secChains')?.scrollIntoView(); });
 await shoot('13-chains-viz', page.locator('#secChains'));
 await page.evaluate(() => document.getElementById('secChains')?.classList.add('collapsed'));

@@ -651,6 +651,20 @@ function iconUrl(name, size){
   const cdnSize = (size && size > 32) ? 64 : 32;
   return `https://images.evetech.net/types/${id}/icon?size=${cdnSize}`;
 }
+
+/* Planet TYPE IDs — standard CCP SDE ids for the eight PI planet kinds.
+ * COSMETIC USE ONLY: they feed the CCP image server (same host as iconUrl)
+ * for the chains visualizer's planet icons; no math touches them, and every
+ * consumer keeps a drawn fallback if the image can't load. */
+const PLANET_TYPE_IDS = {
+  Temperate: 11, Ice: 12, Gas: 13, Oceanic: 2014,
+  Lava: 2015, Barren: 2016, Storm: 2017, Plasma: 2063,
+};
+function planetIconUrl(type, size){
+  const id = PLANET_TYPE_IDS[type];
+  if(!id) return '';
+  return `https://images.evetech.net/types/${id}/icon?size=${(size && size > 32) ? 64 : 32}`;
+}
 function iconFallbackBadge(name, size){
   const s = size||24;
   const initials = (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();

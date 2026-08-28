@@ -8,9 +8,11 @@
  * computes the smallest planet-type set covering all the chain's ores.
  *
  * Data comes straight from src/spec (schematics) and src/world (spawn
- * tables) — nothing here restates a game number. Icons are original SVG
- * stand-ins in the game's schematic style; the ICON_IMG map is swap-ready
- * for real CCP type icons (keyed by commodity name).
+ * tables) — nothing here restates a game number. Icons are the REAL
+ * in-game ones, loaded in the viewer's browser from CCP's image server via
+ * the verified TYPE_IDS table the Market Reference already uses; drawn
+ * schematic-style glyphs render instantly and remain as the offline
+ * fallback (ICON_IMG stays available as a manual per-name override).
  */
 import { SCHEMATICS, PLANET_TYPES, type PlanetType } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
@@ -30,9 +32,43 @@ const P0P: Record<string, PlanetType[]> = {};
 const TIER_C = ['var(--vzt0)', 'var(--vzt1)', 'var(--vzt2)', 'var(--vzt3)', 'var(--vzt4)'];
 const TIER_NAME = ['P0 raw (extracted)', 'P1 processed', 'P2 refined', 'P3 specialized', 'P4 advanced'];
 
-/** Swap-ready: put real type-icon data URIs here (keyed by commodity name)
- * and the tiles render them instead of the drawn glyphs. */
+/* Real in-game icons, from the same CCP image server + verified TYPE_IDS
+ * table the Market Reference already uses (legacy/01-data.js globals —
+ * classic scripts load before this module). Icons preload in the
+ * background; tiles render the drawn schematic-style glyph instantly and
+ * upgrade in place when the real icon arrives, so the tool works offline
+ * and never waits on the CDN. ICON_IMG remains a manual override. */
+declare function iconUrl(name: string, size?: number): string;
+declare function planetIconUrl(type: string, size?: number): string;
 const ICON_IMG: Record<string, string> = {};
+const iconReady = new Set<string>();   // keys: commodity name, or "planet:<Type>"
+const iconFailed = new Set<string>();
+let rerenderViz: (() => void) | null = null;
+let upgradeQueued = false;
+function scheduleUpgrade(): void {
+  if (upgradeQueued) return;
+  upgradeQueued = true;
+  requestAnimationFrame(() => { upgradeQueued = false; rerenderViz?.(); });
+}
+function cdnUrl(name: string): string {
+  const override = ICON_IMG[name];
+  if (override !== undefined) return override;
+  try { return typeof iconUrl === 'function' ? iconUrl(name, 64) : ''; } catch { return ''; }
+}
+function planetCdnUrl(type: string): string {
+  try { return typeof planetIconUrl === 'function' ? planetIconUrl(type, 64) : ''; } catch { return ''; }
+}
+function preload(key: string, url: string): void {
+  if (url === '' || iconReady.has(key) || iconFailed.has(key)) return;
+  const img = new Image();
+  img.onload = () => { iconReady.add(key); scheduleUpgrade(); };
+  img.onerror = () => { iconFailed.add(key); };
+  img.src = url;
+}
+function preloadAllIcons(): void {
+  for (const name of Object.keys(ITEMS)) preload(name, cdnUrl(name));
+  for (const t of PLANET_TYPES) preload(`planet:${t}`, planetCdnUrl(t));
+}
 
 function glyphFor(name: string): string {
   const n = name.toLowerCase();
@@ -65,13 +101,22 @@ const GLYPH: Record<string, string> = {
   flask: '<path d="M10.4 5h3.2M11 5v4.4L7.4 16a2.4 2.4 0 0 0 2.2 3.4h4.8a2.4 2.4 0 0 0 2.2-3.4L13 9.4V5" fill="none" stroke="FG" stroke-width="1.5"/><path d="M9 14.5h6" stroke="FG" stroke-width="1.4"/>',
   dot: '<circle cx="12" cy="12" r="4.5" fill="FG" opacity=".85"/>',
 };
+let clipSeq = 0;
 function iconSvg(name: string, size: number): string {
   const it = ITEMS[name]!;
   const c = TIER_C[it.tier]!;
-  const img = ICON_IMG[name];
-  if (img !== undefined) return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><image href="${img}" width="24" height="24"/></svg>`;
-  const g = GLYPH[glyphFor(name)]!.replaceAll('FG', c);
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><rect x="1.2" y="1.2" width="21.6" height="21.6" rx="5" fill="var(--vztile)" stroke="${c}" stroke-width="1.6"/>${g}</svg>`;
+  const url = cdnUrl(name);
+  const tid = /types\/(\d+)\//.exec(url)?.[1] ?? '';
+  // Tier-colored tile frame always; the real in-game icon fills it once
+  // loaded, the drawn glyph stands in until then (and forever, offline).
+  let inner: string;
+  if (url !== '' && iconReady.has(name)) {
+    const cid = `vzc${clipSeq++}`;
+    inner = `<clipPath id="${cid}"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="3.6"/></clipPath><image href="${url}" x="2.6" y="2.6" width="18.8" height="18.8" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid meet"/>`;
+  } else {
+    inner = GLYPH[glyphFor(name)]!.replaceAll('FG', c);
+  }
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" class="vz-tile" data-icn="${name}" data-tid="${tid}"><rect x="1.2" y="1.2" width="21.6" height="21.6" rx="5" fill="var(--vztile)" stroke="${c}" stroke-width="1.6"/>${inner}</svg>`;
 }
 const PLANET_BASE: Record<PlanetType, string> = {
   Barren: '#b59a6f', Gas: '#d99a4e', Ice: '#bcd8e8', Lava: '#8a4636',
@@ -89,8 +134,13 @@ const PLANET_MOTIF: Record<PlanetType, string> = {
 };
 let gradSeq = 0;
 function planetSvg(type: PlanetType, size: number): string {
+  const url = planetCdnUrl(type);
+  if (url !== '' && iconReady.has(`planet:${type}`)) {
+    const cid = `vzpc${gradSeq++}`;
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-label="${type}" class="vz-ptile" data-ptype="${type}"><clipPath id="${cid}"><circle cx="12" cy="12" r="10.6"/></clipPath><image href="${url}" x="1.4" y="1.4" width="21.2" height="21.2" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid meet"/></svg>`;
+  }
   const id = `vzp${type}${gradSeq++}`;
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-label="${type}"><defs><radialGradient id="g${id}" cx="35%" cy="32%" r="80%"><stop offset="0%" stop-color="#ffffff" stop-opacity=".55"/><stop offset="45%" stop-color="${PLANET_BASE[type]}"/><stop offset="100%" stop-color="#000" stop-opacity=".55"/></radialGradient><clipPath id="c${id}"><circle cx="12" cy="12" r="9.4"/></clipPath></defs><circle cx="12" cy="12" r="9.4" fill="${PLANET_BASE[type]}"/><g clip-path="url(#c${id})">${PLANET_MOTIF[type]}</g><circle cx="12" cy="12" r="9.4" fill="url(#g${id})"/></svg>`;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-label="${type}" class="vz-ptile" data-ptype="${type}"><defs><radialGradient id="g${id}" cx="35%" cy="32%" r="80%"><stop offset="0%" stop-color="#ffffff" stop-opacity=".55"/><stop offset="45%" stop-color="${PLANET_BASE[type]}"/><stop offset="100%" stop-color="#000" stop-opacity=".55"/></radialGradient><clipPath id="c${id}"><circle cx="12" cy="12" r="9.4"/></clipPath></defs><circle cx="12" cy="12" r="9.4" fill="${PLANET_BASE[type]}"/><g clip-path="url(#c${id})">${PLANET_MOTIF[type]}</g><circle cx="12" cy="12" r="9.4" fill="url(#g${id})"/></svg>`;
 }
 
 interface Dag { root: string; nodes: Set<string>; links: Array<{ from: string; to: string; q: number }> }
@@ -318,5 +368,7 @@ export function initChainsViz(): void {
     curLay = b.dataset['lay'] as Lay;
     render();
   }));
+  rerenderViz = render;   // icon preloads re-render (rAF-batched) as they land
+  preloadAllIcons();
   render();
 }

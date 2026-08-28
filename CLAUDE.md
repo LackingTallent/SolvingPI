@@ -32,6 +32,11 @@
   use (Compare: any zero counts).
 - rerender() is re-entrancy-guarded — do not call render functions directly
   from event handlers; always go through rerender().
+- Chains visualizer icons: REAL CCP icons at runtime via the legacy globals
+  iconUrl()/TYPE_IDS (and planetIconUrl()/PLANET_TYPE_IDS) from
+  static/legacy/01-data.js — the one type-id source of truth, shared with
+  Market Reference. Drawn glyphs are the instant/offline fallback; never
+  remove them, and never restate type ids elsewhere.
 
 ## Non-negotiables
 - Footer credit "Fenris Creations (formerly CCP Games)" is CORRECT and

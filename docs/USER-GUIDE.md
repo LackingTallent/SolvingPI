@@ -174,4 +174,7 @@ and detail level. Reference sections are lookups, not steps: the **All PI
 Chains Flow Visualization Tool** (pick any commodity → its full P0→P4 chain
 drawn in four switchable layouts — Ladder, River, Radial, Planet lanes —
 with the smallest planet-type set covering its ores; click any node to
-re-root), Market Reference, Price History, PI Templates, and System Status.
+re-root; nodes and planet chips wear the real in-game icons, fetched live
+from CCP's image server via the same verified type-ID table the Market
+Reference uses, with schematic-style glyphs standing in while they load or
+offline), Market Reference, Price History, PI Templates, and System Status.
