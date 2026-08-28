@@ -382,11 +382,13 @@ export function initChainsViz(quotes?: (name: string) => UiQuote | undefined): v
       <button type="button" class="btn small vz-lay${curLay === 'lanes' ? ' vz-on' : ''}" data-lay="lanes">Planet lanes</button>
     </div>
     <div class="vz-needs" id="vzNeeds"></div>
+    <div class="vz-key" id="vzKey"></div>
     <div class="vz-body" id="vzBody"></div>
-    <p class="v9-muted vz-hint">Click any node to re-root the diagram on it · hover a node to light its branch · under each name: per-unit size (m³) and live Jita best-bid price (fetch prices in section 4 — they auto-refresh as you work; hover for bid/ask) · edge labels are units consumed per factory cycle and the cargo volume that step moves · planet dots under each raw material show every planet type it spawns on.</p>`;
+    <p class="v9-muted vz-hint">Click any node to re-root the diagram on it · hover a node to light its branch · under each name: per-unit size (m³) and live Jita best-bid price (fetch prices in section 4 — they auto-refresh as you work; hover for bid/ask) · edge labels are units consumed per factory cycle and the cargo volume that step moves · planet dots under each raw material show every planet type it spawns on — the planet key above the diagram decodes the colors (bold = in this chain's cover set).</p>`;
   const sel = host.querySelector<HTMLSelectElement>('#vzProduct')!;
   const body = host.querySelector<HTMLElement>('#vzBody')!;
   const needs = host.querySelector<HTMLElement>('#vzNeeds')!;
+  const key = host.querySelector<HTMLElement>('#vzKey')!;
   const render = (): void => {
     const dag = dagOf(curProduct);
     body.innerHTML = curLay === 'ladder' ? layoutLayered(dag, false)
@@ -400,6 +402,11 @@ export function initChainsViz(quotes?: (name: string) => UiQuote | undefined): v
     const { ores, cover } = planetCover(dag);
     needs.innerHTML = `<span class="vz-needs-lbl">Planets needed</span>${cover.map((c) =>
       `<span class="vz-pchip" title="covers: ${c.ores.join(', ')}">${planetSvg(c.planet, 20)}${c.planet}</span>`).join('')}<span class="v9-muted vz-needs-note">— ${cover.length} planet type${cover.length === 1 ? '' : 's'} cover${cover.length === 1 ? 's' : ''} all ${ores.length} ore${ores.length === 1 ? '' : 's'} (hover a chip to see which)</span>`;
+    // Planet key: decodes the colored dots under every raw material — dots
+    // marking a planet type IN this chain's cover set are named in bold.
+    const inCover = new Set(cover.map((c) => c.planet));
+    key.innerHTML = `<span class="vz-needs-lbl">Planet key</span>${PLANET_TYPES.map((t) =>
+      `<span class="vz-kitem${inCover.has(t) ? ' vz-kon' : ''}" title="${t} planet${inCover.has(t) ? ' — in this chain’s smallest cover set' : ''}"><span class="vz-kdot" style="background:${PLANET_BASE[t]}"></span>${planetSvg(t, 16)}${t}</span>`).join('')}<span class="v9-muted vz-needs-note">— the dots under each raw material use these colors (every planet type it spawns on)</span>`;
   };
   sel.addEventListener('change', () => { curProduct = sel.value; render(); });
   host.querySelectorAll<HTMLButtonElement>('.vz-lay').forEach((b) => b.addEventListener('click', () => {

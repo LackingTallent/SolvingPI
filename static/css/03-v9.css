@@ -70,6 +70,11 @@ html[data-theme="daylight"] {
 .vz-needs-note { font-size: .84rem; }
 .vz-pchip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-raised); border: 1px solid var(--panel-border); border-radius: 999px; padding: 3px 12px 3px 5px; }
 .vz-pchip svg { width: 20px; height: 20px; }
+.vz-key { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: .84rem; }
+.vz-kitem { display: inline-flex; align-items: center; gap: 4px; color: var(--text-faint); }
+.vz-kitem.vz-kon { color: var(--text); font-weight: 600; }
+.vz-kitem svg { width: 16px; height: 16px; }
+.vz-kdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.35); }
 .vz-body { overflow-x: auto; }
 .vz-body svg { display: block; margin: 0 auto; }
 .vz-node { cursor: pointer; }

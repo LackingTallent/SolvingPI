@@ -73,6 +73,12 @@ node tools/ui-edge.mjs    # UI edge attacks + review screenshots (20 checks)
       confirmed ✕ planet removal, a three-planet starter world that solves
       out of the box, rerender re-entrancy guard; two adversarial suites
       added (tools/edge-matrix.ts, tools/ui-edge.mjs)
+- [x] All PI Visualized + market-first UX — reference-section chain
+      visualizer (four layouts, click-to-re-root, smallest planet cover,
+      planet key, per-unit m³ + live Jita prices, real CCP type icons with
+      drawn offline fallback); live prices auto-refresh as inputs change
+      (gap-filling only — typed quotes never overwritten), fetch-first
+      sequencing on the solve gate, reset-and-retry guidance on refusals
 
 ## Support documentation
 

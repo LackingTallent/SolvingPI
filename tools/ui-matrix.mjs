@@ -181,7 +181,7 @@ await shoot('03-max-results-top', page.locator('#resultsPanel'));
 await shoot('12-colony-templates', page.locator('.v9-char').first());
 await shoot('04-max-dashboard', page.locator('#resultsPanel').locator('xpath=.//h3[contains(text(),"Plan by character")]/..'));
 
-// 3b ── All PI Chains Flow Visualization Tool (first reference card).
+// 3b ── All PI Visualized (first reference card).
 check('chains viz: first reference card, titled "All PI Visualized"', await page.evaluate(() => {
   const refs = [...document.querySelectorAll('section.card.reference')];
   return refs[0]?.id === 'secChains'
@@ -195,6 +195,12 @@ check('chains viz: every node shows per-unit m³, and live prices from section 4
 check('chains viz: edge labels carry units AND step cargo volume', await page.evaluate(() => {
   const qs = [...document.querySelectorAll('#vzBody .vz-qty')];
   return qs.length > 0 && qs.every((q) => /·\s*[\d,.]+\s*m³/.test(q.textContent));
+}));
+check('chains viz: planet key lists all 8 types, cover-set types bold', await page.evaluate(() => {
+  const items = [...document.querySelectorAll('#vzKey .vz-kitem')];
+  return items.length === 8 && document.querySelectorAll('#vzKey .vz-kon').length >= 1
+    && ['Barren', 'Gas', 'Ice', 'Lava', 'Oceanic', 'Plasma', 'Storm', 'Temperate']
+      .every((t) => items.some((i) => i.textContent.includes(t)));
 }));
 check('chains viz: renders a diagram with 68 selectable products',
   await page.locator('#vzBody svg[role="img"]').count() === 1

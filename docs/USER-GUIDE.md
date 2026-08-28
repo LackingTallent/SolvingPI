@@ -182,8 +182,9 @@ prices in section 4, and solve again — that clears most stuck states.
 Reference sections are lookups, not steps: **All PI Visualized** (pick any
 commodity → its full P0→P4 chain drawn in four switchable layouts —
 Ladder, River, Radial, Planet lanes — with the smallest planet-type set
-covering its ores, each commodity's per-unit m³ and live Jita price, and
-per-cycle units + cargo volume on every edge; click any node to re-root;
+covering its ores, each commodity's per-unit m³ and live Jita price,
+per-cycle units + cargo volume on every edge, and a planet key that decodes
+the colored spawn dots under each raw material; click any node to re-root;
 nodes and planet chips wear the real in-game icons, fetched live from
 CCP's image server via the same verified type-ID table the Market
 Reference uses, with schematic-style glyphs standing in while they load or
