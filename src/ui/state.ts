@@ -8,7 +8,7 @@ import { PLANET_TYPES } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
 import { SPACE_BANDS, type SpaceBand } from './presets.js';
 import { wFromDensityPct } from '../world/density.js';
-import { p1InputsOf } from '../engine/chain.js';
+import { chainIntermediates, p1InputsOf } from '../engine/chain.js';
 
 export interface UiCharacter {
   name: string;
@@ -36,7 +36,7 @@ export interface UiPlanet {
 
 export interface UiQuote { bid: number; ask: number; dailyVolume?: number }
 
-export type UiMode = 'max' | 'quota' | 'qol' | 'compare';
+export type UiMode = 'max' | 'quota' | 'qol' | 'compare' | 'profit';
 
 /** Accuracy ladder: quick (typical-value stand-ins, instant numbers) →
  * refined (your scans, preset costs allowed) → exact (everything yours). */
@@ -48,6 +48,15 @@ export type CostsSource = 'default' | `preset-${SpaceBand}` | 'user';
 
 export interface UiState {
   characters: UiCharacter[];
+  /** Owner spec 2026-09-01: section 2 starts EMPTY and earns its check mark
+   * only when the user presses “Done adding characters” (reversible). */
+  charactersDone: boolean;
+  /** Streamline batch (owner 2026-09-02): Simple hides every power control;
+   * Advanced shows them all. */
+  advancedMode: boolean;
+  /** True (default): the accuracy level is INFERRED from the data present —
+   * the "How exact?" question only exists in Advanced. */
+  autoDetail: boolean;
   planets: UiPlanet[];
   prices: Record<string, UiQuote>;
   priceNote: string; // provenance + staleness, always shown
@@ -66,8 +75,14 @@ export interface UiState {
   product: string;
   quotaPerWeek: number;
   qolSessions: number;
-  /** Explicit per-input pins; an absent key means "Suggested (auto)". */
-  sourcingOverrides: Record<string, 'extract' | 'refine' | 'buy'>;
+  /** Explicit per-input pins; an absent key means "Suggested (auto)".
+   * P1 inputs: extract | refine | buy. Intermediates (P2/P3): make | buy —
+   * 'buy' cuts the chain there (owner spec: buy P3s, make the P4). */
+  sourcingOverrides: Record<string, 'extract' | 'refine' | 'buy' | 'make'>;
+  /** Product mix (owner spec 2026-08-31): two or more products with relative
+   * percentage shares. Active in max/quota/qol when it has >= 2 entries; the
+   * solver optimizes the blend at that ratio. Empty = single-product mode. */
+  mix: Array<{ product: string; pct: number }>;
 }
 
 /** Default density for freshly loaded planets: 70% until the user changes it. */
@@ -81,9 +96,15 @@ export function defaultResources(type: PlanetType): UiResource[] {
 
 /** Owner default: every input starts on extract ("mine it"); Suggested and
  * the other modes remain one click away under Adjust sourcing. */
-export function extractDefaults(product: string): Record<string, 'extract' | 'refine' | 'buy'> {
+export function extractDefaults(product: string): Record<string, 'extract' | 'refine' | 'buy' | 'make'> {
   try {
-    return Object.fromEntries(p1InputsOf(product).map((p1) => [p1, 'extract' as const]));
+    return {
+      ...Object.fromEntries(p1InputsOf(product).map((p1) => [p1, 'extract' as const])),
+      // Intermediates default to made-in-house — same mine-it philosophy;
+      // "buy finished" (chain cut) is one dropdown away, and Suggested/
+      // Maximize-profits explore it automatically when unpinned.
+      ...Object.fromEntries(chainIntermediates(product).map((i) => [i, 'make' as const])),
+    };
   } catch {
     return {};
   }
@@ -91,7 +112,12 @@ export function extractDefaults(product: string): Record<string, 'extract' | 're
 
 export function defaultState(): UiState {
   return {
-    characters: [{ name: 'Main', icLevel: 5, ccuLevel: 5, customsCodeLevel: 5, accountingLevel: 5, brokerRelationsLevel: 5 }],
+    // Owner spec 2026-09-01: ZERO starter characters — the user adds their
+    // own and presses “Done adding characters” to complete the section.
+    characters: [],
+    charactersDone: false,
+    advancedMode: false,
+    autoDetail: true,
     // Owner decision (2026-08-28, reversing the earlier starter trio): a
     // fresh visit starts with ZERO planets — the user adds their own, and
     // the solve gate names the step ("Add at least one planet, section 3").
@@ -103,8 +129,10 @@ export function defaultState(): UiState {
     sellBasis: 'immediate',
     buyBasis: 'immediate',
     programHours: 6,
+    // Owner 2026-09-02 (reversing the pre-selected Compare): NOTHING is
+    // checked until the user selects a goal themselves.
     mode: 'compare',
-    modeChosen: true,
+    modeChosen: false,
     detailLevel: 'quick',
     spaceBand: null,
     costsSource: 'default',
@@ -112,6 +140,7 @@ export function defaultState(): UiState {
     quotaPerWeek: 5000,
     qolSessions: 7,
     sourcingOverrides: extractDefaults('Coolant'),
+    mix: [],
   };
 }
 
@@ -124,14 +153,44 @@ export function sanitizeState(parsed: Partial<UiState>): UiState {
   const base = defaultState();
     // Merge conservatively: unknown/missing fields fall back to defaults.
     const merged: UiState = { ...base, ...parsed, fees: { ...base.fees, ...parsed.fees }, freight: { ...base.freight, ...parsed.freight } };
-    if (!Array.isArray(merged.characters) || merged.characters.length === 0) merged.characters = base.characters;
+    if (!Array.isArray(merged.characters)) merged.characters = base.characters;
+    // Migration: saves from before the flag existed count as done when they
+    // already carry characters. (Check the RAW input — the base default would
+    // otherwise mask a missing field as false.)
+    if (typeof parsed.charactersDone !== 'boolean') merged.charactersDone = merged.characters.length > 0;
+    if (typeof parsed.advancedMode !== 'boolean') merged.advancedMode = false;
+    if (typeof parsed.autoDetail !== 'boolean') merged.autoDetail = true;
+    if (merged.characters.length === 0) merged.charactersDone = false;
     if (!Array.isArray(merged.planets)) merged.planets = base.planets;
-    if (!['max', 'quota', 'qol', 'compare'].includes(merged.mode)) merged.mode = base.mode;
+    if (!['max', 'quota', 'qol', 'compare', 'profit'].includes(merged.mode)) merged.mode = base.mode;
     if (!['quick', 'refined', 'exact'].includes(merged.detailLevel)) merged.detailLevel = base.detailLevel;
     for (const [k, v] of Object.entries(merged.sourcingOverrides ?? {})) {
-      if (!['extract', 'refine', 'buy'].includes(v)) delete merged.sourcingOverrides[k];
+      if (!['extract', 'refine', 'buy', 'make'].includes(v)) delete merged.sourcingOverrides[k];
     }
     if (merged.spaceBand !== null && !(SPACE_BANDS as readonly string[]).includes(merged.spaceBand)) merged.spaceBand = null;
+    if (!Array.isArray(merged.mix)) merged.mix = [];
+    const seenMix = new Set<string>();
+    merged.mix = merged.mix.filter((e) => {
+      if (!e || typeof e.product !== 'string' || !Number.isFinite(e.pct) || e.pct <= 0) return false;
+      if (seenMix.has(e.product)) return false;
+      seenMix.add(e.product);
+      return true;
+    }).slice(0, 6);
+    if (merged.mix.length === 1) merged.mix = []; // a one-line mix is just a product
+    if (merged.mix.length >= 2) {
+      // Owner spec: shares always total EXACTLY 100.
+      for (const e of merged.mix) e.pct = Math.max(1, Math.round(e.pct));
+      const total = merged.mix.reduce((a, e) => a + e.pct, 0);
+      let acc = 0;
+      merged.mix.forEach((e, i) => {
+        e.pct = i === merged.mix.length - 1
+          ? Math.max(1, 100 - acc)
+          : Math.max(1, Math.round((e.pct / total) * 100));
+        acc += e.pct;
+      });
+      const t2 = merged.mix.reduce((a, e) => a + e.pct, 0);
+      if (t2 !== 100) merged.mix[0]!.pct = Math.max(1, merged.mix[0]!.pct + (100 - t2));
+    }
     if (typeof merged.modeChosen !== 'boolean') merged.modeChosen = false;
     if (merged.costsSource !== 'default' && merged.costsSource !== 'user'
       && !SPACE_BANDS.some((b) => merged.costsSource === `preset-${b}`)) merged.costsSource = base.costsSource;

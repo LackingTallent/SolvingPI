@@ -11,7 +11,7 @@
 .v9-card h4 { margin: 0 0 4px; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; color: var(--cyan); }
 .v9-card p { margin: 2px 0; }
 .v9-card .v9-big { font-size: 1.3rem; font-weight: 700; color: var(--text-strong); }
-.v9-muted { color: var(--text-faint); font-size: .85rem; }
+.v9-muted { color: var(--text-faint); font-size: .9rem; }
 
 .v9-table { border-collapse: collapse; width: 100%; margin: 10px 0; }
 .v9-table th, .v9-table td { text-align: left; padding: 5px 9px; border-bottom: 1px solid var(--panel-border); font-size: .9rem; }
@@ -43,6 +43,48 @@
 /* audit #15: the skin's body.has-sticky padding never gets its class; reserve it here.
  * (JS refines this to the bar's measured height — this is the no-JS fallback.) */
 body { padding-bottom: 96px; }
+
+/* --- "NEW HERE? READ THIS FIRST" as a first-visit beacon (owner spec):
+ * styled like the Save My Data primary button, with the Help button's pulse
+ * ring — in gold. Pulse stops for good once opened (.is-seen, localStorage;
+ * wired in legacy/10-shell.js). --- */
+.quickstart { background: transparent; border: none; padding: 0; }
+.quickstart summary {
+  position: relative; display: block; text-align: center; list-style: none;
+  background: linear-gradient(135deg, var(--cyan), var(--green));
+  color: var(--on-accent, #04110d); font-weight: 800;
+  border: 1px solid var(--cyan); border-radius: 8px;
+  padding: 12px 18px;
+  box-shadow: var(--shadow, none), var(--glow, none);
+}
+.quickstart summary::-webkit-details-marker { display: none; }
+.quickstart summary:hover {
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  color: var(--on-accent, #04110d);
+}
+.quickstart[open] { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; }
+.quickstart[open] summary { border-radius: 7px 7px 0 0; }
+/* The gold ring lives on a pseudo-element (same pattern as .help-btn::after)
+ * so the button's own colours never animate. */
+.quickstart summary::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 11px;
+  border: 2px solid #f0b429; opacity: 0; pointer-events: none;
+  box-shadow: 0 0 12px rgba(240, 180, 41, .45);
+  animation: help-pulse 2.4s ease-out infinite;
+}
+.quickstart.is-seen summary::after { animation: none; opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .quickstart summary::after { animation: none; opacity: 0; }
+}
+
+/* --- Next-step pilot light: ✓/→ chips on section headers + crumb --- */
+.v9-step-chip { display: inline-block; min-width: 1.1em; margin-right: 6px; font-weight: 800; }
+.v9-chip-done { color: var(--green, #4dffa0); }
+.v9-chip-now { color: #f0b429; text-shadow: 0 0 8px rgba(240, 180, 41, .5); }
+.v9-chip-todo { opacity: 0; }
+.v9-solve-crumb { margin-top: 10px; font-size: .95rem; }
+.v9-solve-crumb b { color: #f0b429; letter-spacing: .04em; }
+.v9-crumb-missing { margin-top: 6px; font-size: .88rem; }
 
 /* --- Duplicate planet names flagged inline (review #1) --- */
 input.v9-text.v9-dup { border-color: #e8b03c; outline: 2px solid rgba(232, 176, 60, .45); }
@@ -163,8 +205,8 @@ details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0
 /* --- Top-right cluster stays at the top of the page (no scroll-follow) --- */
 .top-cluster { position: absolute; }
 
-/* --- SOLVE: bigger, radiant gold — sticky bar and Goal section alike --- */
-#stickyCalcBtn, #sec3Body .btn.primary {
+/* --- SOLVE: bigger, radiant gold — ONE button, in the sticky bar --- */
+#stickyCalcBtn {
   font-size: 1.3rem; font-weight: 800; letter-spacing: .05em;
   padding: 14px 44px; border-radius: 12px;
   color: #231900; border: 1px solid #ffd75e;
@@ -173,11 +215,158 @@ details.v9-sourcing summary { color: var(--cyan); cursor: pointer; margin: 6px 0
               inset 0 1px 0 rgba(255, 255, 255, .6);
   text-shadow: 0 1px 0 rgba(255, 255, 255, .45);
 }
-#stickyCalcBtn:hover:not([disabled]), #sec3Body .btn.primary:hover:not([disabled]) {
+#stickyCalcBtn:hover:not([disabled]) {
   filter: brightness(1.08);
   box-shadow: 0 0 22px rgba(255, 205, 80, .75), 0 0 60px rgba(255, 190, 60, .40),
               inset 0 1px 0 rgba(255, 255, 255, .6);
 }
-#stickyCalcBtn[disabled], #sec3Body .btn.primary[disabled] {
+#stickyCalcBtn[disabled] {
   filter: grayscale(.6) brightness(.75); opacity: .6; box-shadow: none; cursor: not-allowed;
 }
+
+/* --- Product mix editor: 100%-exact shares, color-keyed bar --- */
+.v9-mix { margin: 10px 0; }
+.v9-mix-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex-shrink: 0; border: 1px solid rgba(0,0,0,.35); }
+.v9-mix-pct { color: var(--text-faint); font-size: .9em; }
+.v9-mix-bar { display: flex; height: 14px; max-width: 460px; border-radius: 7px; overflow: hidden; border: 1px solid var(--panel-border); margin: 8px 0 2px; }
+.v9-mix-seg { display: block; height: 100%; }
+.v9-mix-total { font-family: var(--font-mono, monospace); font-size: .85rem; margin: 2px 0 8px; }
+
+/* --- Region Scout: traffic badges live BESIDE the ISK, never inside it --- */
+.v9-scout-region { min-width: 220px; }
+.v9-scout-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 10px;
+  font-size: .8rem; font-family: var(--font-mono, monospace); white-space: nowrap;
+}
+.v9-scout-quiet { background: rgba(60, 200, 120, .16); color: #46d08a; border: 1px solid rgba(60, 200, 120, .4); }
+.v9-scout-busy  { background: rgba(255, 200, 70, .14); color: #f0b84a; border: 1px solid rgba(255, 200, 70, .4); }
+.v9-scout-hot   { background: rgba(255, 90, 90, .14); color: #ff7a7a; border: 1px solid rgba(255, 90, 90, .45); }
+
+/* --- Segmented view toggle (PLANNER / REFERENCE lens) --- */
+.v9-src-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+.v9-src-toggle .src-choice { opacity: .55; }
+.v9-src-toggle .src-choice.active {
+  opacity: 1; border-color: var(--cyan, #22e8ff);
+  box-shadow: 0 0 10px rgba(34, 232, 255, .35);
+}
+
+/* --- Sticky-bar step dots (UI-review #7) --- */
+#stickyDots { display: inline-flex; gap: 6px; margin-right: 14px; align-items: center; }
+.v9-dot {
+  width: 22px; height: 22px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center;
+  font-size: .72rem; font-family: var(--font-mono, monospace);
+  border: 1px solid var(--panel-border); color: var(--text-faint); opacity: .55;
+}
+.v9-dot-done { border-color: rgba(60, 200, 120, .6); color: #46d08a; opacity: 1; }
+.v9-dot-now  { border-color: var(--amber, #f0b84a); color: var(--amber, #f0b84a); opacity: 1;
+  box-shadow: 0 0 8px rgba(255, 200, 70, .45); }
+
+/* --- "Where?" banners: the section's permanent switch (owner 2026-09-02) --- */
+.v9-bannerset { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 14px; }
+.v9-banner {
+  display: flex; align-items: center; gap: 16px; padding: 16px 18px;
+  cursor: pointer; color: var(--text); text-align: left; font: inherit;
+  border: 1px solid var(--panel-border); border-radius: 12px;
+  background: linear-gradient(90deg, rgba(34, 232, 255, .07), transparent 60%), var(--panel-raised);
+  transition: border-color .15s, box-shadow .15s;
+}
+.v9-banner > svg:first-child { color: var(--cyan, #22e8ff); flex: 0 0 auto; }
+.v9-banner:hover { border-color: var(--cyan, #22e8ff); }
+.v9-banner.active { border-color: var(--cyan, #22e8ff); box-shadow: 0 0 12px rgba(34, 232, 255, .2); }
+.v9-banner-txt b { display: block; font-family: var(--font-display); font-size: 20px; letter-spacing: .3px; }
+.v9-banner-txt i { display: block; font-style: normal; color: var(--text-faint); font-size: 16px; }
+.v9-banner-go { margin-left: auto; color: var(--text-faint); flex: 0 0 auto; }
+
+/* --- Goal grid: selectable icon cards (owner 2026-09-02) --- */
+.v9-goalgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0; }
+/* Doubled selector: the later .v9-mode polish rules must not override the
+   card geometry (same-specificity cascade). */
+.v9-gcard, .v9-mode.v9-gcard {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0;
+  border: 1px solid var(--panel-border); border-radius: 10px;
+  background: var(--panel-raised); cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.v9-gcard:hover, .v9-mode.v9-gcard:hover { border-color: var(--cyan, #22e8ff); }
+.v9-gcard:has(input[type="radio"]:checked) { box-shadow: 0 0 12px rgba(34, 232, 255, .2); }
+.v9-gcard input[type="radio"] { accent-color: var(--cyan, #22e8ff); margin: 0; flex: 0 0 auto; }
+.v9-gicon { display: inline-flex; color: var(--text-faint); flex: 0 0 auto; }
+.v9-gcard:has(input[type="radio"]:checked) .v9-gicon { color: var(--cyan, #22e8ff); }
+.v9-gcard-txt b { display: block; font-size: 18px; }
+.v9-gcard-txt i { display: block; font-style: normal; color: var(--text-faint); font-size: 15px; }
+.v9-gcard-hint { border-style: dashed; justify-content: center; cursor: default; background: transparent; }
+.v9-gcard-hint:hover { border-color: var(--panel-border); }
+@media (max-width: 700px) { .v9-goalgrid { grid-template-columns: 1fr; } }
+.v9-more-tools { margin: 10px 0; }
+.v9-more-tools > summary { cursor: pointer; color: var(--text-faint); font-size: .9rem; padding: 4px 0; }
+
+/* --- Results: verdict-first + three plain tabs (UI-review #6) --- */
+.v9-verdict {
+  border: 1px solid rgba(60, 200, 120, .45); border-radius: 12px;
+  padding: 14px 18px; margin: 10px 0 14px;
+  background: rgba(60, 200, 120, .07);
+}
+.v9-verdict-loss { border-color: rgba(255, 90, 90, .5); background: rgba(255, 90, 90, .07); }
+.v9-verdict-main { margin: 0 0 4px; }
+.v9-tabbar { display: flex; gap: 8px; margin: 6px 0 12px; }
+.v9-tab { opacity: .6; }
+.v9-tab.active { opacity: 1; border-color: var(--cyan, #22e8ff); box-shadow: 0 0 10px rgba(34, 232, 255, .3); }
+
+/* --- Planner / Reference views (UI-review #10) --- */
+body:not(.v9-view-ref) section.card.reference { display: none; }
+body.v9-view-ref main > section.card:not(.reference) { display: none; }
+body.v9-view-ref #stickyCalc { display: none; }
+.ref-divider .v9-src-toggle { margin-bottom: 6px; }
+
+/* --- Streamline batch (owner 2026-09-02) --- */
+.v9-mkt-status {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  border: 1px solid rgba(255, 200, 70, .4); border-radius: 10px;
+  padding: 10px 14px; margin: 6px 0 12px; background: rgba(255, 200, 70, .06);
+}
+.v9-mkt-status.ok { border-color: rgba(60, 200, 120, .45); background: rgba(60, 200, 120, .06); }
+.v9-reschip {
+  font: inherit; font-size: .85rem; padding: 3px 10px; border-radius: 11px;
+  background: var(--panel); border: 1px solid var(--panel-border); color: var(--text);
+  cursor: pointer;
+}
+.v9-reschip:hover { border-color: var(--cyan, #22e8ff); }
+.v9-reschip-warn { border-color: rgba(255, 200, 70, .55); color: var(--amber, #f0b84a); }
+.v9-chiprow { flex-wrap: wrap; gap: 6px; }
+.v9-nextrow { margin-top: 12px; }
+.v9-next { border-color: var(--cyan, #22e8ff); }
+.v9-tweaks { margin-top: 8px; gap: 8px; }
+
+/* The legacy stylesheet predates the [hidden] toggles the streamline batch
+ * uses — enforce it (choice cards vs tools, scout wrap, market folds). */
+[hidden] { display: none !important; }
+
+/* ═══ Goal rows & step polish (layout only — theme colors come from tokens) ═══ */
+.v9-mode {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; margin: 2px 0; border-radius: 8px;
+  border: 1px solid transparent; cursor: pointer;
+}
+.v9-mode:hover { background: rgba(34, 232, 255, 0.05); }
+.v9-mode:has(input[type="radio"]:checked) {
+  background: rgba(34, 232, 255, 0.08); border-color: var(--cyan);
+}
+.v9-reschip { border-radius: 20px; }
+.v9-src-toggle .src-choice.active { background: rgba(34, 232, 255, 0.08); }
+.v9-verdict { border-color: rgba(77, 255, 160, 0.45); background: linear-gradient(180deg, rgba(77, 255, 160, 0.10), rgba(77, 255, 160, 0.03)); }
+.v9-step-chip.v9-chip-done, .v9-dot-done { color: var(--green); border-color: rgba(77, 255, 160, 0.6); }
+.v9-tab.active { background: rgba(34, 232, 255, 0.08); }
+.v9-next { background: var(--cyan); color: var(--on-accent); border-color: var(--cyan); font-weight: 600; }
+.v9-next:hover { filter: brightness(1.08); }
+
+/* ═══ Type scale (owner 2026-09-02): three consistent tiers ═══
+   Titles = .section-title (30px planner / 26px reference, 02-app.css).
+   Subtitles = every in-section h3 below. Subtext = .section-sub /
+   .v9-muted at ~.9rem. Keep new text on one of these tiers. */
+.sec-body h3 {
+  font-family: var(--font-display); font-size: 25px; letter-spacing: .4px;
+  color: var(--text-strong); margin: 16px 0 8px; line-height: 1.2;
+}
+.v9-quickadd-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.v9-quickadd-row h3 { margin: 0; }

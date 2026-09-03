@@ -8,10 +8,17 @@
  *   'extract' — mine the P0 locally (needs planets carrying it)
  *   'refine'  — buy the P0, refine in an extractor-less colony (150:1 ore)
  *   'buy'     — buy the finished P1 (no colony at all)
+ *
+ * Sourcing per INTERMEDIATE (tier 2..3 chain member, owner spec 2026-08-30):
+ *   'make' — produce it in-house (the default; absence means the same)
+ *   'buy'  — buy it finished and stop the chain there: its whole subtree
+ *            (factories, extractors, P1 decisions) disappears from the plan
+ *            and the commodity arrives as a priced import. This is how
+ *            "buy P3s, run one P4 factory" becomes expressible.
  */
 import { P1_FROM_P0, SCHEMATICS, tierOf } from '../spec/schematics.js';
 
-export type Sourcing = 'extract' | 'refine' | 'buy';
+export type Sourcing = 'extract' | 'refine' | 'buy' | 'make';
 
 export const P0_PER_P1 = 150; // 3000 in / 20 out, derived-checked in tests
 
@@ -37,6 +44,46 @@ export function p1InputsOf(product: string): ReadonlyArray<string> {
     if (tierOf(name) === 1) { out.add(name); return; }
     for (const input of Object.keys(SCHEMATICS.get(name)!.inputs)) {
       if (tierOf(input) === 0) continue; // P1 schematic's own P0 input
+      walk(input);
+    }
+  };
+  walk(product);
+  return [...out].sort();
+}
+
+/** All tier-2..3 chain members of `product` (its own tier excluded): the set
+ * a user may mark 'buy' to truncate the chain there. Sorted tier-desc then
+ * name, so UIs list the biggest cuts first. */
+export function chainIntermediates(product: string): ReadonlyArray<string> {
+  const tier = tierOf(product);
+  if (tier <= 1) return [];
+  const out = new Set<string>();
+  const walk = (name: string): void => {
+    for (const input of Object.keys(SCHEMATICS.get(name)!.inputs)) {
+      const t = tierOf(input);
+      if (t >= 2) { out.add(input); walk(input); }
+      else if (t === 1) { /* leaf for this purpose */ }
+    }
+  };
+  walk(product);
+  return [...out].sort((a, b) => tierOf(b) - tierOf(a) || a.localeCompare(b));
+}
+
+/** The P1 inputs a chain still NEEDS once 'buy' cuts on intermediates are
+ * applied — pure walk, no validation (readiness and UIs use this to avoid
+ * demanding scans/decisions for pruned subtrees). */
+export function effectiveP1Inputs(
+  product: string,
+  sourcing: Readonly<Record<string, Sourcing>>,
+): ReadonlyArray<string> {
+  if (tierOf(product) <= 1) return tierOf(product) === 1 ? [product] : [];
+  const out = new Set<string>();
+  const walk = (name: string): void => {
+    for (const input of Object.keys(SCHEMATICS.get(name)!.inputs)) {
+      const t = tierOf(input);
+      if (t === 0) continue;
+      if (t === 1) { out.add(input); continue; }
+      if (sourcing[input] === 'buy') continue; // cut: subtree pruned
       walk(input);
     }
   };
@@ -78,24 +125,41 @@ export function chainNeeds(
   if (tier === 0) throw new Error(`chain-target-invalid: "${product}" is a raw P0`);
 
   const p1Set = p1InputsOf(product);
-  const missing = p1Set.filter((p) => !(p in sourcing));
-  if (missing.length > 0) throw new Error(`sourcing-missing: no sourcing chosen for ${missing.join(', ')}`);
-  const extra = Object.keys(sourcing).filter((p) => !p1Set.includes(p));
-  if (extra.length > 0) throw new Error(`sourcing-extra: ${extra.join(', ')} are not P1 inputs of ${product}`);
-  for (const [k, v] of Object.entries(sourcing)) {
-    if (v !== 'extract' && v !== 'refine' && v !== 'buy')
-      throw new Error(`sourcing-invalid: unknown mode "${String(v)}" for ${k}`);
-  }
-  if (tier === 1 && sourcing[product] === 'buy')
+  const interSet = chainIntermediates(product);
+  if (sourcing[product] === 'buy')
     throw new Error(`sourcing-invalid: buying the target product "${product}" is not production`);
+  for (const [k, v] of Object.entries(sourcing)) {
+    if (k === product && tierOf(product) >= 2) continue; // 'make' on the product itself is a harmless no-op
+    if (v !== 'extract' && v !== 'refine' && v !== 'buy' && v !== 'make')
+      throw new Error(`sourcing-invalid: unknown mode "${String(v)}" for ${k}`);
+    if (p1Set.includes(k)) {
+      if (v === 'make') throw new Error(`sourcing-invalid: "${k}" is a P1 — choose extract, refine or buy`);
+    } else if (interSet.includes(k)) {
+      // intermediates: 'buy' cuts the chain there; 'make' (the default) keeps it.
+      if (v !== 'buy' && v !== 'make')
+        throw new Error(`sourcing-invalid: "${k}" is an intermediate — choose make or buy, not ${v}`);
+    } else {
+      throw new Error(`sourcing-extra: ${k} is not in the chain of ${product}`);
+    }
+  }
+
+  const bought = new Set(interSet.filter((i) => sourcing[i] === 'buy'));
 
   // Walk the chain top-down, accumulating weekly quantities per commodity.
+  // A bought intermediate becomes a purchase and its subtree never enters
+  // the walk — no factories, no extractors, no P1 decisions beneath it.
   const need = new Map<string, number>([[product, ratePerWeek]]);
+  const boughtPerWeek = new Map<string, number>();
   let advancedFacilities = 0;
   let htFacilities = 0;
   for (let t = 4; t >= 2; t--) {
     for (const [name, qty] of [...need]) {
       if (tierOf(name) !== t || qty === 0) continue;
+      if (bought.has(name)) {
+        boughtPerWeek.set(name, (boughtPerWeek.get(name) ?? 0) + qty);
+        need.set(name, 0); // arrives as an import, not an in-house output
+        continue;
+      }
       const s = SCHEMATICS.get(name)!;
       const perFac = weeklyPerFacility(name);
       if (s.facility === 'hightech') htFacilities += qty / perFac;
@@ -111,10 +175,19 @@ export function chainNeeds(
     if (tierOf(name) >= 2 && qty > 0) outputsPerWeek[name] = qty;
   }
 
+  // P1 coverage is validated on what the walk actually NEEDS — a P1 that only
+  // existed under a bought intermediate no longer requires a decision.
+  const neededP1s = [...need].filter(([n, q]) => tierOf(n) === 1 && q > 0).map(([n]) => n);
+  const missing = neededP1s.filter((p) => !(p in sourcing));
+  if (missing.length > 0) throw new Error(`sourcing-missing: no sourcing chosen for ${missing.join(', ')}`);
+
   const p1PerWeek: Record<string, number> = {};
   const purchasesPerWeek: Record<string, number> = {};
   const refineP1PerWeek: Record<string, number> = {};
   const extractP1PerWeek: Record<string, number> = {};
+  for (const [name, qty] of boughtPerWeek) {
+    if (qty > 0) purchasesPerWeek[name] = (purchasesPerWeek[name] ?? 0) + qty;
+  }
   for (const [name, qty] of need) {
     if (tierOf(name) !== 1 || qty === 0) continue;
     p1PerWeek[name] = qty;

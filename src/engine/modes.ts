@@ -11,7 +11,7 @@ import { tierOf, SCHEMATICS } from '../spec/schematics.js';
 import { TIER_VOLUME_M3 } from '../spec/constants.js';
 import { iskPerM3, iskPerQty, m3, qty } from '../units.js';
 import type { CustomsContext } from '../world/tax.js';
-import type { Sourcing } from './chain.js';
+import { chainIntermediates, type Sourcing } from './chain.js';
 import { p1InputsOf, oreOf } from './chain.js';
 import { HOURS_PER_WEEK } from './flow.js';
 
@@ -174,17 +174,38 @@ export function comparative(
   world: SolveWorld,
   market: MarketContext,
   candidates: ReadonlyArray<string> = allProducts(),
+  overrides: Readonly<Record<string, Sourcing>> = {},
 ): { ranked: RankedOption[]; excluded: Array<{ product: string; reason: string }> } {
   const ranked: RankedOption[] = [];
   const excluded: Array<{ product: string; reason: string }> = [];
   for (const product of candidates) {
     try {
       const sourcing = defaultSourcing(world, product);
+      // User sourcing preferences apply to every candidate whose chain they
+      // touch (owner spec: Compare respects Adjust sourcing).
+      const p1s = new Set(Object.keys(sourcing));
+      const inters = new Set(chainIntermediates(product));
+      for (const [k, v] of Object.entries(overrides)) {
+        if (p1s.has(k) && v !== 'make') sourcing[k] = v;
+        else if (inters.has(k) && (v === 'buy' || v === 'make')) sourcing[k] = v;
+      }
+      if (tierOf(product) === 1 && sourcing[product] === 'buy') sourcing[product] = 'refine';
       // RANKING pass: the fast solver keeps ~100 candidate solves interactive
       // even on small worlds where 'auto' would go exhaustive per product.
       // The product the user picks gets a full 'auto' solve — and greedy
       // answers carry their upper-bound certificate, so the ranking is honest.
-      const result = solveMax(world, product, sourcing, { method: 'greedy' });
+      let result = solveMax(world, product, sourcing, { method: 'greedy' });
+      if ('error' in result && tierOf(product) >= 2) {
+        // Second chance (owner spec): a chain that doesn't FIT can still be
+        // profitable when its direct inputs are bought finished — e.g. buy
+        // P3s, run one P4 factory. Try that cut before excluding.
+        const cut: Record<string, Sourcing> = { ...sourcing };
+        for (const i of Object.keys(SCHEMATICS.get(product)!.inputs)) {
+          if (tierOf(i) >= 1 && overrides[i] !== 'make') cut[i] = 'buy';
+        }
+        const retry = solveMax(world, product, cut, { method: 'greedy' });
+        if (!('error' in retry)) result = retry;
+      }
       if ('error' in result) { excluded.push({ product, reason: result.error }); continue; }
       const eco = economics(result, market, world.programHours);
       ranked.push({ product, result, economics: eco });
@@ -201,8 +222,9 @@ export function maxProfit(
   world: SolveWorld,
   market: MarketContext,
   candidates?: ReadonlyArray<string>,
+  overrides: Readonly<Record<string, Sourcing>> = {},
 ): { best: RankedOption; ranked: RankedOption[]; excluded: Array<{ product: string; reason: string }> } | { error: string } {
-  const { ranked, excluded } = comparative(world, market, candidates ?? allProducts());
+  const { ranked, excluded } = comparative(world, market, candidates ?? allProducts(), overrides);
   const best = ranked[0];
   if (best === undefined) {
     return { error: `no-viable-product: all candidates excluded (${excluded.length} reasons recorded)` };

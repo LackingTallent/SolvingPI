@@ -105,8 +105,11 @@ const shoot = async (name, locator) => {
   else await page.screenshot({ path });
   console.log(`shot ${name}.png`);
 };
+// Auto-advance (UI-review #1) folds sections as steps complete — tests open
+// whichever section they are about to poke.
+const openSec = (id) => page.evaluate((i) => document.getElementById(i)?.classList.remove('collapsed'), id);
 const solveAndWait = async () => {
-  await page.click('#sec3 >> text=Solve');
+  await page.click('#stickyCalcBtn'); // the ONE solve button (sticky bar)
   await page.waitForFunction(() => {
     const p = document.getElementById('resultsPanel');
     return p && p.childElementCount > 0 && !/^Solving/.test(p.textContent ?? '');
@@ -117,21 +120,32 @@ await page.goto(base);
 await page.waitForSelector('body[data-smoke="ok"]', { timeout: 60000 });
 
 // 1 ── Fresh visitor: owner defaults — goal options A-Z, Compare pre-selected.
-check('fresh: goal options listed A to Z', (await page.locator('#sec3 .v9-mode').first().textContent()).includes('Best net within a login budget'));
-check('fresh: Compare is the pre-selected default', await page.locator('input[name="v9mode"][value="compare"]:checked').count() === 1);
+check('fresh: goal options listed A to Z', await (async () => { const t = await page.locator('#sec3 .v9-mode').first().textContent(); return t.includes('Compare') && t.includes('rank every product'); })());
+check('fresh: NO goal pre-selected — the user must choose', await page.locator('input[name="v9mode"]:checked').count() === 0
+  && /Select a Goal/.test(await page.locator('#sec3').textContent()));
 check('fresh: no product dropdown in compare', !/Product /.test(await page.locator('#sec3 label:has(select)').allTextContents().then((a) => a.join(' '))));
 check('fresh: sourcing controls hidden in compare', await page.locator('text=Adjust sourcing (default').count() === 0);
-check('fresh: solve gated — planets AND a price both named', await page.locator('#stickyCalcBtn[disabled]').count() === 1
-  && /Add at least one planet/.test(await page.locator('#stickyCalcInfo').textContent())
-  && /price/.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? ''));
+check('fresh: solve gated — the ONE next step is picking a goal', await page.locator('#stickyCalcBtn[disabled]').count() === 1
+  && /Next → Step 1: pick your goal/i.test(await page.locator('#stickyCalcInfo').textContent()));
 check('fresh: ZERO starter planets (owner spec); first added planet is 70%, expanded', await (async () => {
   if (await page.locator('.v9-planet').count() !== 0) return false;
   await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
   await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
   await page.waitForTimeout(250);
   const ok = await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1
-    && (await page.locator('#v9PlanetList').textContent()).includes('= 70%')
+    && await page.locator('.v9-planet input[placeholder="density %"]').first().inputValue() === '70'
+    && /% = [\d,]+ per cycle/.test(await page.locator('#v9PlanetList').textContent())
     && /remove planet/i.test(await page.locator('button[title="Remove this planet"]').first().textContent() ?? '');
+  // Owner spec 2026-08-31: the density % the user TYPES is the number the
+  // plan runs on — typing 85 must store w = wFromDensityPct(85) exactly.
+  const inp = page.locator('.v9-planet input[placeholder="density %"]').first();
+  await inp.fill('85'); await inp.dispatchEvent('change');
+  await page.waitForTimeout(200);
+  const wOk = await page.evaluate((expected) => {
+    const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+    return Math.abs(s.planets[0].resources[0].w - expected) < 1e-6;
+  }, wFromDensityPct(85));
+  if (!wOk) return false;
   // put the fresh state back for the checks that follow
   await page.evaluate(() => {
     const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
@@ -142,25 +156,49 @@ check('fresh: ZERO starter planets (owner spec); first added planet is 70%, expa
   return ok;
 })());
 // Mine-it sourcing defaults: pick a product goal and check the pins.
+// The sourcing panel is an ADVANCED control now (streamline #1).
+check('simple mode: sourcing panel hidden by default', await page.locator('details.v9-sourcing').count() === 0);
+await page.evaluate(() => document.getElementById('modeAdvancedBtn')?.click());
+await page.waitForTimeout(200);
+await openSec('sec3');
 await page.check('input[name="v9mode"][value="max"]');
+await page.waitForTimeout(150); await openSec('sec3');
 await page.click('summary:has-text("Adjust sourcing")');
 const pinVals = await page.locator('details.v9-sourcing select').evaluateAll((els) => els.map((e) => e.value));
 check('fresh: sourcing defaults to extract (mine it) for every input', pinVals.length >= 2 && pinVals.every((v) => v === 'extract'));
+check('advanced mode: How exact? radios appear, Auto first', await page.evaluate(() =>
+  document.querySelectorAll('input[name="v9detail"]').length === 4
+  && document.querySelector('input[name="v9detail"][value="auto"]')?.checked === true));
 await shoot('01-fresh-goal-first', page.locator('#sec3'));
+await page.evaluate(() => document.getElementById('modeSimpleBtn')?.click());
+await page.waitForTimeout(200);
 
-// Seed the full operation and reload (autosave storage key).
-await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify(s)), seededState);
+// Seed the full operation and reload (autosave storage key). Advanced on:
+// the deep blocks poke sourcing pins, detail radios, mix and cost tables.
+await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...s, advancedMode: true })), seededState);
 await page.reload();
 await page.waitForSelector('body[data-smoke="ok"]', { timeout: 60000 });
 
 // 2 ── Pick the Max goal: section discloses only what that goal needs.
+await openSec('sec3');
 await page.check('input[name="v9mode"][value="max"]');
-await page.waitForSelector('input[name="v9detail"]');
-check('max: detail ladder appears after goal pick', await page.locator('input[name="v9detail"]').count() === 3);
+await page.waitForTimeout(150); await openSec('sec3');
+await page.waitForSelector('input[name="v9detail"]', { state: 'attached' });
+await openSec('sec3');
+check('max: detail ladder appears after goal pick (Advanced, incl. Auto)', await page.locator('input[name="v9detail"]').count() === 4);
 check('max: no quota/qol fields', await page.locator('#sec3 >> text=Target/week').count() === 0
   && await page.locator('#sec3 >> text=Max sessions/week').count() === 0);
 await page.click('summary:has-text("Adjust sourcing")');
 check('max: sourcing rows offer Suggested (auto)', (await page.locator('#sec3 select option[value="auto"]').count()) >= 2);
+// Owner report 2026-08-31: picking a pin collapsed the panel every time.
+await page.locator('details.v9-sourcing select').first().selectOption('buy');
+await page.waitForTimeout(250);
+check('sourcing panel stays open after choosing a pin', await page.evaluate(() =>
+  document.querySelector('details.v9-sourcing')?.open === true));
+await page.locator('details.v9-sourcing select').first().selectOption('auto');
+await page.waitForTimeout(250);
+check('sourcing panel still open after a second change', await page.evaluate(() =>
+  document.querySelector('details.v9-sourcing')?.open === true));
 await shoot('02-goal-configured', page.locator('#sec3'));
 
 // 3 ── Solve Max: suggested sourcing disclosed, per-character dashboard.
@@ -195,7 +233,12 @@ await shoot('03-max-results-top', page.locator('#resultsPanel'));
 await shoot('12-colony-templates', page.locator('.v9-char').first());
 await shoot('04-max-dashboard', page.locator('#resultsPanel').locator('xpath=.//h3[contains(text(),"Plan by character")]/..'));
 
-// 3b ── All PI Visualized (first reference card).
+// 3b ── All PI Visualized (first reference card). Reference cards live in
+// the REFERENCE view now (UI-review #10) — switch lenses for this block.
+await page.evaluate(() => document.getElementById('viewReference')?.click());
+check('view toggle: reference lens hides the planner steps', await page.evaluate(() =>
+  getComputedStyle(document.getElementById('sec3')).display === 'none'
+  && getComputedStyle(document.getElementById('secChains')).display !== 'none'));
 check('chains viz: first reference card, titled "All PI Visualized"', await page.evaluate(() => {
   const refs = [...document.querySelectorAll('section.card.reference')];
   return refs[0]?.id === 'secChains'
@@ -250,6 +293,8 @@ const PNG1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
 await page.route('https://images.evetech.net/**', (r) => r.fulfill({ contentType: 'image/png', body: PNG1 }));
 await page.reload();
 await page.waitForSelector('body[data-smoke="ok"]');
+// A reload resets the lens to PLANNER — switch back for the icon checks.
+await page.evaluate(() => document.getElementById('viewReference')?.click());
 await page.evaluate(() => document.getElementById('secChains')?.classList.remove('collapsed'));
 await page.waitForFunction(() => document.querySelectorAll('#vzBody .vz-tile image').length > 0, { timeout: 20000 });
 check('chains viz: real in-game icons load and tiles upgrade in place',
@@ -263,6 +308,9 @@ await page.unroute('https://images.evetech.net/**');
 await page.evaluate(() => { document.getElementById('secChains')?.scrollIntoView(); });
 await shoot('13-chains-viz', page.locator('#secChains'));
 await page.evaluate(() => document.getElementById('secChains')?.classList.add('collapsed'));
+await page.evaluate(() => document.getElementById('viewPlanner')?.click());
+check('view toggle: planner lens back — steps visible again', await page.evaluate(() =>
+  getComputedStyle(document.getElementById('sec3')).display !== 'none'));
 
 // 3c ── Market data populates ITSELF (simulated ESI): fetch-first prompt when
 // unpriced, then a product change auto-fills the gaps within seconds.
@@ -279,20 +327,26 @@ await page.evaluate(() => {
   localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
 });
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
-check('sequencing: ready-but-unpriced gate says fetch in COSTS & MARKET first',
-  /COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
-await page.selectOption('#sec3 select >> nth=0', 'Coolant');
+// UI-review #2: arriving unpriced no longer asks the user to do anything —
+// the page fetches live prices ITSELF on load and the gate self-heals.
 await page.waitForFunction(() => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
   return Object.values(s.prices ?? {}).some((q) => q && q.bid > 0 && q.ask > 0);
+}, { timeout: 15000 });
+check('auto-fetch: unpriced arrival populates market data with no user action', true);
+await openSec('sec3');
+await page.selectOption('#sec3 select >> nth=0', 'Coolant');
+await page.waitForFunction(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return Object.values(s.prices ?? {}).some((q) => q && q.bid > 0 && q.ask > 0) && /Live: /.test(s.priceNote);
 }, { timeout: 15000 });
 check('auto-refresh: a product change repopulates market data by itself', true);
 check('auto-refresh: price note reports live + auto-refreshing', await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
   return /Live: /.test(s.priceNote) && /Auto-refreshes/.test(s.priceNote);
 }));
-check('auto-refresh: gate tip clears once the chain is priced',
-  !/COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.waitForFunction(() => /Ready — press SOLVE/.test(document.getElementById('stickyCalcInfo')?.textContent ?? ''), { timeout: 15000 });
+check('auto-fetch: gate reaches "Ready — press SOLVE" entirely by itself', true);
 await page.unroute('https://esi.evetech.net/**');
 // Restore the seeded quotes + product so the sections that follow see the
 // exact state they always have.
@@ -304,21 +358,27 @@ await page.evaluate((restore) => {
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
 
 // 4 ── Quota goal.
+await openSec('sec3');
 await page.check('input[name="v9mode"][value="quota"]');
+await page.waitForTimeout(150); await openSec('sec3');
 await page.waitForSelector('#sec3 >> text=Target/week');
 await solveAndWait();
 check('quota: solved or refused by name', await page.locator('#resultsPanel').textContent().then((t) => /\/wk|quota-unreachable|achievable/.test(t)));
 await shoot('05-quota-results', page.locator('#resultsPanel'));
 
 // 5 ── QoL goal.
+await openSec('sec3');
 await page.check('input[name="v9mode"][value="qol"]');
+await page.waitForTimeout(150); await openSec('sec3');
 await page.waitForSelector('#sec3 >> text=Max sessions/week');
 await solveAndWait();
 check('qol: cadence note present', /Chosen cadence/.test(await page.locator('#resultsPanel').textContent()));
 await shoot('06-qol-results', page.locator('#resultsPanel'));
 
 // 6 ── Compare: rank order → pick → best path.
+await openSec('sec3');
 await page.check('input[name="v9mode"][value="compare"]');
+await page.waitForTimeout(150); await openSec('sec3');
 await page.waitForTimeout(200);
 check('compare: sourcing controls absent', await page.locator('text=Adjust sourcing (default').count() === 0);
 check('compare: product dropdown disappears', await page.locator('#sec3').textContent().then((t) => !/Product /.test(t)));
@@ -345,13 +405,121 @@ check('compare→pick: goal switched to max of picked product',
   && (await page.locator('#sec3 select').first().inputValue()) === topProduct);
 await shoot('08-compare-picked-best-path', page.locator('#resultsPanel'));
 
+// 6b ── Multi-tier sourcing + Maximize profits (owner spec 2026-08-30).
+check('goal list: Pick for me sits A-to-Z between Max output and Weekly target', await page.evaluate(() => {
+  const labels = [...document.querySelectorAll('#sec3 .v9-mode')].map((l) => l.textContent.trim());
+  const i = labels.findIndex((t) => /Pick for me/.test(t));
+  return i > 0 && /Max output/.test(labels[i - 1] ?? '') && /Weekly target/.test(labels[i + 1] ?? '');
+}));
+// Intermediate pins exist in product modes (Robotics has two P2 parts).
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.mode = 'max'; s.modeChosen = true; s.product = 'Robotics';
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await page.click('summary:has-text("Adjust sourcing")');
+check('sourcing: intermediate parts pinnable (make / buy finished cuts the chain)', await page.evaluate(() => {
+  const t = document.querySelector('details.v9-sourcing')?.textContent ?? '';
+  return /Intermediate parts/.test(t) && /buy finished — cut the chain here/.test(t)
+    && /Mechanical Parts \(P2\)/.test(t) && /Consumer Electronics \(P2\)/.test(t);
+}));
+// Pin a P2 to 'buy': the solved plan must import it and build no factories for it.
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.sourcingOverrides = { ...s.sourcingOverrides, 'Mechanical Parts': 'buy' };
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await solveAndWait();
+check('chain cut honored: bought P2 imported, no factories built for it', await page.evaluate(() => {
+  const t = document.getElementById('resultsPanel')?.textContent ?? '';
+  return /import .*Mechanical Parts/.test(t) && !/advanced → Mechanical Parts/.test(t);
+}));
+// Compare: sourcing preferences panel with all 15 P1s.
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.mode = 'compare'; delete s.sourcingOverrides['Mechanical Parts'];
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+check('compare: Adjust sourcing preferences shown with all 15 P1s', await page.evaluate(() => {
+  const d = document.querySelector('details.v9-sourcing');
+  if (!d || !/Adjust sourcing preferences/.test(d.textContent)) return false;
+  return d.querySelectorAll('.v9-row select').length === 15;
+}));
+// Maximize profits: hands-free pick end to end.
+await openSec('sec3');
+await page.check('input[name="v9mode"][value="profit"]');
+await page.waitForTimeout(150); await openSec('sec3');
+await page.waitForTimeout(200);
+check('profit: no product dropdown (it decides)', await page.evaluate(() =>
+  ![...document.querySelectorAll('#sec3 label')].some((l) => /^\s*Product\b/.test(l.textContent ?? ''))));
+await solveAndWait();
+check('profit: picked a product with net + runners-up + full plan', await page.evaluate(() => {
+  const t = document.getElementById('resultsPanel')?.textContent ?? '';
+  return /Pick for me chose/.test(t) && /Runners-up/.test(t) && /Plan by character/.test(t);
+}));
+await shoot('14-maximize-profits', page.locator('#resultsPanel'));
+
+// 6c ── Product mix (owner spec): pick several products with % shares.
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.mode = 'max'; s.product = 'Coolant'; s.mix = [];
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+check('mix: single-product modes offer "+ Plan a mix of products instead"',
+  await page.locator('#sec3 button', { hasText: 'Plan a mix of products' }).count() === 1);
+await openSec('sec3');
+await page.locator('#sec3 button', { hasText: 'Plan a mix of products' }).click();
+await page.waitForTimeout(250);
+check('mix: editor opens with two rows and % shares; single Product row gone',
+  await page.locator('.v9-mix .v9-mix-row').count() === 2
+  && await page.evaluate(() => ![...document.querySelectorAll('#sec3 label')].some((l) => /^\s*Product\b/.test(l.textContent ?? ''))));
+// Owner spec: shares total EXACTLY 100, always — editing one rebalances the rest.
+await page.evaluate(() => {
+  const inp = document.querySelectorAll('.v9-mix-row input.v9-num')[0];
+  inp.value = '90'; inp.dispatchEvent(new Event('change', { bubbles: true }));
+});
+await page.waitForTimeout(250);
+check('mix: shares always total exactly 100 (edit one → others rebalance)', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return s.mix.reduce((a, e) => a + e.pct, 0) === 100 && s.mix[0].pct === 90
+    && /Total: 100% ✓/.test(document.querySelector('.v9-mix-total')?.textContent ?? '');
+}));
+check('mix: color share bar shows one segment per product', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return document.querySelectorAll('.v9-mix-seg').length === s.mix.length;
+}));
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.mix = [{ product: 'Coolant', pct: 60 }, { product: 'Mechanical Parts', pct: 40 }];
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await solveAndWait();
+check('mix: bundle table + per-line full plans, characters partitioned', await page.evaluate(() => {
+  const t = document.getElementById('resultsPanel')?.textContent ?? '';
+  return /Your mix — planned/.test(t) && /Coolant/.test(t) && /Mechanical Parts/.test(t)
+    && document.querySelectorAll('.v9-mix-line').length === 2;
+}));
+await shoot('15-product-mix', page.locator('#resultsPanel'));
+// restore for the sections that follow
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.mode = 'max'; s.mix = [];
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+
 // 7 ── Accuracy ladder: Quick estimate with an unscanned planet + band.
 await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
   s.planets.push({ name: 'Auviken VIII', type: 'Ice', system: 'Auviken', resources: [] });
   const legal = ['Aqueous Liquids', 'Heavy Metals', 'Micro Organisms', 'Noble Gas', 'Planktic Colonies'];
   s.planets[s.planets.length - 1].resources = legal.map((p0) => ({ p0, w: 0 }));
-  s.detailLevel = 'quick'; s.spaceBand = null; s.costsSource = 'default';
+  s.detailLevel = 'quick'; s.autoDetail = false; s.spaceBand = null; s.costsSource = 'default';
   // Deterministic product: Coolant's chain uses Aqueous Liquids (Water),
   // which the Ice planet lists unscanned — so the band is demanded under the
   // review-#2 scoping rule regardless of what section 6 picked. (Scoping
@@ -362,8 +530,8 @@ await page.evaluate(() => {
 });
 await page.reload();
 await page.waitForSelector('body[data-smoke="ok"]');
-check('quick: band demanded while something is unscanned',
-  /security band/.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? ''));
+check('quick: space type demanded while something is unscanned',
+  /space type/.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? ''));
 // Planet completion checkboxes: seeded planets load all-minimized but first.
 await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
 check('planets: all minimized but the first', await page.locator('.v9-planet-min').count() === 8
@@ -410,16 +578,34 @@ check('SOLVE is big radiant gold in the sticky bar', await page.evaluate(() => {
   const cs = getComputedStyle(document.getElementById('stickyCalcBtn'));
   return cs.backgroundImage.includes('linear-gradient') && parseFloat(cs.fontSize) >= 19;
 }));
-check('SOLVE is big radiant gold in the Goal section', await page.evaluate(() => {
-  const b = document.querySelector('#sec3Body .btn.primary');
-  if (!b) return false;
-  const cs = getComputedStyle(b);
-  return cs.backgroundImage.includes('linear-gradient') && parseFloat(cs.fontSize) >= 19;
+check('ONE solve button: Goal section has a breadcrumb, not a second SOLVE', await page.evaluate(() => {
+  return document.querySelector('#sec3Body .btn.primary') === null
+    && /gold SOLVE/.test(document.querySelector('#sec3Body .v9-solve-crumb')?.textContent ?? '');
 }));
-await page.selectOption('#sec3 select >> nth=1', 'nullsec');
+check('pilot light: sticky bar names the single next step', await page.evaluate(() => {
+  const t = document.getElementById('stickyCalcInfo')?.textContent ?? '';
+  return /Next → Step \d:/.test(t) || /Ready — press SOLVE/.test(t);
+}));
+check('pilot light: section headers carry ✓/→ progress chips', await page.evaluate(() => {
+  const chips = [...document.querySelectorAll('.v9-step-chip')];
+  return chips.length === 4 && chips.some((c) => c.classList.contains('v9-chip-done') || c.classList.contains('v9-chip-now'));
+}));
+// The band question is answered in MARKET now: "Where do you operate?"
+// sets costs AND the density band in one tap (streamline #3).
+check('quick: no band dropdown left in the Goal section', !/Your space/.test(await page.locator('#sec3').textContent()));
+await page.evaluate(() => document.getElementById('sec2')?.classList.remove('collapsed'));
+await page.locator('#sec2 .fin-presets .preset-btn', { hasText: 'Null sec' }).click();
 await page.waitForTimeout(300);
-check('quick: preset prefilled + disclosed', /Typical costs were prefilled|Your own cost rates/.test(await page.locator('#sec3').textContent()));
-await shoot('09-quick-band', page.locator('#sec3'));
+check('quick: one "Where do you operate?" tap records band + costs', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return s.spaceBand === 'nullsec' && s.costsSource === 'preset-nullsec';
+}));
+check('quick: preset tap does NOT overwrite scanned densities', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return s.planets.some((p) => p.resources.some((r) => r.w > 0 && Math.abs(r.w - 11949.5) > 1));
+}));
+await shoot('09-quick-band', page.locator('#sec2'));
+await page.evaluate(() => document.getElementById('sec2')?.classList.add('collapsed'));
 await solveAndWait();
 check('quick: ESTIMATE banner lists assumptions', await page.locator('.v9-estimate').count() === 1
   && /assumed|preset/.test(await page.locator('.v9-estimate').textContent()));
@@ -430,6 +616,7 @@ await shoot('10-quick-estimate-banner', page.locator('#resultsPanel'));
 await page.evaluate(() => document.getElementById('sec2')?.classList.remove('collapsed'));
 check('costs: 4 preset buttons + confirm', await page.locator('#sec2 .preset-btn').count() === 4
   && await page.locator('#sec2 button', { hasText: 'These are my real rates' }).count() === 1);
+await openSec('sec2');
 await page.locator('#sec2 button', { hasText: 'These are my real rates' }).click();
 await page.waitForTimeout(200);
 check('costs: confirm marks rates as user\'s own', /your own rates/.test(await page.locator('#sec2').textContent()));
@@ -438,9 +625,150 @@ await shoot('11-costs-presets', page.locator('#sec2'));
 // 9 ── Per-section reset: Goal reset returns to goal-first state.
 await page.locator('button[data-reset="sec3"]').click();
 await page.waitForTimeout(300);
-check('reset: goal section back to the Compare default', await page.locator('input[name="v9mode"][value="compare"]:checked').count() === 1);
+check('reset: goal section back to nothing-chosen', await page.locator('input[name="v9mode"]:checked').count() === 0);
 check('reset: other sections untouched (planets kept)', await page.evaluate(() =>
   JSON.parse(localStorage.getItem('solving-pi-v9-state')).planets.length) === 9);
+
+// 10 ── REGION SCOUT: mocked ESI universe — region select, ranked table with
+// the estimate disclosure and live-traffic badges, one-click planet load.
+// The mock region: one system that covers a P2 chain (Storm+Gas), one
+// ore-less pocket, so the ranking has something honest to say.
+const scoutEsi = {
+  '/universe/regions/': [42000001],
+  '/universe/names/': [{ id: 42000001, name: 'Scoutland', category: 'region' }],
+  '/universe/regions/42000001/': { constellations: [43000001] },
+  '/universe/constellations/43000001/': { systems: [44000001, 44000002] },
+  '/universe/systems/44000001/': { name: 'Alpha', security_status: -0.42, planets: [{ planet_id: 45000001 }, { planet_id: 45000002 }] },
+  '/universe/systems/44000002/': { name: 'Bravo', security_status: -0.42, planets: [{ planet_id: 45000003 }] },
+  '/universe/planets/45000001/': { name: 'Alpha I', type_id: 2017 },
+  '/universe/planets/45000002/': { name: 'Alpha II', type_id: 13 },
+  '/universe/planets/45000003/': { name: 'Bravo I', type_id: 2016 },
+  '/universe/system_kills/': [{ system_id: 44000002, ship_kills: 9, pod_kills: 4, npc_kills: 120 }],
+  '/universe/system_jumps/': [{ system_id: 44000001, ship_jumps: 3 }, { system_id: 44000002, ship_jumps: 250 }],
+};
+await page.route('https://esi.evetech.net/**', (r) => {
+  const path = new URL(r.request().url()).pathname.replace('/latest', '');
+  const body = scoutEsi[path];
+  if (body !== undefined) { r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) }); return; }
+  r.fulfill({ contentType: 'application/json', body: '[]' });
+});
+// The repo now SHIPS a baked map (owner-generated); block it here so this
+// block keeps exercising the live-ESI fallback path end to end.
+await page.route('**/map/universe-map.json', (r) => r.fulfill({ status: 404, body: 'nope' }));
+// A product goal whose chain Storm+Gas covers (Coolant), prices already seeded.
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.mode = 'max'; s.modeChosen = true; s.product = 'Coolant'; s.mix = [];
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('#chooseScout').click();
+check('scout: Find-me-a-home banner swaps the section — planets UI hidden, scout shown', await page.evaluate(() =>
+  document.getElementById('sec1Mine').hidden === true && document.getElementById('scoutWrap').hidden === false));
+await page.locator('#scoutPanel select').focus();
+await page.waitForFunction(() => document.querySelectorAll('#scoutPanel select option').length >= 2, { timeout: 30000 });
+check('scout: region list loads into the picker (live ESI fallback, no baked map)',
+  /Scoutland/.test(await page.locator('#scoutPanel select').textContent()));
+await page.selectOption('#scoutPanel select', '42000001');
+await page.locator('#scoutPanel button', { hasText: 'Scout this region' }).click();
+await page.waitForFunction(() => document.querySelectorAll('#scoutPanel table tr').length >= 3, { timeout: 60000 });
+check('scout: estimate disclosure carries the band assumptions', await page.evaluate(() => {
+  const e = document.querySelector('#scoutPanel .v9-estimate');
+  return e !== null && /assumed/.test(e.textContent) && /only exist in game/.test(e.textContent);
+}));
+check('scout: covering system ranked first with a net estimate', await page.evaluate(() => {
+  const row = document.querySelectorAll('#scoutPanel table tr')[1];
+  return row !== undefined && /Alpha/.test(row.textContent) && /1× Gas|1× Storm/.test(row.textContent);
+}));
+check('scout: traffic badge is its own column — quiet vs hot', await page.evaluate(() => {
+  const t = document.getElementById('scoutPanel');
+  return t.querySelector('.v9-scout-quiet') !== null && t.querySelector('.v9-scout-hot') !== null;
+}));
+const beforeLoad = await page.evaluate(() => JSON.parse(localStorage.getItem('solving-pi-v9-state')).planets.length);
+await page.locator('#scoutPanel button', { hasText: 'Load planets' }).first().click();
+await page.waitForTimeout(400);
+check('scout: Load planets seeds section 3 with the system\'s real planets at the 70% default', await page.evaluate((n) => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  const added = s.planets.filter((p) => p.system === 'Alpha');
+  return s.planets.length === n + 2 && added.length === 2
+    && added.every((p) => p.resources.every((r) => r.w > 0))
+    && added.some((p) => p.name === 'Alpha I' && p.type === 'Storm');
+}, beforeLoad));
+check('scout: Load planets flips back to MY SYSTEMS view', await page.evaluate(() =>
+  document.getElementById('sec1Mine').hidden === false && document.getElementById('scoutWrap').hidden === true));
+await page.locator('#chooseScout').click();
+check('scout: second scan uses the kept copy (no re-crawl of the map service)', await (async () => {
+  let calls = 0;
+  await page.route('https://esi.evetech.net/latest/universe/planets/**', (r) => { calls++; r.fulfill({ contentType: 'application/json', body: '{}' }); });
+  await page.locator('#scoutPanel button', { hasText: 'Scout this region' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('#scoutPanel table tr').length >= 3, { timeout: 60000 });
+  await page.unroute('https://esi.evetech.net/latest/universe/planets/**');
+  return calls === 0;
+})());
+await shoot('13-region-scout', page.locator('#sec1'));
+await page.locator('#chooseSearch').click();
+await page.unroute('https://esi.evetech.net/**');
+
+// 11 ── UI-review batch (owner-approved 2026-09-01): dots, quick-add, choice
+// cards, Try-an-example, verdict-first results with tabs.
+await page.route('https://esi.evetech.net/**', (r) =>
+  r.fulfill({ contentType: 'application/json', body: /history/.test(r.request().url()) ? '[]' : esiOrders }));
+await page.evaluate(() => localStorage.clear());
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+check('sticky bar: four step dots mirror the pilot light', await page.locator('#stickyDots .v9-dot').count() === 4
+  && await page.locator('#stickyDots .v9-dot-now').count() === 1);
+// Quick-add: fresh boot auto-opens section 2 (the first incomplete step).
+check('auto-advance: fresh boot opens START HERE (no goal chosen)', await page.evaluate(() =>
+  !document.getElementById('sec3').classList.contains('collapsed')
+  && document.getElementById('sec1').classList.contains('collapsed')));
+await openSec('sec1');
+const qn = page.locator('#sec0Body .v9-quickadd input');
+await qn.fill('2'); await qn.dispatchEvent('change');
+await page.locator('#sec0Body button', { hasText: 'Create my roster' }).click();
+await page.waitForTimeout(250);
+check('quick-add: N maxed characters in one press', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return s.characters.length === 2 && s.characters[0].name === 'Main' && s.characters.every((c) => c.icLevel === 5);
+}));
+await page.locator('#sec0Body button', { hasText: 'Done adding characters' }).click();
+await page.waitForTimeout(300);
+// Choice cards: section 3 opens next, tools hidden behind the two big cards.
+check('choice banners: empty section 2 leads with the two banners, tools hidden', await page.evaluate(() =>
+  !document.getElementById('sec1').classList.contains('collapsed')
+  && document.getElementById('sec1Choice').hidden === false
+  && document.getElementById('sysSearchPanel').hidden === true));
+await page.locator('#chooseSearch').click();
+await page.waitForTimeout(200);
+check('choice banners: "I know my system" reveals the search tools, banners stay (power tools hidden in Simple)', await page.evaluate(() =>
+  document.getElementById('sec1Choice').hidden === false
+  && document.getElementById('chooseSearch').classList.contains('active')
+  && document.getElementById('sysSearchPanel').hidden === false
+  && document.getElementById('moreTools').hidden === true));
+// Try an example: one press fills the planner; prices fetch themselves.
+await page.locator('#loadExampleBtn').click();
+await page.waitForFunction(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  return s.planets?.length === 5 && s.charactersDone === true
+    && Object.values(s.prices ?? {}).some((q) => q && q.bid > 0 && q.ask > 0);
+}, { timeout: 20000 });
+check('example: sample world loaded, prices self-fetched', true);
+await page.waitForFunction(() => !document.getElementById('stickyCalcBtn')?.hasAttribute('disabled'), { timeout: 15000 });
+await solveAndWait();
+check('example: compare solves out of the box', (await page.locator('#resultsPanel table tr').count()) > 2);
+await page.locator('#resultsPanel button', { hasText: 'Plan this' }).first().click();
+await page.waitForFunction(() => document.querySelector('#resultsPanel .v9-verdict') !== null, { timeout: 120000 });
+check('verdict-first: the answer leads the results in one card',
+  await page.locator('#resultsPanel .v9-verdict .v9-big').count() === 1);
+check('tabs: Plan is default and holds the build', await page.evaluate(() =>
+  /Plan by character/.test(document.querySelector('#resultsPanel .v9-pane:not([hidden])')?.textContent ?? '')));
+await page.locator('#resultsPanel .v9-tab', { hasText: 'Money' }).click();
+check('tabs: Money shows the ledger-backed numbers', await page.evaluate(() =>
+  /Ledger|ISK not shown/.test(document.querySelector('#resultsPanel .v9-pane:not([hidden])')?.textContent ?? '')));
+await page.locator('#resultsPanel .v9-tab', { hasText: 'Why this plan' }).click();
+check('tabs: Why holds quality + insights', await page.evaluate(() =>
+  /Insights/.test(document.querySelector('#resultsPanel .v9-pane:not([hidden])')?.textContent ?? '')));
+await page.unroute('https://esi.evetech.net/**');
 
 check('no page console errors across the whole flow', consoleErrors.length === 0);
 if (consoleErrors.length) console.error(consoleErrors.slice(0, 6).join('\n'));

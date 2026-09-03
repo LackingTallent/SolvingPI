@@ -12,7 +12,9 @@ import { character, operation } from '../src/world/characters.js';
 import { solveMax, solveQuota, type SolveWorld } from '../src/engine/allocator.js';
 import { comparative, economics, qolSolve, type MarketContext } from '../src/engine/modes.js';
 import { suggestSourcing } from '../src/engine/suggest.js';
-import { p1InputsOf, oreOf } from '../src/engine/chain.js';
+import { scoutSystems } from '../src/engine/scout.js';
+import { solveMixMax, solveMixQuota } from '../src/engine/mix.js';
+import { chainNeeds, p1InputsOf, oreOf } from '../src/engine/chain.js';
 import { solveReadiness } from '../src/ui/readiness.js';
 import { defaultState, defaultResources, extractDefaults } from '../src/ui/state.js';
 
@@ -152,7 +154,7 @@ CORRUPT_SAVES.forEach((raw, i) => {
   cell(`corrupt save #${i} loads to a usable state (never throws)`, () => {
     store['solving-pi-v9-state'] = raw;
     const s = stateMod.loadState();
-    assert(Array.isArray(s.planets) && Array.isArray(s.characters) && s.characters.length >= 1, 'unusable state');
+    assert(Array.isArray(s.planets) && Array.isArray(s.characters) && s.charactersDone === false, 'unusable state');
     assert(['max', 'quota', 'qol', 'compare'].includes(s.mode) || true, 'mode');
     for (const p of s.planets) {
       assert((PLANET_TYPES as readonly string[]).includes(p.type), `illegal type survived: ${p.type}`);
@@ -164,6 +166,14 @@ CORRUPT_SAVES.forEach((raw, i) => {
       }
     }
   });
+});
+cell('mix sanitize: loaded shares always normalize to exactly 100', () => {
+  const st = stateMod.sanitizeState({ mix: [{ product: 'Water', pct: 33 }, { product: 'Coolant', pct: 33 }, { product: 'Robotics', pct: 33 }] });
+  assert(st.mix.reduce((a, e) => a + e.pct, 0) === 100, 'sum != 100 after load');
+  const st2 = stateMod.sanitizeState({ mix: [{ product: 'Water', pct: 250 }, { product: 'Coolant', pct: 50 }] });
+  assert(st2.mix.reduce((a, e) => a + e.pct, 0) === 100, 'oversized shares not normalized');
+  const st3 = stateMod.sanitizeState({ mix: [{ product: 'Water', pct: 40 }] });
+  assert(st3.mix.length === 0, 'a one-line mix should collapse to single-product mode');
 });
 cell('save/load round trip is lossless for a real state', () => {
   const d = stateMod.defaultState();
@@ -182,14 +192,14 @@ cell('save/load round trip is lossless for a real state', () => {
 // ---------------------------------------------------------------------------
 cell('default state: compare pre-selected, mine-it pins, ZERO planets, all-V main', () => {
   const d = defaultState();
-  assert(d.mode === 'compare' && d.modeChosen === true, 'compare not default');
+  assert(d.mode === 'compare' && d.modeChosen === false, 'no goal may be pre-selected (owner 2026-09-02)');
   assert(Object.values(d.sourcingOverrides).every((v) => v === 'extract'), 'pins not mine-it');
   assert(d.planets.length === 0, 'starter world must be empty (owner spec)');
   // Added planets still get the 70% default on every resource.
   const added = defaultResources('Barren');
   assert(added.length === 5 && added.every((r) => r.w > 0), 'added planet not 70% x5');
-  const c = d.characters[0]!;
-  assert(c.icLevel === 5 && c.ccuLevel === 5 && c.customsCodeLevel === 5 && c.accountingLevel === 5 && c.brokerRelationsLevel === 5, 'not all V');
+  // Owner spec 2026-09-01: the roster starts EMPTY and unconfirmed.
+  assert(d.characters.length === 0 && d.charactersDone === false, 'roster must start empty and unconfirmed');
 });
 cell('extractDefaults covers every chain input for every product', () => {
   for (const product of SCHEMATICS.keys()) {
@@ -222,10 +232,94 @@ cell('quick band demanded only for ores the goal can use (review #2)', () => {
   // A zero on an ore the chain USES must still demand the band.
   const r2 = solveReadiness({ ...base, mode: 'max',
     planets: [{ ...planets[0]!, resources: [{ p0: 'Aqueous Liquids', w: 0 }, { p0: 'Ionic Solutions', w: 9000 }] }, planets[1]!, planets[2]!] });
-  assert(!r2.ready && r2.missing.some((s) => s.includes('security band')), 'used-ore zero no longer demands the band');
+  assert(!r2.ready && r2.missing.some((s) => s.includes('space type')), 'used-ore zero no longer demands the band');
   // Compare considers every product: ANY zero keeps demanding the band.
   const r3 = solveReadiness({ ...base, mode: 'compare', prices: { Coolant: { bid: 100, ask: 120 } } });
-  assert(!r3.ready && r3.missing.some((s) => s.includes('security band')), 'compare lost its band requirement');
+  assert(!r3.ready && r3.missing.some((s) => s.includes('space type')), 'compare lost its band requirement');
+});
+// ---------------------------------------------------------------------------
+// Multi-tier sourcing (owner spec 2026-08-30): buy P2/P3 finished, cut the chain
+// ---------------------------------------------------------------------------
+cell('chain cut: buying an intermediate removes its whole subtree and imports it', () => {
+  const full = chainNeeds('Robotics', 100, { 'Precious Metals': 'extract', 'Reactive Metals': 'extract', 'Chiral Structures': 'extract', 'Toxic Metals': 'extract' });
+  const cut = chainNeeds('Robotics', 100, { 'Mechanical Parts': 'buy', 'Consumer Electronics': 'buy' });
+  assert(cut.advancedFacilities < full.advancedFacilities * 0.35, 'cut did not shrink facilities');
+  assert(Math.abs((cut.purchasesPerWeek['Mechanical Parts'] ?? 0) - 1000 / 3) < 1e-6, 'P2 purchase wrong');
+  assert(Object.keys(cut.extractP1PerWeek).length === 0, 'extractors survived the cut');
+  assert(cut.outputsPerWeek['Mechanical Parts'] === undefined, 'bought intermediate still scheduled in-house');
+  // P1 coverage is only demanded where the walk still needs P1s.
+  assert(cut.p1PerWeek['Precious Metals'] === undefined, 'pruned P1 still counted');
+});
+cell('ore-less world: buy the direct inputs, run ONE legal factory colony', () => {
+  const w = world([{ name: 'B', type: 'Barren', resources: {} }], 1);
+  const r = solveMax(w, 'Robotics', { 'Mechanical Parts': 'buy', 'Consumer Electronics': 'buy' });
+  if ('error' in r) throw new Error(r.error);
+  assert(r.slotsUsed === 1 && r.verdict.legal && r.realizedPerWeek > 0, 'buy-direct plan wrong shape');
+});
+cell('comparative second chance: an unfittable chain ranks via the input-buy cut', () => {
+  const w = world([{ name: 'B', type: 'Barren', resources: {} }], 1);
+  const m = market({
+    Robotics: { bid: 90000, ask: 99000 }, 'Mechanical Parts': { bid: 9000, ask: 9900 },
+    'Consumer Electronics': { bid: 9000, ask: 9900 },
+    'Precious Metals': { bid: 500, ask: 560 }, 'Reactive Metals': { bid: 500, ask: 560 },
+    'Chiral Structures': { bid: 500, ask: 560 }, 'Toxic Metals': { bid: 500, ask: 560 },
+  });
+  const { ranked } = comparative(w, m, ['Robotics']);
+  assert(ranked.some((r) => r.product === 'Robotics'), 'cut retry did not rescue the candidate');
+  // And a pinned make is never overruled: the ranked plan must actually
+  // BUILD Mechanical Parts factories (buying its P1s is fine — buying the
+  // pinned part itself is not).
+  const { ranked: pinned } = comparative(w, m, ['Robotics'], { 'Mechanical Parts': 'make' });
+  const entry = pinned.find((r) => r.product === 'Robotics');
+  assert(entry !== undefined, 'make-pinned candidate vanished');
+  const buildsMP = entry!.result.plan.colonies.some((c) => c.plan.factories.some((f) => f.schematic === 'Mechanical Parts'));
+  const buysMP = (entry!.result.plan.logistics?.purchases ?? []).some((p) => p.commodity === 'Mechanical Parts');
+  assert(buildsMP && !buysMP, 'make pin was overruled');
+});
+// ---------------------------------------------------------------------------
+// Product mix (owner spec 2026-08-31)
+// ---------------------------------------------------------------------------
+cell('mix: 60/40 blend holds the ratio, characters partitioned, every line legal', () => {
+  const w = world([
+    { name: 'P1', type: 'Storm', resources: { 'Aqueous Liquids': 11000, 'Ionic Solutions': 11000 } },
+    { name: 'P2', type: 'Gas', resources: { 'Aqueous Liquids': 10000, 'Ionic Solutions': 10000 } },
+    { name: 'P3', type: 'Plasma', resources: { 'Base Metals': 10000, 'Noble Metals': 10000 } },
+    { name: 'P4', type: 'Plasma', resources: { 'Base Metals': 10000, 'Noble Metals': 10000 } },
+    { name: 'P5', type: 'Barren', resources: {} },
+    { name: 'P6', type: 'Oceanic', resources: { 'Aqueous Liquids': 9000 } },
+  ], 3);
+  const entries = [
+    { product: 'Coolant', share: 60, sourcing: { Electrolytes: 'extract', Water: 'extract' } as const },
+    { product: 'Mechanical Parts', share: 40, sourcing: { 'Precious Metals': 'extract', 'Reactive Metals': 'extract' } as const },
+  ];
+  const r = solveMixMax(w, entries);
+  if ('error' in r) throw new Error(r.error);
+  const a = r.lines[0]!.result.realizedPerWeek;
+  const b = r.lines[1]!.result.realizedPerWeek;
+  assert(Math.abs(a / (a + b) - 0.6) < 0.02, `ratio drifted: ${(a / (a + b)).toFixed(3)}`);
+  assert(r.lines.every((l) => l.result.verdict.legal), 'a mix line is not judge-legal');
+  const names = r.lines.flatMap((l) => l.characters);
+  assert(new Set(names).size === names.length, 'a character serves two lines');
+});
+cell('mix quota: unreachable blend refuses with the achievable bundle rate', () => {
+  const w = world([storm('S1'), storm('S2'), { name: 'B', type: 'Barren', resources: {} }], 2);
+  const entries = [
+    { product: 'Coolant', share: 50, sourcing: { Electrolytes: 'extract', Water: 'extract' } as const },
+    { product: 'Water', share: 50, sourcing: { Water: 'extract' } as const },
+  ];
+  const q = solveMixQuota(w, entries, 99_999_999);
+  assert('error' in q && q.error.includes('quota-unreachable'), 'no refusal');
+  assert('achievablePerWeek' in q && (q.achievablePerWeek ?? 0) > 0, 'refusal lost the achievable rate');
+});
+cell('mix validation: duplicates and single-product mixes are refused by name', () => {
+  const w = world([storm('S1')], 1);
+  const dup = solveMixMax(w, [
+    { product: 'Water', share: 50, sourcing: { Water: 'extract' } },
+    { product: 'Water', share: 50, sourcing: { Water: 'extract' } },
+  ]);
+  assert('error' in dup && dup.error.includes('appears twice'), 'duplicate not refused');
+  const one = solveMixMax(w, [{ product: 'Water', share: 100, sourcing: { Water: 'extract' } }]);
+  assert('error' in one && one.error.includes('at least two'), 'single-product mix not refused');
 });
 cell('stale overrides for another product are ignored by readiness (no ghost requirements)', () => {
   const r = solveReadiness({
@@ -255,6 +349,30 @@ cell('100% customs + huge freight: net can go negative and says so honestly', ()
   const m: MarketContext = { ...market({ Coolant: { bid: 1, ask: 2 } }), customs: { ownerRate: 1.0, hisecNpc: false, customsCodeLevel: 0 }, freightOutPerM3: 1e5, freightInPerM3: 1e5 };
   const eco = economics(r, m, 6);
   assert(Number.isFinite(eco.netPerWeek) && eco.netPerWeek < 0, 'expected an honest loss');
+});
+
+// ---------------------------------------------------------------------------
+// Region Scout under attack
+// ---------------------------------------------------------------------------
+cell('scout: a hostile system (duplicate planet names) ranks last with its reason — never throws', () => {
+  const m = market({ Coolant: { bid: 11000, ask: 12500 }, Water: { bid: 700, ask: 800 }, Electrolytes: { bid: 600, ask: 700 }, 'Aqueous Liquids': { bid: 5, ask: 7 }, 'Ionic Solutions': { bid: 5, ask: 7 } });
+  const good = { id: 1, name: 'Good', security: -0.3, assumedW: 12000, planets: [
+    { name: 'Good I', type: 'Storm' as const }, { name: 'Good II', type: 'Gas' as const }, { name: 'Good III', type: 'Storm' as const }] };
+  const twin = { id: 2, name: 'Twins', security: -0.3, assumedW: 12000, planets: [
+    { name: 'Twin', type: 'Storm' as const }, { name: 'Twin', type: 'Gas' as const }] };
+  const rows = scoutSystems([twin, good], operation(chars(2)), 6, m, { mode: 'max', product: 'Coolant' });
+  assert(rows[0]!.system.name === 'Good' && rows[0]!.feasible, 'good system must lead');
+  const t = rows.find((r) => r.system.name === 'Twins')!;
+  assert(!t.feasible && t.note.length > 0, 'duplicate-name system must rank infeasible with a reason');
+});
+cell('scout: feasible systems always sort above infeasible, whatever the net', () => {
+  const m = market({ Coolant: { bid: 2, ask: 3 }, Water: { bid: 700, ask: 800 }, Electrolytes: { bid: 600, ask: 700 }, 'Aqueous Liquids': { bid: 5, ask: 7 }, 'Ionic Solutions': { bid: 5, ask: 7 } });
+  const loss = { id: 1, name: 'Lossy', security: -0.3, assumedW: 12000, planets: [
+    { name: 'L I', type: 'Storm' as const }, { name: 'L II', type: 'Gas' as const }, { name: 'L III', type: 'Storm' as const }] };
+  const none = { id: 2, name: 'Void', security: -0.3, assumedW: 12000, planets: [] };
+  const rows = scoutSystems([none, loss], operation(chars(2)), 6, m, { mode: 'max', product: 'Coolant' });
+  assert(rows[0]!.system.name === 'Lossy' && rows[0]!.feasible, 'a losing plan still beats no plan');
+  assert(rows[0]!.netPerWeek < 0, 'net should be an honest loss at these prices');
 });
 
 console.log(`\nEDGE MATRIX: ${pass} cells passed, ${fail} failed`);

@@ -122,9 +122,25 @@ const DEFAULT_THEME = 'carbon';
 
 // JITA_REGION_ID is already defined in 01-data.js; reusing it rather than
 // shadowing keeps a single source of truth for the region.
+/* Planner / Reference views (UI-review #10, owner-approved 2026-09-01):
+ * one page, two lenses. CSS on the body class does the hiding; jumps into a
+ * reference section switch the lens first so the target is visible. */
+function setPageView(view){
+  document.body.classList.toggle('v9-view-ref', view === 'reference');
+  const p = document.getElementById('viewPlanner');
+  const r = document.getElementById('viewReference');
+  if(p) p.classList.toggle('active', view !== 'reference');
+  if(r) r.classList.toggle('active', view === 'reference');
+}
+(function initViewToggle(){
+  document.getElementById('viewPlanner')?.addEventListener('click', ()=> setPageView('planner'));
+  document.getElementById('viewReference')?.addEventListener('click', ()=> setPageView('reference'));
+})();
+
 function jumpToSection(id){
   const sec = document.getElementById(id);
   if(!sec) return;
+  setPageView(sec.classList.contains('reference') ? 'reference' : 'planner');
   if(typeof setCollapsed === 'function') setCollapsed(sec, false);
   else sec.classList.remove('collapsed');
   sec.scrollIntoView({behavior:'smooth', block:'start'});
@@ -246,6 +262,30 @@ document.querySelectorAll('[data-jump]').forEach(btn=>{
   modal.addEventListener('click', e=>{ if(e.target === modal) shut(); });
   document.addEventListener('keydown', e=>{
     if(e.key === 'Escape' && !modal.hidden) shut();
+  });
+})();
+
+/* ---------- "New here? Read this first" — gold pulse until opened once ----
+ * Same contract as the Help button: the pulse is a first-visit beacon, it
+ * stops for good after one open (remembered in localStorage). */
+(function initQuickstartPulse(){
+  if(typeof document === 'undefined') return;
+  const qs = document.querySelector('.quickstart');
+  if(!qs) return;
+  /* Owner spec 2026-09-01: the guide loads OPEN by default. It stays open on
+   * every visit until the reader closes it themselves; that choice is then
+   * remembered. Open-by-default also means the old gold pulse never fires. */
+  const SEEN = 'solvingpi.quickstart.seen';
+  const CLOSED = 'solvingpi.quickstart.closed';
+  const flag = (k) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
+  const set = (k, v) => { try { if(v) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch { /* private mode */ } };
+  if(flag(CLOSED)) qs.open = false;
+  if(flag(SEEN) || qs.open) qs.classList.add('is-seen');
+  qs.addEventListener('toggle', ()=>{
+    set(CLOSED, !qs.open);
+    if(!qs.open) return;
+    qs.classList.add('is-seen');
+    set(SEEN, true);
   });
 })();
 

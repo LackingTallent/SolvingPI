@@ -50,7 +50,7 @@ test('quick: unscanned world without a band is blocked, naming the band', () => 
     detailLevel: 'quick', spaceBand: null,
   });
   assert.ok(!r.ready);
-  assert.match(r.missing.join(' '), /security band/);
+  assert.match(r.missing.join(' '), /space type/);
 });
 
 test('quick: band chosen makes an unscanned world solvable (assumptions cover scans)', () => {

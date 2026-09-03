@@ -75,28 +75,30 @@ const checks = [
   ['version stamped (no literal build token)', !dom.includes('@build:version')],
   ['batch import panel present', dom.includes('batchInput')],
   ['system search rendered', dom.includes('sysSearch') && dom.includes('Load its planets')],
-  ['goal section is step 1 and the only one expanded',
+  // UI-review #1: one step open at a time — boot opens the FIRST INCOMPLETE
+  // step (fresh default: characters, step 2) and folds the rest.
+  // Owner 2026-09-02: no goal is pre-selected — a fresh boot opens START
+  // HERE (the goal step) and folds the rest.
+  ['auto-advance: START HERE is the only step expanded on a fresh boot',
     dom.includes('class="card" id="sec3"')
-    && ['sec0', 'sec1', 'sec2', 'sec4'].every((id) => dom.includes(`class="card collapsed" id="${id}"`))
-    && dom.indexOf('id="sec3"') < dom.indexOf('id="sec0"')],
+    && ['sec1', 'sec2', 'sec4'].every((id) => dom.includes(`class="card collapsed" id="${id}"`))
+    && dom.indexOf('id="sec3"') < dom.indexOf('id="sec1"')],
   // The default world is deliberately solvable (missing ores default to buy
   // sourcing), so the gate is proven by the in-page self-test instead: it must
   // block a no-planet world and an unscanned-ore world, and pass a scanned one.
   ['solve gate blocks/passes correctly incl. accuracy ladder (in-page check)', dom.includes('data-gate="pass"')],
   ['every planner section has a reset button',
-    ['sec3', 'sec0', 'sec1', 'sec2', 'sec4'].every((id) => dom.includes(`data-reset="${id}"`))],
+    ['sec3', 'sec1', 'sec2', 'sec4'].every((id) => dom.includes(`data-reset="${id}"`))],
   // Owner defaults: Compare pre-selected (A-Z listing), so no product
   // dropdown and no sourcing controls render on a fresh visit.
-  ['compare is the pre-selected default goal',
-    /name="v9mode" value="compare" checked/.test(dom)
-    && !dom.includes('<label>Product <')
-    && !dom.includes('Adjust sourcing (default')],
+  ['no goal pre-selected — the user must choose (owner 2026-09-02)',
+    !/name="v9mode"[^>]*checked/.test(dom) && dom.includes('Select a Goal')],
   // Owner spec: ZERO starter planets; the 70% default applies to ADDED
   // planets (covered in ui-edge/ui-matrix by pressing + Add planet).
   ['starter world is empty; explainer still teaches the 70% default',
-    !dom.includes('v9-planet"') && dom.includes('70% default density')],
+    !dom.includes('v9-planet"') && dom.includes('Planetary Resource Density is set to 70%')],
   ['systems panel headings are caps, explainer removed',
-    dom.includes('ADD A SOLAR SYSTEM') && dom.includes('FLAT DENSITY')
+    dom.includes('ADD A SOLAR SYSTEM') && dom.includes('SELECT SPACE TYPE PRESET FLAT RATE')
     && !dom.includes('what ESI does <b>not</b> publish')],
   ['Complete & Collapse checkbox + per-system collapse-all rendered',
     /Complete (&amp;|&) Collapse/.test(dom) && /Complete (&amp;|&) Collapse All/.test(dom)],

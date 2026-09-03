@@ -19,7 +19,8 @@
  * Explicit user overrides are never second-guessed: they are applied last and
  * labeled "your choice".
  */
-import { oreOf, type Sourcing } from './chain.js';
+import { chainIntermediates, chainNeeds, oreOf, type Sourcing } from './chain.js';
+import { SCHEMATICS, tierOf } from '../spec/schematics.js';
 import { solveMax, type SolveWorld } from './allocator.js';
 import { defaultSourcing, economics, type MarketContext } from './modes.js';
 
@@ -61,34 +62,59 @@ export function suggestSourcing(
   overrides: Readonly<Record<string, Sourcing>> = {},
 ): SourcingSuggestion {
   const sourcing = defaultSourcing(world, product);
+  const interSet = chainIntermediates(product);
   const reasons = new Map<string, string>();
   for (const [p1, mode] of Object.entries(sourcing)) {
     if (mode === 'extract') reasons.set(p1, `you have ${oreOf(p1)} scanned in your systems`);
     else if (mode === 'refine') reasons.set(p1, `no scanned ${oreOf(p1)} — buy the ore and refine it (buying the product itself is not production)`);
     else reasons.set(p1, `no scanned ${oreOf(p1)} in your systems — buy it finished`);
   }
+  // Intermediate pins land first: a pinned 'buy' cuts the chain before any
+  // probe runs; a pinned 'make' is never second-guessed.
+  for (const i of interSet) {
+    const o = overrides[i];
+    if (o === 'buy' || o === 'make') {
+      sourcing[i] = o;
+      reasons.set(i, 'your choice (pinned in section 1)');
+    }
+  }
 
   // Feasibility ladder: when the extract-what-you-have heuristic cannot fit
   // this operation AT ALL (deep chains need many colonies; small operations
-  // have few slots), fall back to buying the inputs in — the smallest
-  // physical chain — exactly as a real operator would. Disclosed per input.
+  // have few slots), fall back rung by rung — buy the P1s in (no extractors),
+  // then buy the product's own direct inputs (a single factory colony, the
+  // smallest possible chain). Disclosed per input.
   {
     const withOverrides = { ...sourcing };
     for (const [p1, mode] of Object.entries(overrides)) if (p1 in withOverrides) withOverrides[p1] = mode;
     const probe = solveMax(world, product, withOverrides, { method: 'greedy' });
     if ('error' in probe) {
-      const allBuy: Record<string, Sourcing> = {};
-      for (const p1 of Object.keys(sourcing)) {
+      const allBuy: Record<string, Sourcing> = { ...withOverrides };
+      for (const p1 of Object.keys(defaultSourcing(world, product))) {
         allBuy[p1] = p1 === product ? 'refine' : 'buy';
         if (p1 in overrides) allBuy[p1] = overrides[p1]!;
       }
       const probeBuy = solveMax(world, product, allBuy, { method: 'greedy' });
       if (!('error' in probeBuy)) {
-        for (const p1 of Object.keys(sourcing)) {
-          if (p1 in overrides || allBuy[p1] === sourcing[p1]) continue;
-          sourcing[p1] = allBuy[p1]!;
+        for (const [k, v] of Object.entries(allBuy)) {
+          if (k in overrides || sourcing[k] === v) continue;
+          sourcing[k] = v;
           // Plain words on the card, never raw engine codes (place-extract:…).
-          reasons.set(p1, `the fuller chain does not fit this operation (${shortWhy(probe.error)}) — ${allBuy[p1] === 'refine' ? 'buying ore and refining' : 'buying it in'} keeps the plan feasible`);
+          reasons.set(k, `the fuller chain does not fit this operation (${shortWhy(probe.error)}) — ${v === 'refine' ? 'buying ore and refining' : 'buying it in'} keeps the plan feasible`);
+        }
+      } else if (tierOf(product) >= 2) {
+        // Rung 3 (owner spec): buy the product's direct inputs finished and
+        // run ONLY the final factory step — e.g. buy P3s, make the P4.
+        const direct = Object.keys(SCHEMATICS.get(product)!.inputs).filter((i) => tierOf(i) >= 1);
+        const cut: Record<string, Sourcing> = { ...withOverrides };
+        for (const i of direct) if (overrides[i] !== 'make') cut[i] = 'buy';
+        const probeCut = solveMax(world, product, cut, { method: 'greedy' });
+        if (!('error' in probeCut)) {
+          for (const i of direct) {
+            if (cut[i] !== 'buy' || sourcing[i] === 'buy') continue;
+            sourcing[i] = 'buy';
+            reasons.set(i, `even the bought-P1 chain does not fit this operation (${shortWhy(probe.error)}) — buying ${i} finished and running just the final factory keeps it feasible`);
+          }
         }
       }
     }
@@ -127,6 +153,34 @@ export function suggestSourcing(
         sourcing[p1] = best.mode;
       } else {
         reasons.set(p1, `${reasons.get(p1) ?? ''} — and it wins the full price comparison (net ${fmt(best.net)} ISK/wk)`);
+      }
+    }
+    // Intermediate buy-vs-make (owner spec 2026-08-30): can buying a P2/P3
+    // finished — skipping its whole subtree — beat making it? Greedy pass,
+    // biggest cuts first; every switch is disclosed with both nets.
+    const freeInters = interSet.filter((i) => !(i in overrides));
+    if (freeInters.length > 0 && freeInters.length <= 10) {
+      const netOf = (s: Record<string, Sourcing>): number | null => {
+        try {
+          const r = solveMax(world, product, s, { method: 'greedy' });
+          if ('error' in r) return null;
+          return economics(r, market, world.programHours).netPerWeek;
+        } catch { return null; }
+      };
+      let cur = netOf(sourcing);
+      for (const i of freeInters) {
+        if (cur === null) break;
+        try {
+          // skip nodes whose subtree is already gone (an ancestor was bought)
+          if ((chainNeeds(product, 1, sourcing).outputsPerWeek[i] ?? 0) <= 0) continue;
+        } catch { break; }
+        const trialNet = netOf({ ...sourcing, [i]: 'buy' });
+        if (trialNet !== null && trialNet > cur + Math.abs(cur) * 1e-9) {
+          sourcing[i] = 'buy';
+          reasons.set(i, `buying ${i} finished beats making it in-house (net ${fmt(trialNet)} vs ${fmt(cur)} ISK/wk) — its whole sub-chain is freed up`);
+          cur = trialNet;
+          refined = true;
+        }
       }
     }
     if (!refined && refinementSkipped === undefined) {

@@ -26,7 +26,7 @@ const goodPrices = {
 test('no planets: blocked, with the fix named', () => {
   const r = solveReadiness({ planets: [], product: 'Coolant', sourcing: coolantExtract, mode: 'max', prices: {} });
   assert.ok(!r.ready);
-  assert.match(r.missing.join(' '), /Add at least one planet \(section 3\)/);
+  assert.match(r.missing.join(' '), /Add at least one planet \(section 2\)/);
 });
 
 test('extract sourcing without a scanned ore: blocked, names the ore, the input, and both fixes', () => {
@@ -35,7 +35,7 @@ test('extract sourcing without a scanned ore: blocked, names the ore, the input,
   assert.equal(r.missing.length, 1);
   assert.match(r.missing[0]!, /Ionic Solutions/);
   assert.match(r.missing[0]!, /extract Electrolytes/);
-  assert.match(r.missing[0]!, /section 3.*section 1/);
+  assert.match(r.missing[0]!, /section 2.*section 1/);
 });
 
 test('max mode: ready without any prices once extraction is covered (output needs no quotes)', () => {

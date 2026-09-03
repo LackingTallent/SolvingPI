@@ -132,7 +132,7 @@ section.card::before{ content:''; position:absolute; top:0; left:0; right:0; hei
   background:linear-gradient(90deg, var(--cyan), var(--magenta), var(--amber));
   opacity:.9; }
 section.card:hover{ border-color:var(--cyan); transition:border-color .2s ease; }
-.section-title{ font-family:var(--font-display); font-size:22.6px; letter-spacing:.5px; color:var(--text-strong); text-transform:uppercase;
+.section-title{ font-family:var(--font-display); font-size:30px; letter-spacing:.5px; color:var(--text-strong); text-transform:uppercase;
   display:flex; align-items:center; gap:10px; margin-bottom:6px; }
 .section-title::before{ content:''; width:14px; height:2px; background:var(--cyan); display:inline-block; }
 /* Every section header is this row: title on the left, controls hard right.
@@ -170,7 +170,7 @@ section.card:hover{ border-color:var(--cyan); transition:border-color .2s ease; 
 /* No cap. 640px was a readable measure when the page was 900 wide; the cards
    now run to ~1200 and a 640px paragraph inside one reads as a column pinned
    to the left with half the box empty beside it. */
-.section-sub{ color:var(--text-dim); font-size:19.6px; line-height:1.6;
+.section-sub{ color:var(--text-dim); font-size:18.6px; line-height:1.6;
   margin-bottom:16px; max-width:none; }
 
 label.field-label{ display:block; font-family:var(--font-mono); font-size:18.8px; letter-spacing:1px; color:var(--text-dim); text-transform:uppercase; margin-bottom:6px; }
@@ -447,7 +447,7 @@ table.gen-table tr:last-child td{ border-bottom:none; }
  * letting it follow the title made it depend on title length. Neither lines
  * up. A fixed-width title column does: the summary always begins at the same
  * offset whatever the title says. */
-.st-label{ flex:0 0 auto; width:340px; }
+.st-label{ flex:0 0 auto; width:560px; }
 .sec-summary{ font-family:var(--font-body); font-size:18.4px;
   font-weight:normal; letter-spacing:normal; text-transform:none;
   color:var(--text-dim); flex:1 1 auto; min-width:0;
@@ -1720,7 +1720,7 @@ section.card.reference:hover{ border-color:var(--text-faint); }
    differently even before you notice the missing number. */
 section.card.reference .section-title::before{ width:9px; height:9px;
   background:none; border:1px solid var(--text-faint); border-radius:2px; }
-section.card.reference .section-title{ font-size:20.4px; color:var(--text); }
+section.card.reference .section-title{ font-size:26px; color:var(--text); }
 
 /* ===== CONTACT / BUG REPORT =====
    Quiet by design. It should be findable the moment something goes wrong and

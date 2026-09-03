@@ -49,6 +49,17 @@ const planet = (name, type, system, pct) => ({
   resources: resourcesOf(type).map((p0, i) => ({ p0, w: Math.round(wFromDensityPct(pct[i % pct.length])) })),
 });
 const seed = {
+  // Three characters: the removal test needs meat, and the fresh default is
+  // now an EMPTY roster (owner spec 2026-09-01).
+  characters: [
+    { name: 'Main', icLevel: 5, ccuLevel: 5, customsCodeLevel: 5, accountingLevel: 5, brokerRelationsLevel: 5 },
+    { name: 'Alt 1', icLevel: 4, ccuLevel: 4, customsCodeLevel: 4, accountingLevel: 4, brokerRelationsLevel: 4 },
+    { name: 'Alt 2', icLevel: 3, ccuLevel: 4, customsCodeLevel: 4, accountingLevel: 4, brokerRelationsLevel: 3 },
+  ],
+  charactersDone: true,
+  // A goal is chosen in the seed — nothing is pre-selected any more
+  // (owner 2026-09-02), and these blocks test post-goal behavior.
+  mode: 'max', modeChosen: true, product: 'Coolant',
   planets: [
     planet('Auviken IV', 'Storm', 'Auviken', [92, 71, 64, 55, 48]),
     planet('Auviken V', 'Gas', 'Auviken', [83, 77, 58, 51, 45]),
@@ -77,7 +88,10 @@ await page.reload();
 await page.waitForSelector('body[data-smoke="ok"]');
 
 // 1 ── Remove every character: the page must survive and refuse sanely.
-await page.evaluate(() => document.getElementById('sec0')?.classList.remove('collapsed'));
+// (charactersDone folds the roster to one line — open the editor first.)
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('#sec0Body button', { hasText: 'Edit characters' }).click();
+await page.waitForTimeout(200);
 for (let i = 0; i < 3; i++) {
   await page.evaluate(() => {
     const btns = [...document.querySelectorAll('#sec0Body table button')];
@@ -98,7 +112,7 @@ check('remove characters: the LAST character cannot be deleted', await page.eval
 // Restore.
 await page.evaluate((s) => {
   const cur = JSON.parse(localStorage.getItem('solving-pi-v9-state')) || {};
-  localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...cur, ...s, characters: undefined }));
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...cur, ...s }));
 }, seed);
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
 
@@ -121,9 +135,9 @@ await page.evaluate(() => {
 await page.waitForTimeout(250);
 check('remove-all planets: zero cards, zero group headers, no crash',
   await page.locator('.v9-planet').count() === 0 && await page.locator('.v9-sys-head').count() === 0 && pageErrors.length === 0);
-check('remove-all planets: gate names "Add at least one planet"',
-  /Add at least one planet/.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? '') ||
-  /Add at least one planet/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+check('remove-all planets: gate names "add at least one planet"',
+  /add at least one planet/i.test(await page.locator('#stickyCalcBtn').getAttribute('title') ?? '') ||
+  /add at least one planet/i.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
 
 // 3 ── Corrupt save file through the LOAD button (file path ≠ localStorage path).
 const corrupt = join('/tmp', 'corrupt-save.json');
@@ -131,9 +145,9 @@ writeFileSync(corrupt, JSON.stringify({ solvingPiV9: 1, state: { planets: [{ nam
 await page.setInputFiles('#loadDataInput', corrupt);
 await page.waitForTimeout(600);
 check('corrupt save FILE: page survives the load button', pageErrors.length === 0);
-check('corrupt save FILE: sanitized — illegal planet dropped, chars restored, mode valid', await page.evaluate(() => {
+check('corrupt save FILE: sanitized — illegal planet dropped, empty roster kept honest, mode valid', await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
-  return s.characters.length >= 1
+  return s.characters.length === 0 && s.charactersDone === false
     && !s.planets.some((p) => p.type === 'Shattered')
     && ['max', 'quota', 'qol', 'compare'].includes(s.mode);
 }));
@@ -166,6 +180,9 @@ check('duplicate planet names: refused in words on screen (no crash)',
 check('refusals: no raw engine codes visible on screen (Engine detail stays tucked)',
   await page.evaluate(() => !/quota-unreachable:|place-extract:|no-capacity-for:|refusing to (value|cost) it silently|missing-price:/.test(document.body.innerText)));
 // Review #1: the duplicate is ALSO flagged inline, before any solve.
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('.v9-planet button', { hasText: 'Edit' }).first().click();
+await page.waitForTimeout(200);
 check('duplicate planet names: inline ⚠ tag on the offending cards',
   await page.locator('.v9-dup-tag').count() >= 2 && await page.locator('input.v9-dup').count() >= 1);
 // Review #5: removal is a quiet confirmed ✕, not a labeled pill.
@@ -180,31 +197,65 @@ check('remove planet is a small labeled chip with a confirm',
 // step, and the first added planet arrives expanded at the 70% defaults.
 await page.evaluate(() => localStorage.clear());
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
-await page.evaluate(() => {
+await page.evaluate((chars) => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state') || 'null');
-  // storage may be empty on a fresh visit — merge the mode switch into whatever the app persisted
-  localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...(s || {}), mode: 'max', modeChosen: true }));
-});
+  // storage may be empty on a fresh visit — merge the mode switch into whatever
+  // the app persisted. Characters seeded + done so THIS check isolates the
+  // planets gate; 5b2 below wipes them to test the section-2 gate itself.
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...(s || {}), mode: 'max', modeChosen: true, characters: chars, charactersDone: true }));
+}, seed.characters);
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
-check('fresh default world: ZERO planets, SOLVE gated with "Add at least one planet"',
+check('fresh default world: ZERO planets, SOLVE gated with "add at least one planet"',
   await page.locator('.v9-planet').count() === 0
   && await page.locator('#stickyCalcBtn[disabled]').count() === 1
-  && /Add at least one planet/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+  && /add at least one planet/i.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
 await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
 await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
 await page.waitForTimeout(300);
 check('added planet: expanded at 70% defaults, labeled remove chip, "Complete" box',
   await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1
-  && /= 70%/.test(await page.locator('#v9PlanetList').textContent() ?? '')
+  && await page.locator('.v9-planet input[placeholder="density %"]').first().inputValue() === '70'
   && /remove planet/i.test(await page.locator('button[title="Remove this planet"]').first().textContent() ?? '')
   && /Complete(?!\s*&)/.test(await page.locator('.v9-done').first().textContent() ?? ''));
-check('fresh default: gate now nudges the sequence — fetch prices in section 4 FIRST',
-  /COSTS & MARKET first/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+check('fresh default: gate now nudges the sequence — Step 3, fetch prices first',
+  /Next → Step 3: fetch live Jita prices/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+
+// 5b2 ── Section 2 gate (owner spec 2026-09-01): empty roster, then the
+// reversible Done button.
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+  s.characters = []; s.charactersDone = false;
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(s));
+});
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+check('empty roster: gate names Step 2, add a character',
+  /Next → Step 2: add at least one character/i.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+// Characters live INSIDE section 2 ("What You Have") now — same card as planets.
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('#sec0Body button', { hasText: 'Create my roster' }).click();
+await page.waitForTimeout(250);
+check('one character added: gate now asks for the Done press',
+  /Done adding characters/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.locator('#sec0Body button', { hasText: 'Done adding characters' }).click();
+await page.waitForTimeout(250);
+check('Done pressed: roster folds to one line and the gate moves on', await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('solving-pi-v9-state')).charactersDone === true
+  && document.querySelector('#sec0Body table') === null)
+  && !/character/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('#sec0Body button', { hasText: 'Edit characters' }).click();
+await page.waitForTimeout(250);
+check('reversible: Edit characters reopens the question',
+  /Done adding characters/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.locator('#sec0Body button', { hasText: 'Done adding characters' }).click();
+await page.waitForTimeout(250);
 
 // 5c ── Blur-mid-rerender trap (bug-hunt find): focus a planet-name input,
 // then click a control that rerenders. The detached input's blur→change
 // handler re-enters rerender(); without the guard, replaceChildren throws.
 await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('.v9-planet button', { hasText: 'Edit' }).first().click().catch(() => {});
+await page.waitForTimeout(200);
 const trapInput = page.locator('.v9-planet:not(.v9-planet-min) input.v9-text').first();
 if (await trapInput.count()) {
   await trapInput.focus();
@@ -215,7 +266,8 @@ if (await trapInput.count()) {
 check('blur-mid-rerender: no replaceChildren crash (re-entrancy guard)', pageErrors.length === 0);
 
 // 6 ── Rapid goal/product churn: 12 switches, zero errors, pins re-derived.
-await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify(s)), { ...seed, mode: 'max', modeChosen: true });
+// Advanced on: the churn block pokes the sourcing panel, which Simple hides.
+await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify(s)), { ...seed, mode: 'max', modeChosen: true, advancedMode: true });
 await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
 for (const m of ['qol', 'quota', 'max', 'compare', 'max', 'quota']) {
   await page.check(`input[name="v9mode"][value="${m}"]`);

@@ -51,6 +51,13 @@
     </div>
   </div>
   <div class="tc-row">
+    <span class="tc-label">Controls</span>
+    <div class="tc-value theme-switch">
+      <button class="theme-btn" id="modeSimpleBtn" title="Just the essentials — smart defaults handle the rest">&#9675; Simple</button>
+      <button class="theme-btn" id="modeAdvancedBtn" title="Every dial: accuracy level, sourcing pins, blends, cost tables">&#9679; Advanced</button>
+    </div>
+  </div>
+  <div class="tc-row">
     <span class="tc-label">Problem?</span>
     <a class="tc-value report-btn" id="reportTop" href="#"
        title="Report a bug or contact the developer">&#9993; Contact / Report a Bug</a>
@@ -174,16 +181,16 @@
       </svg>
       <b>Live</b><span>Jita Market Prices</span>
     </button>
-    <button type="button" class="hstat" data-jump="secStatus" title="Jump to EVE and ESI server status">
+    <button type="button" class="hstat" data-jump="secChains" title="Jump to All PI Visualized — every P0→P4 chain drawn, with planets, sizes and live prices">
       <svg class="hstat-icon" viewBox="0 0 40 40" aria-hidden="true">
-        <circle cx="20" cy="20" r="14" fill="none" stroke="var(--amber)" stroke-width="2.6"/>
-        <path d="M20 11 v10 l7 4" fill="none" stroke="var(--amber)" stroke-width="2.6"
-              stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="32" cy="9" r="4.5" fill="var(--green)"/>
-        <path d="M30 9 l1.6 1.7 L34.2 7.6" fill="none" stroke="var(--void)"
-              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M20 8 v7 M12 32 l6 -11 M28 32 l-6 -11" fill="none" stroke="var(--amber)"
+              stroke-width="2.2" stroke-linecap="round"/>
+        <rect x="15.5" y="3" width="9" height="9" rx="2.4" fill="none" stroke="var(--magenta)" stroke-width="2.4"/>
+        <rect x="7.5" y="28" width="9" height="9" rx="2.4" fill="none" stroke="var(--green)" stroke-width="2.4"/>
+        <rect x="23.5" y="28" width="9" height="9" rx="2.4" fill="none" stroke="var(--cyan)" stroke-width="2.4"/>
+        <circle cx="20" cy="18.5" r="2.1" fill="var(--amber)"/>
       </svg>
-      <b>Works</b><span>Most Of The Time</span>
+      <b>PI Chains</b><span>Visualized In Full</span>
     </button>
     <button type="button" class="hstat" data-jump="secTemplates" title="Jump to the full template list">
       <svg class="hstat-icon" viewBox="0 0 40 40" aria-hidden="true">
@@ -201,19 +208,26 @@
       <b>1-Click</b><span>Import PI Templates</span>
     </button>
   </div>
-  <p class="subhead">Start with your goal — the planner suggests the rest. Tell it what you want and what you have; it works out the most profitable thing you can actually build, using Jita market prices — fetched live where this build can, entered by you where it can't — and the game's real physical limits. Quick estimates from typical values when you want speed, exact numbers when you provide your own. Works for any solar system, from 1 to 50 characters.</p>
-  <details class="quickstart">
-    <summary>New here? Read this first (60 seconds)</summary>
+  <details class="quickstart" open>
+    <summary>New here? Get your first plan in 60 seconds</summary>
     <div class="quickstart-body">
-      <p><b>What this does:</b> you tell it what planets you can reach and how many characters you have; it tells you what to build, how to split your colonies between extraction and factories, and what you'd actually clear per week after tax, shipping and customs. Every answer says how good it is: small operations get a <b>provably optimal</b> plan; big ones get a measured "within X% of the best possible" bound.</p>
+      <p><b>What this does:</b> you tell it what you have. It tells you what to build and
+        how much ISK you&rsquo;ll make each week. Four steps:</p>
       <ol>
-        <li><b>Section 1 — Your Goal.</b> First question: <b>what do you want?</b> — goals listed A to Z with <b>Compare pre-selected</b>. Your answer decides what appears next: a product dropdown for the other three goals; Compare asks for none, it ranks every product. Sourcing starts on <b>mine it</b> (Suggested is one click away), and the <b>detail level</b> lets typical values stand in until you provide your own.</li>
-        <li><b>Section 2 — Your Operation.</b> Each character individually: planets (max 6 with Interplanetary Consolidation V) and skills — plus one <b>extraction program length</b> for the whole operation. Short programs yield much more per week but need more logins.</li>
-        <li><b>Section 3 — Your Systems &amp; Planets.</b> You start with a clean slate — search a solar system to load its planets from ESI, drop in planet screenshots, or add planets by hand (each arrives at a 70% default density). Scan values are yours to enter — or let Quick estimate assume your security band's typical density until you do.</li>
-        <li><b>Section 4 — Costs &amp; Market.</b> <b>Press "Fetch live Jita prices" BEFORE you solve</b> — rankings and net numbers are built from them (they also auto-refresh in the background as you change things). Then taxes, fees, freight — one tap fills typical High/Low/Null/Wormhole rates — and whether you sell instantly or list orders, which changes real money.</li>
-        <li><b>Section 5 — Results.</b> With prices fetched, hit Solve: per-character build sheets plus the analytics — what's bottlenecking you, what the next character or skill is worth, and why each input was extracted, refined, or bought. If anything looks stuck or wrong, press that section's &#10226; Reset and try again.</li>
+        <li><b>Pick a goal</b> (section 1). Not sure? Choose <b>Compare</b> &mdash; it finds
+          the money for you.</li>
+        <li><b>Add what you have</b> (section 2): your characters, then your planets &mdash;
+          press <b>I know my system</b> to type its name, or <b>Find me a home</b> and
+          the tool scouts a region for you.</li>
+        <li><b>Tap where you operate</b> (section 3). Live Jita prices load themselves.</li>
+        <li><b>Press the gold SOLVE button</b> at the bottom. Your plan appears in
+          section 4.</li>
       </ol>
-      <p class="quickstart-note">Numbers here come from FC/CCP's published formulas and the game's own data, verified — where something can't be known (like another player's POCO tax), you set it and the tool says what it assumed. It never silently guesses.</p>
+      <p class="quickstart-note">Stuck? The bar at the bottom always names your next step.
+        More dials live behind <b>Advanced</b> (top right); the full guide is under
+        <b>? Help &amp; Full Guide</b>.
+        <button class="btn small" id="loadExampleBtn" type="button"
+          title="Fills the planner with a sample operation so you can press SOLVE right away">&#9654; Try an example</button></p>
     </div>
   </details>
 </header>
@@ -225,7 +239,7 @@
 
 <section class="card" id="sec3">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">1. Your Goal</span><span class="sec-summary" id="sec3Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">1. START HERE &mdash; What You Want</span><span class="sec-summary" id="sec3Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn reset-section" data-reset="sec3" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec3" title="Collapse or expand this section">&#9660;</button>
@@ -234,26 +248,37 @@
   <div class="sec-body" id="sec3Body"></div>
 </section>
 
-<section class="card collapsed" id="sec0">
-  <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">2. Your Operation</span><span class="sec-summary" id="sec0Summary"></span></h2>
-    <div class="sec-controls">
-      <button class="btn reset-section" data-reset="sec0" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
-      <button class="btn collapse-btn" data-target="sec0" title="Collapse or expand this section">&#9660;</button>
-    </div>
-  </div>
-  <div class="sec-body" id="sec0Body"></div>
-</section>
-
 <section class="card collapsed" id="sec1">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">3. Your Systems &amp; Planets</span><span class="sec-summary" id="sec1Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">2. What You Have</span><span class="sec-summary" id="sec1Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn reset-section" data-reset="sec1" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec1" title="Collapse or expand this section">&#9660;</button>
     </div>
   </div>
   <div class="sec-body" id="sec1Body">
+    <div id="sec0Body"></div>
+    <h3>Where? Either add your systems or scout a region.</h3>
+    <div id="sec1Choice" class="v9-bannerset" role="group" aria-label="Where your systems come from">
+      <button id="chooseSearch" class="v9-banner" type="button">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"></circle><path d="M15 15l5.5 5.5"></path></svg>
+        <span class="v9-banner-txt"><b>I know my system</b><i>Type its name — its planets load</i></span>
+        <svg class="v9-banner-go" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"></path></svg>
+      </button>
+      <button id="chooseScout" class="v9-banner" type="button">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 13.5l13.5-8 2.6 4.6L6 18z"></path><path d="M12.5 16l-2 5.5M8.5 17l-3 4.5"></path></svg>
+        <span class="v9-banner-txt"><b>Find me a home</b><i>Scout a region for your goal</i></span>
+        <svg class="v9-banner-go" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"></path></svg>
+      </button>
+    </div>
+
+    <div id="scoutWrap" hidden>
+      <p class="section-sub">Pick a region and the scout ranks its systems for your goal &mdash;
+        estimates until you scan.</p>
+      <div id="scoutPanel"></div>
+    </div>
+
+    <div id="sec1Mine">
     <div class="quickrate-panel" id="sysSearchPanel">
       <div class="qr-head">
         <b>&#128269; ADD A SOLAR SYSTEM</b>
@@ -269,29 +294,14 @@
       <div class="qr-status" id="sysSearchStatus"></div>
     </div>
 
-    <details class="explain-all">
-      <summary>&#9635; EXPLAIN EVERY DETAIL</summary>
-      <div class="explain-body">
-        <p><b>What this step decides:</b> what your planets can physically produce.</p>
-        <h4>Raw survey values, not just percentages</h4>
-        <p>The engine works in the game's own unit: the <b>per-cycle extraction value</b> your survey window shows (what ESI calls <i>qty_per_cycle</i>). The familiar percentage is shown alongside as a translation — 100% is the value where one extractor roughly feeds 8 basic industry facilities on 6-hour programs.</p>
-        <h4>The physical cap — corrected from earlier versions</h4>
-        <p>An extraction colony produces</p>
-        <p class="ex-math">min( what its facilities can process, extractor supply &divide; 150 )</p>
-        <p>8 basic facilities top out at <b>53,760 P1/week</b> (20 per 30-minute cycle each). A hot planet above 100% does NOT produce beyond that cap — unless the plan adds more basic facilities, which the tool will propose when the surplus is real. Earlier versions scaled linearly past the cap; this one never claims P1 the buildings cannot make.</p>
-        <h4>Why planet type matters</h4>
-        <p>Each type carries a fixed set of raw resources. A Lava planet has no Aqueous Liquids at any density. The tool refuses plans that need a resource the planet does not have — by name — rather than quietly assuming.</p>
-      </div>
-    </details>
 
+    <details class="v9-more-tools" id="moreTools">
+      <summary>&#9881; More tools — space presets &amp; screenshot import</summary>
     <div class="quickrate-panel">
       <div class="qr-head">
-        <b>&#9889; FLAT DENSITY</b>
-        <span class="qr-sub">Set every resource on every planet to one flat density &mdash;
-          or tap a security band for its typical value. Useful for a fast ballpark before
-          you scan anything, but the result is an estimate, not your real numbers.
-          (The Quick estimate detail level in section 1 does this automatically,
-          without touching your saved values.)</span>
+        <b>&#9889; SELECT SPACE TYPE PRESET FLAT RATE</b>
+        <span class="qr-sub">Set one flat density for everything &mdash; a ballpark until
+          you scan.</span>
       </div>
       <div class="qr-row">
         <button class="btn small preset-btn" data-band="highsec" type="button" title="Typical high-sec yield &mdash; an estimate, not a scan">High sec 30%</button>
@@ -312,7 +322,7 @@
     <div class="batch-panel">
       <div class="batch-head">
         <b>Batch import</b>
-        <span class="batch-sub">Up to 20 planet screenshots at once, or a .zip of them. Each planet gets the screenshot's own capture time. Everything is read in your browser &mdash; nothing is uploaded anywhere.</span>
+        <span class="batch-sub">Up to 20 planet screenshots or a .zip &mdash; read in your browser, never uploaded.</span>
       </div>
       <div class="batch-row">
         <label class="upload-label" for="batchInput">&#128193; Choose screenshots or .zip</label>
@@ -322,14 +332,16 @@
       <div class="batch-status" id="batchStatus"></div>
       <div id="batchResults"></div>
     </div>
+    </details>
 
     <div id="v9PlanetList"></div>
+    </div>
   </div>
 </section>
 
 <section class="card collapsed" id="sec2">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">4. Costs &amp; Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">3. Market</span><span class="sec-summary" id="sec2Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn reset-section" data-reset="sec2" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec2" title="Collapse or expand this section">&#9660;</button>
@@ -340,7 +352,7 @@
 
 <section class="card collapsed" id="sec4">
   <div class="section-head-row">
-    <h2 class="section-title"><span class="st-label">5. Results</span><span class="sec-summary" id="sec4Summary"></span></h2>
+    <h2 class="section-title"><span class="st-label">4. Results</span><span class="sec-summary" id="sec4Summary"></span></h2>
     <div class="sec-controls">
       <button class="btn reset-section" data-reset="sec4" title="Reset this section to defaults"><span class="rs-icon">&#10226;</span> Reset</button>
       <button class="btn collapse-btn" data-target="sec4" title="Collapse or expand this section">&#9660;</button>
@@ -356,10 +368,12 @@
 
 
 
-<div class="ref-divider">
-  <span class="ref-divider-label">Reference</span>
-  <p class="ref-divider-note">Look anything up, any time. These are not steps &mdash;
-    you never have to open them.</p>
+<div class="ref-divider" id="viewToggle">
+  <div class="v9-src-toggle" role="group" aria-label="Page view">
+    <button class="btn small src-choice active" id="viewPlanner" type="button">PLANNER</button>
+    <button class="btn small src-choice" id="viewReference" type="button">&#128218; REFERENCE</button>
+  </div>
+  <p class="ref-divider-note">Prices, charts, templates and the chain visualizer live under Reference.</p>
 </div>
 
 <section class="card reference collapsed" id="secChains">
@@ -368,7 +382,7 @@
     <button class="btn collapse-btn" data-target="secChains" title="Collapse or expand this section">&#9660;</button>
   </div>
   <div class="sec-body" id="secChainsBody">
-    <p class="section-sub">Pick any commodity and see its whole production chain drawn — every input edge from raw P0 materials up, in four switchable layouts, with the smallest set of planet types that covers all its ores. Every node shows its per-unit size (m&sup3;) and live Jita price (fetched in section 4 — prices auto-refresh as you work), and every edge shows the units and cargo volume moved per factory cycle. Built from the same verified schematic data the planner solves with, wearing the real in-game icons (loaded live from CCP's image server; clean schematic glyphs stand in until they arrive or when you're offline).</p>
+    <p class="section-sub">Pick any commodity and see its whole production chain drawn &mdash; the planets it needs, per-unit size and live Jita price on every node, units and cargo volume on every edge. Four layouts; click a node to re-root.</p>
     <div id="chainsViz"></div>
   </div>
 </section>
@@ -379,7 +393,7 @@
     <button class="btn collapse-btn" data-target="secMarket" title="Collapse or expand this section">&#9660;</button>
   </div>
   <div class="sec-body" id="secMarketBody">
-  <p class="section-sub">Everything tracked here, with live Jita price trends. Hover one to see which of your planets carry it. The first five columns are the PI chain itself (P0 to P4). <b>Built from PI</b> are things made from PI &mdash; fuel blocks, nanite paste and deployables &mdash; shown with live prices for reference. <b>Bought inputs</b> are the non-PI materials those recipes need. This build's planner plans the PI chain itself, P1&ndash;P4.<span class="hint">&#9432;<span class="hint-body">Each entry shows its 24H / 7D / 30D Jita price movement and per-unit volume. Volume key: <b>&#10003;</b> means that item&rsquo;s volume was individually confirmed against EVE&rsquo;s own SDE data; <b>*</b> means it uses its tier&rsquo;s confirmed value.</span></span></p>
+  <p class="section-sub">Live Jita prices and trends for everything tracked. Hover an item to see which of your planets carry it. P0&ndash;P4 are the PI chain; <b>Built from PI</b> and <b>Bought inputs</b> are shown for reference.<span class="hint">&#9432;<span class="hint-body">Each entry shows its 24H / 7D / 30D Jita price movement and per-unit volume. Volume key: <b>&#10003;</b> means that item&rsquo;s volume was individually confirmed against EVE&rsquo;s own SDE data; <b>*</b> means it uses its tier&rsquo;s confirmed value.</span></span></p>
   <div class="legend-grid" id="legendGrid"></div>
   </div>
 </section>
@@ -469,6 +483,7 @@
 </main>
 
 <div id="stickyCalc">
+  <span id="stickyDots" aria-hidden="true"></span>
   <span id="stickyCalcInfo"></span>
   <button class="btn primary" id="stickyCalcBtn">Solve</button>
 </div>
@@ -481,165 +496,110 @@
       <button class="btn small" id="helpClose" type="button">&times; Close</button>
     </div>
     <div class="help-body">
-      <p class="help-lead">This tool works out what to build on your planets and how much
-        you will make. You enter what you have, it does the arithmetic. Nothing is saved
-        to a server and it never asks for your EVE login.</p>
+      <p class="help-lead">This tool tells you what to build on your planets and how much ISK
+        you will make. You type in what you have; it does the math. It never asks for your
+        EVE login, and nothing you enter leaves your browser.</p>
 
-      <h3>The short version</h3>
+      <h3>Get your plan &mdash; four steps</h3>
       <ol class="help-steps">
-        <li>Pick your goal &mdash; how you define &ldquo;best&rdquo; &mdash; then the product it asks
-          for. <b>Compare comes pre-selected</b> and asks for none: it ranks them all. Typical
-          values stand in for everything else until you provide your own.</li>
-        <li>Enter your characters — each one individually, with their real skills.</li>
-        <li>Add your planets (search a system, drop in screenshots, or type them) — they load at a 70% default density until you enter real scans.</li>
-        <li>Enter your costs &mdash; tax, fees, shipping (or apply a typical space-type preset) &mdash; and load or enter Jita prices.</li>
-        <li>Press Solve (it unlocks once everything your goal and detail level need is defined) — you get a build sheet per character, plus the analytics that explain it.</li>
+        <li><b>Pick a goal</b> in section 1. Not sure what to make? Choose <b>Compare</b>
+          &mdash; it finds the money for you.</li>
+        <li><b>Add what you have</b> in section 2: your characters (one press creates a
+          maxed roster &mdash; fix any skills that aren&rsquo;t, then <b>&#10003; Done</b>),
+          and your planets &mdash; press <b>I know my system</b> to type its name, or
+          <b>Find me a home</b> to scout a region.</li>
+        <li><b>Tap where you operate</b> in section 3 (High/Low/Null/Wormhole). Live Jita
+          prices load and refresh themselves.</li>
+        <li><b>Press the gold SOLVE button</b> at the bottom. Your plan appears in
+          section 4.</li>
       </ol>
+      <p>Never feel lost: the bar at the bottom names your next step, each section shows
+        &#10003; when done, and every open section has a <b>Next &rarr;</b> button. If SOLVE
+        is grey, read the bar.</p>
 
-      <h3>Step 1 &mdash; Your goal</h3>
-      <p>Four ways to define &ldquo;best&rdquo;: <b>most output of your chosen product</b> (then
-        priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
-        weekly amount), <b>a login budget</b> (best net within your sessions per week), or
-        <b>compare everything</b> (the profit ranking across every product your operation could
-        make), listed A to Z with <b>Compare pre-selected</b> &mdash; the tool starts ready to
-        tell you what to build. Your answer dictates the rest of the section: the other three
-        goals ask for a product; <b>Compare shows no product dropdown at all</b> &mdash; it
-        searches every product itself.
-        <b>Compare</b> works in two steps: first the ranked list, then you pick a product
-        (&ldquo;Plan this&rdquo;) and get its full best path &mdash; colonies, build sheet and
-        analytics &mdash; with your goal switched to that product so the choice stays visible.</p>
-      <p><b>Sourcing</b> decides where each input comes from: <b>extract</b> it,
-        <b>refine</b> it from bought ore (150 units of ore per unit made &mdash; roughly 1.9&times;
-        the customs and 4&times; the freight of buying finished), or <b>buy</b> it finished.
-        Every input starts on <b>extract (mine it)</b>. Switch any input to <b>Suggested</b>
-        under <i>Adjust sourcing</i> and the tool picks for it &mdash; from your goal, your
-        systems and (when loaded) prices &mdash; naming every choice with its reason and what
-        the alternatives were worth.</p>
-      <p><b>Detail level</b> is the accuracy-for-convenience dial. <b>Quick estimate</b> answers
-        immediately: unscanned densities assume your security band&rsquo;s typical value and
-        typical costs are prefilled &mdash; every such number is clearly labeled an estimate with
-        the exact assumptions listed. <b>Refined</b> requires your real scans (typical cost
-        presets still allowed, still labeled). <b>Exact</b> means everything is yours &mdash;
-        scans entered, cost rates edited or confirmed &mdash; and only Exact prints unlabeled
-        numbers. The band density assumptions (High sec 30%, Low sec 60%, Null sec 90%,
-        Wormhole 100%) are typical-yield anchors, not game data &mdash; FC/CCP publishes no density
-        table &mdash; so replace them with scans when you commit. The band is only asked for when
-        an unscanned resource is one your chosen goal can actually use; Compare considers every
-        product, so there any unscanned resource counts.</p>
-      <p>Each planner section has a <b>&#10226; Reset</b> button that clears only that
-        section back to defaults, after asking.</p>
+      <h3>Simple and Advanced</h3>
+      <p>The site starts <b>Simple</b>: smart defaults handle accuracy, sourcing and costs.
+        The <b>Advanced</b> switch (top right) reveals every dial &mdash; the accuracy
+        level, sourcing pins, the blend builder, flat-density tools, the full price and
+        cost tables, program length, and deep analytics. Nothing changes underneath; you
+        just see more knobs.</p>
 
-      <h3>Step 2 &mdash; Your operation</h3>
-      <p>Every character is modeled individually. One character can run <b>six planets at
-        most</b>, and that needs Interplanetary Consolidation V. If your main runs six and two
-        alts run one each, that is eight colonies, not eighteen — the tool adds up what you
-        tell it. From 1 to 50 characters, and a one-character operation gets the same rigor
-        (in fact small operations get a <i>provably optimal</i> answer, because they can be
-        searched exhaustively).</p>
-      <p><b>Extraction program length</b> is how long you set your extractors to run. Short
-        programs give more per week but need more logins. Six hours is full pace; a day gives
-        about 81% of it; a week about 34%. The Results section can show this trade as ISK per
-        week <i>and</i> ISK per login, so you can pick what fits your life.</p>
-
-      <h3>Step 3 &mdash; Your systems &amp; planets</h3>
-      <p>You start with <b>no planets</b> &mdash; add your own: search a solar system to load
-        its planets from ESI, drop in survey screenshots, or press <b>+ Add planet</b>.
-        Worth knowing as you plan: one character places only one colony per planet, and even
-        a small chain needs three colonies (two extractors and a factory) &mdash; so most
-        goals want at least three planets in reach.</p>
-      <p>Added planets load with every resource at a <b>70% default density</b>, so plans
-        work immediately; replace the defaults with your real scans for real numbers. Tick a
-        planet&rsquo;s <b>Complete</b> box (right side) to collapse just that card &mdash;
-        each system header also carries a <b>Complete &amp; Collapse All</b>. Two planets
-        with the same name make a plan ambiguous, so duplicates are flagged with an amber
-        &#9888; the moment you type one. Removing a planet is the small <b>&times; remove
-        planet</b> chip on its header row &mdash; it asks first, since scans go with it.</p>
-      <p><b>Resource values come from your in-game planet scan.</b> Enter the raw per-cycle
-        value the survey shows; the familiar percentage appears alongside. Values above 100%
-        are real and the tool never caps them &mdash; but it also never claims output your
-        buildings cannot physically process. When a hot planet outruns its factories, the
-        tool says so and proposes a bigger layout instead of inventing units.</p>
-      <p>The screenshot reader fills planets in from survey screenshots, entirely in your
-        browser. Check its work &mdash; it is a convenience, not a data source.</p>
-
-      <h3>Step 4 &mdash; Costs &amp; market</h3>
+      <h3>The five goals</h3>
       <ul>
-        <li><b>Space-type presets</b> &mdash; one tap fills typical High/Low/Null/Wormhole
-          rates (each figure&rsquo;s rationale is on its button). Presets are typical values,
-          not yours &mdash; results stay labeled as estimates until you edit the fields or press
-          <i>These are my real rates</i>.</li>
-        <li><b>Customs tax</b> &mdash; what your POCO or skyhook charges. The game taxes fixed
-          base values per tier, not market price &mdash; the tool gets this right.</li>
-        <li><b>Sales tax and broker fee</b> &mdash; what the market takes when you sell.</li>
-        <li><b>Price basis</b> &mdash; <i>instant</i> hits existing orders (no broker fee, worse
-          price); <i>patient</i> lists orders (broker fee, better price, if they fill). This is
-          real money and the tool prices both honestly.</li>
-        <li><b>Shipping</b> &mdash; ISK per cubic metre, charged on real cargo volume.</li>
+        <li><b>Compare</b> &mdash; &ldquo;what should I make?&rdquo; Ranks everything by
+          profit. Press <b>Plan this &rarr;</b> on a row for its full plan.</li>
+        <li><b>Fit my logins</b> &mdash; the best money for how often you can log in.</li>
+        <li><b>Max output</b> &mdash; as much as possible of one thing you choose.</li>
+        <li><b>Pick for me</b> &mdash; hands-free. Picks the product and the plan for you.</li>
+        <li><b>Weekly target</b> &mdash; make a set amount each week.</li>
       </ul>
 
-      <h3>Step 5 &mdash; Results</h3>
-      <p>Four ways to define &ldquo;best&rdquo;: <b>most output of your chosen product</b> (then
-        priced honestly &mdash; a loss shows as a loss), <b>a quota</b> (minimum colonies to hit a
-        weekly amount), <b>a login budget</b> (best net within your sessions per week), or
-        <b>compare everything</b> (the profit ranking across every product your operation could
-        make).</p>
-      <p>Every result names its <b>bottleneck</b> (add capacity there first), its
-        <b>answer quality</b> (exact, or within a measured percentage of the best possible),
-        and reconciles every ISK to one ledger you can open and read line by line. A plan
-        that loses money says so with a minus sign &mdash; losses are never hidden.</p>
-      <p>When a goal cannot be met, the refusal is <b>a plain sentence, not a code</b> &mdash;
-        what doesn&rsquo;t fit and why. A quota refusal that knows your best achievable rate
-        offers a one-click <b>Set target to N/wk</b> that re-solves immediately, and the raw
-        engine text stays one click away under <i>Engine detail</i> for bug reports.</p>
-      <p>Results also disclose their honesty about YOUR inputs: a <b>Sourcing — chosen for
-        you</b> card names every suggested extract/refine/buy choice with its reason, and any
-        number built on a stand-in (assumed densities, preset costs) carries an amber
-        <b>ESTIMATE</b> banner listing exactly what was assumed and where to replace it.</p>
-      <p>Each colony card in <b>Plan by character</b> carries a one-click <b>Copy
-        template</b>: a byte-exact community template from the PI Templates library when one
-        matches that planet type and product (credited), otherwise a layout generated for
-        that colony — anything generated is flagged <b class="tpl-warn-inline">&#9888;&#65038;</b>
-        and must be verified in game before you trust it. Any difference between the
-        template and the plan (facility count, command center level, encoded planet type)
-        is listed right under the button.</p>
+      <h3>Where parts come from</h3>
+      <p>Every part can be <b>mined</b>, <b>refined</b> from bought ore, or <b>bought</b>
+        ready-made &mdash; even the middle parts (buy P3s, run just the P4 factory). The
+        tool decides by default and tells you why. To choose yourself, use <b>&#9881;
+        Adjust where parts come from</b> on your results, or Advanced&rsquo;s sourcing
+        panel in section 1. Anything you set is never changed.</p>
+
+      <h3>Making more than one thing</h3>
+      <p>Press <b>+ Add a second product</b> on your results (or the blend builder in
+        Advanced) and give each product a share. Shares always add up to 100.</p>
+
+      <h3>How exact are the numbers?</h3>
+      <p>Automatic. No scans yet &rarr; quick estimates from your space type, clearly
+        labeled. Real scans &rarr; your numbers. Costs confirmed &rarr; nothing assumed at
+        all. (Advanced can force a level.)</p>
+
+      <h3>Your planets</h3>
+      <p>Each planet shows its resources as chips &mdash; click one (or <b>&#9998; Edit</b>)
+        to enter your scan&rsquo;s <b>density %</b>. New planets start at 70% until you do;
+        over 100% is real. Tick <b>Complete</b> to fold a finished planet away &mdash; each
+        system header has a <b>Complete &amp; Collapse All</b>.</p>
+
+      <h3>Region Scout &mdash; where should I live?</h3>
+      <p>In section 2, press <b>Find me a home</b>, pick a region, and it ranks every system
+        in it for your goal. The traffic tag shows how dangerous each system was in the last
+        hour. Press <b>Load planets &rarr;</b> on a winner and they drop into your planner.
+        Scout numbers are estimates until you scan.</p>
+
+      <h3>Reading your plan</h3>
+      <p>The answer comes first &mdash; one card with your ISK per week &mdash; then three
+        tabs: <b>Plan</b> (what to build), <b>Money</b> (the ledger), <b>Why</b> (what&rsquo;s
+        limiting you and what was chosen for you).</p>
+      <p>The plan shows: your money per week (a loss shows as a loss &mdash; never hidden),
+        what each character builds (press <b>Copy template</b> to paste a colony into the
+        game &mdash; &#9888;&#65038; means double-check it first), what&rsquo;s slowing you down, and
+        why each choice was made. Numbers built on guesses carry an amber
+        <b>ESTIMATE</b> label.</p>
+      <p>If your goal can&rsquo;t be done, the tool says why in plain words &mdash; often
+        with a one-click fix, like <b>Set target to N/wk</b>.</p>
+
+      <h3>Saving</h3>
+      <p>Everything saves in your browser as you type. <b>Save My Data</b> downloads a
+        backup file you can load anywhere.</p>
+
+      <h3>Good to know</h3>
+      <ul>
+        <li>No login, no passwords &mdash; public data only.</li>
+        <li>Prices move. Solve again before spending big.</li>
+        <li>It plans; you build. It can&rsquo;t click the in-game buttons for you.</li>
+      </ul>
 
       <h3>The reference sections</h3>
+      <p>Press <b>REFERENCE</b> (below Results) to switch to them; <b>PLANNER</b> brings the
+        steps back.</p>
       <ul>
-        <li><b>All PI Visualized</b> &mdash; pick any commodity and see its whole
-          P0&rarr;P4 chain drawn in four switchable layouts, with the smallest planet set that covers
-          its ores, each commodity&rsquo;s per-unit m&sup3; and live Jita price, and the units + cargo
-          volume moved per factory cycle on every edge. A <b>planet key</b> above the diagram
-          decodes the colored dots under each raw material (bold = in the chain&rsquo;s cover set).
-          Click any node to re-root the diagram.
-          Nodes wear the real in-game icons (fetched live from CCP&rsquo;s image server, like the
-          Market Reference); schematic-style glyphs stand in while they load and whenever
-          you&rsquo;re offline.</li>
-        <li><b>Market Reference</b> &mdash; live Jita prices for all 101 items with trends.</li>
-        <li><b>Price History</b> &mdash; the same data charted, plus live order-book depth.</li>
+        <li><b>All PI Visualized</b> &mdash; any commodity&rsquo;s whole chain, drawn.</li>
+        <li><b>Market Reference</b> &mdash; live Jita prices for every PI item.</li>
+        <li><b>Price History</b> &mdash; the same prices, charted over time.</li>
         <li><b>PI Templates</b> &mdash; ready-made colony layouts. Copy, paste in game, done.</li>
-        <li><b>System Status</b> &mdash; whether EVE and its API are up.</li>
-      </ul>
-
-      <h3>Saving your work</h3>
-      <p>The tool <b>autosaves to your browser</b> as you type. <b>Save My Data</b> downloads
-        a file; use it to move between computers or keep a backup.</p>
-
-      <h3>Things worth knowing</h3>
-      <ul>
-        <li><b>It will not click the buttons for you.</b> It works out what to build and
-          where. You still build it.</li>
-        <li><b>Nothing touches your account.</b> No login, no password. Only public data.</li>
-        <li><b>Screenshots stay on your computer.</b> The image reading happens in your browser.</li>
-        <li><b>Prices move.</b> Recalculate before committing to something large.</li>
+        <li><b>System Status</b> &mdash; is EVE up right now?</li>
       </ul>
 
       <h3>If something looks wrong</h3>
-      <p>First try the two-step fix: press the <b>&#10226; Reset</b> on the section that's
-        misbehaving (or <b>RESET EVERYTHING</b> at the top), then <b>Fetch live Jita
-        prices</b> in section 4 and solve again — most "it won't solve" reports turn out to
-        be market data that hadn't populated yet. Still wrong? Use the <b>Contact / Report
-        a Bug</b> button. It opens an email with your build version already filled in. Tell
-        us what you expected and what happened instead.</p>
+      <p>Press <b>&#10226; Reset</b> on the section that&rsquo;s acting up, press <b>Refresh
+        now</b> in section 3, and solve again. Still wrong? Press <b>Contact / Report a
+        Bug</b> and tell us what happened.</p>
     </div>
   </div>
 </div>

@@ -18,7 +18,28 @@ rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 
 console.log('tsc: emitting ES modules …');
-execFileSync('tsc', ['-p', 'tsconfig.build.json'], { cwd: root, stdio: 'inherit' });
+// Windows-safe compiler launch (owner hit `spawnSync tsc ENOENT` there): the
+// local devDependency's tsc.js run with THIS node binary works on every OS —
+// no .cmd shims, no PATH guessing. A bare `tsc` on PATH is the fallback for
+// environments that install TypeScript globally instead.
+{
+  const { createRequire } = await import('node:module');
+  let tscJs = null;
+  try { tscJs = createRequire(import.meta.url).resolve('typescript/lib/tsc.js'); } catch { /* not installed locally */ }
+  if (tscJs !== null) {
+    execFileSync(process.execPath, [tscJs, '-p', 'tsconfig.build.json'], { cwd: root, stdio: 'inherit' });
+  } else {
+    try {
+      execFileSync('tsc', ['-p', 'tsconfig.build.json'], { cwd: root, stdio: 'inherit' });
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        console.error('build: TypeScript not found — run `npm install` in this folder first, then re-run the build.');
+        process.exit(1);
+      }
+      throw e;
+    }
+  }
+}
 
 console.log('copy: static shell …');
 cpSync(join(root, 'static'), dist, { recursive: true });

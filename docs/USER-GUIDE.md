@@ -17,8 +17,9 @@ silently: every assumption is named, on screen, next to the number it touched.
 
 **"What do you want?" comes first.** Goals are listed A to Z with **Compare
 pre-selected**, and the answer dictates what appears next: Max output, Quota
-and Login budget ask for a product; **Compare shows no product dropdown at
-all** — it ranks every product itself. Four goals:
+and Login budget ask for a product; **Compare and Maximize profits show no
+product dropdown at all** — they consider every product themselves. Five
+goals:
 
 | Goal | Question it answers | Needs prices? |
 |---|---|---|
@@ -26,6 +27,7 @@ all** — it ranks every product itself. Four goals:
 | Weekly quota | "Fewest colonies to hit N per week?" | Optional |
 | Login budget | "Best net within my sessions per week?" | Whole chain |
 | Compare everything | "What SHOULD I be making?" | At least one |
+| Maximize profits | "Just tell me the best move." Picks the product AND the sourcing automatically — including buying P2/P3 parts finished when that nets more — and hands you the finished plan with the runners-up listed. | At least one |
 
 In Compare, "fetch live Jita prices" covers **every product and input** so
 the whole board ranks — anything still unpriced is summarized in one line
@@ -40,9 +42,29 @@ visible in section 1 and you can re-solve or adjust it.
 Change the goal at any time — the section reshapes itself around your answer,
 showing only what that goal needs.
 
-**Sourcing defaults to mine-it.** Each input can be *extracted* (mined on
-your planets), *refined* (buy ore, 150:1), or *bought* finished — and every
-input starts pinned to **extract (mine it)**. Switch any input to **Suggested
+**Product mix.** In Max output, Quota and Login budget you don't have to
+plan one product: press **+ Plan a mix of products instead** and name up to
+six products with percentage shares. The percentages fix the RATIO of weekly
+unit output (60/40 = 60 units of the first for every 40 of the second); the
+solver splits your characters between product lines, judge-checks every
+line, and reports the blend — Max maximizes the blend's scale, Quota hits a
+total blended units/week (with the achievable rate on refusals), and Login
+budget picks the best cadence for the blend's combined net. The result says
+plainly that a partitioned plan is a certified-feasible lower bound on the
+theoretical joint optimum. Sourcing preferences apply to every line that
+uses them.
+
+**Sourcing defaults to mine-it — but you never have to start from raw
+materials.** Each P1 input can be *extracted* (mined on your planets),
+*refined* (buy ore, 150:1), or *bought* finished, and every **intermediate
+part** (P2/P3) can be *made in-house* (the default) or **bought finished —
+which cuts the chain there**: buy the P3s and run just the P4 factory, and
+everything beneath the bought part (factories, extractors, P1 decisions)
+disappears from the plan. Compare and Maximize profits show global P1
+preferences that apply to every candidate; Suggested explores buying
+intermediates automatically when prices are loaded and it nets more.
+Every input starts pinned to **extract (mine it)** and every intermediate
+to make-in-house. Switch any input to **Suggested
 (auto)** under Adjust sourcing and the tool picks for it: the heuristic
 extracts what you have scanned and buys what you lack; when prices are
 loaded, it re-solves all three alternatives per input through the full engine
@@ -68,6 +90,14 @@ Deep analytics button remains the thorough path.
 - **Exact** — everything is yours: scans entered, and the cost rates either
   edited by you or confirmed with *These are my real rates* in section 4.
   Only Exact prints unlabeled numbers.
+
+**One SOLVE button, and a guide to it.** The gold **SOLVE** lives in the
+always-visible bar at the bottom of the screen — there is exactly one. The
+text beside it is a pilot light that always names your single next action
+("Next → Step 3: add at least one planet", "Next → Step 4: fetch live Jita
+prices — then press SOLVE", "Ready — press SOLVE"), and every section header
+carries a ✓ when that step is complete or a → when it's the one that needs
+you. Follow the arrows and you can't get lost.
 
 **Reset.** Every planner section has a ⟲ Reset button that clears only that
 section back to defaults, after a confirm that names what will go.
