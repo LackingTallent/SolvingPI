@@ -66,9 +66,35 @@ test('price service: best bid/ask AT THE STATION, other locations excluded, volu
   const q = snapshot.prices['Coolant']!;
   assert.equal(q.bid, 11000);
   assert.equal(q.ask, 12500);
-  assert.ok(Math.abs((q.dailyVolume ?? 0) - 5000) < 1e-9);
+  // T-18 venue consistency: regional daily volume (5000) is scaled by the
+  // station's share of the standing book — 4 of 6 equal-volume orders sit at
+  // the station, so 5000 × 4/6.
+  assert.ok(Math.abs((q.dailyVolume ?? 0) - 5000 * (4 / 6)) < 1e-6);
   assert.deepEqual(snapshot.unpriced, []);
   assert.match(snapshot.source, /region 10000002/);
+});
+
+test('price service pages the order book — best prices beyond page 1 are seen (T-18)', async () => {
+  // Page 1 carries a worse ask; page 2 carries the true best ask + the only
+  // bid. Reading page 1 alone would misprice the ask AND drop the bid side.
+  const paged: FetchJson = async (url: string) => {
+    if (/history/.test(url)) return { body: [{ date: '2026-08-10', volume: 7000 }], headers: {} };
+    const page = Number(/[?&]page=(\d+)/.exec(url)?.[1] ?? '1');
+    const mk = (buy: boolean, price: number) => ({
+      is_buy_order: buy, price, type_id: 9832, location_id: JITA_44_STATION_ID, volume_remain: 500,
+    });
+    if (page === 1) return { body: [mk(false, 14000)], headers: { 'x-pages': '2' } };
+    return { body: [mk(false, 12250), mk(true, 11750)], headers: {} };
+  };
+  const snapshot = await fetchPrices(['Coolant'], {
+    ids: idRegistry(testIds),
+    now: () => '2026-08-25T12:00:00Z',
+    fetchJson: paged,
+  });
+  const q = snapshot.prices['Coolant']!;
+  assert.equal(q.ask, 12250, 'best ask lives on page 2 — paging must find it');
+  assert.equal(q.bid, 11750, 'the only bid lives on page 2');
+  assert.deepEqual(snapshot.unpriced, []);
 });
 
 test('price service: one-sided or empty books are UNPRICED with reasons, never guessed', async () => {

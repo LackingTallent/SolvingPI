@@ -212,13 +212,27 @@ check('fresh default world: ZERO planets, SOLVE gated with "add at least one pla
 await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
 await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
 await page.waitForTimeout(300);
-check('added planet: expanded at 70% defaults, labeled remove chip, "Complete" box',
+// Owner 2026-09-03: NO default density any more — a planet added before the
+// space type is chosen arrives BLANK (empty density fields, awaiting band).
+check('added planet: expanded with NO default density (blank until a space type is picked), labeled remove chip, "Complete" box',
   await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1
-  && await page.locator('.v9-planet input[placeholder="density %"]').first().inputValue() === '70'
+  && await page.locator('.v9-planet input[placeholder="density %"]').first().inputValue() === ''
   && /remove planet/i.test(await page.locator('button[title="Remove this planet"]').first().textContent() ?? '')
   && /Complete(?!\s*&)/.test(await page.locator('.v9-done').first().textContent() ?? ''));
-check('fresh default: gate now nudges the sequence — Step 3, fetch prices first',
+// Truth audit 2026-09-03: assumed densities exist only AFTER a band pick —
+// the gate asks for the space band first (one tap bands every blank density),
+// and only then nudges toward prices.
+check('fresh default: gate asks for the space band first (assumed densities)',
+  /space type/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+await page.locator('#sec1 .fin-presets .preset-btn', { hasText: 'Null sec' }).click();
+await page.waitForTimeout(300);
+check('fresh default: after the band tap, the nudge moves on to prices',
   /Next → Step 3: fetch live Jita prices/.test(await page.locator('#stickyCalcInfo').textContent() ?? ''));
+check('band tap banded the blank planet to the null-sec typical (w > 0, marked ~)',
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+    return s.planets[0].resources.every((r) => r.assumed === true && r.w > 0) && s.spaceBand === 'nullsec';
+  }));
 
 // 5b2 ── Section 2 gate (owner spec 2026-09-01): empty roster, then the
 // reversible Done button.
@@ -282,11 +296,71 @@ await page.click('summary:has-text("Adjust sourcing")');
 const churnedPins = await page.locator('details.v9-sourcing select').evaluateAll((els) => els.map((e) => e.value));
 check('churn: pins re-derived to mine-it for the final product', churnedPins.length >= 1 && churnedPins.every((v) => v === 'extract'));
 
+// 6b ── Round-4 regression: hand-editing a price must actually TAKE — the
+// fetched order-book depth used to shadow the edited bid/ask silently.
+await page.evaluate((s) => {
+  const st = { ...s, mode: 'max', modeChosen: true };
+  st.prices = { ...st.prices };
+  st.prices['Water'] = {
+    bid: 750, ask: 900,
+    bids: [{ price: 750, qty: 1e9 }], asks: [{ price: 900, qty: 1e9 }],
+  };
+  localStorage.setItem('solving-pi-v9-state', JSON.stringify(st));
+}, seed);
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await page.evaluate(() => document.getElementById('sec2')?.classList.remove('collapsed'));
+await page.click('#sec2 summary:has-text("Edit prices & costs by hand")');
+const waterRow = page.locator('#sec2 tr', { hasText: 'Water (P1)' }).first();
+const bidInput = waterRow.locator('input').first();
+await bidInput.fill('1500'); await bidInput.dispatchEvent('change');
+await page.waitForTimeout(200);
+check('hand-edited bid replaces the quote AND drops the stale depth (edit is never a no-op)',
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
+    const q = s.prices['Water'];
+    return q.bid === 1500 && q.bids === undefined && q.asks === undefined;
+  }));
+
+// 6c ── Round-4 race guards: async compare completions must never pose as
+// current after the world changed, and a superseded solve must never stomp
+// a newer mode's answer.
+// spaceBand set so the mid-run "+ Add planet" arrives at a band typical and
+// the SECOND solve isn't gated on the space-type question.
+await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify({ ...s, mode: 'compare', modeChosen: true, spaceBand: 'nullsec' })), seed);
+await page.reload(); await page.waitForSelector('body[data-smoke="ok"]');
+await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
+// Wait for the in-flight progress paint, then change an input mid-run.
+await page.waitForFunction(() => /Ranking products/.test(document.getElementById('resultsPanel')?.textContent ?? ''), { timeout: 60000 });
+await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
+await page.waitForFunction(() => {
+  const t = document.getElementById('resultsPanel')?.textContent ?? '';
+  return !/^(Solving|Ranking products)/.test(t) && t.length > 0;
+}, { timeout: 120000 });
+check('race: compare finishing after an input edit renders WITH the stale warning',
+  await page.locator('#resultsPanel .v9-stale').count() === 1
+  && await page.locator('#resultsPanel table tr').count() > 3);
+// Mode switch mid-run: start compare again, immediately switch to max and
+// re-solve; the abandoned compare must never overwrite the max verdict.
+await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
+await page.waitForFunction(() => /Solving|Ranking products/.test(document.getElementById('resultsPanel')?.textContent ?? ''), { timeout: 60000 });
+await page.evaluate(() => document.getElementById('sec3')?.classList.remove('collapsed'));
+await page.check('input[name="v9mode"][value="max"]');
+await page.waitForTimeout(150);
+await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
+await page.waitForFunction(() => /building|units\/wk|\/week/.test(document.getElementById('resultsPanel')?.textContent ?? ''), { timeout: 120000 });
+await page.waitForTimeout(6000); // give the abandoned compare time to finish (and be discarded)
+check('race: abandoned compare never stomps the newer max result',
+  await page.evaluate(() => {
+    const t = document.getElementById('resultsPanel')?.textContent ?? '';
+    return !/Ranking products/.test(t) && !/Plan this/.test(t) && /\/week|units\/wk/.test(t);
+  }));
+
 // 7 ── Review screenshots: carbon results, daylight everything, phone width.
 await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
 await page.waitForFunction(() => {
   const p = document.getElementById('resultsPanel');
-  return p && p.childElementCount > 0 && !/^Solving/.test(p.textContent ?? '');
+  return p && p.childElementCount > 0 && !/^(Solving|Ranking products)/.test(p.textContent ?? '');
 }, { timeout: 120000 });
 await page.screenshot({ path: join(shots, 'carbon-results.png') });
 await page.evaluate(() => document.querySelector('[data-set-theme="daylight"]')?.click());

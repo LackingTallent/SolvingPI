@@ -105,6 +105,10 @@ export interface ImportedSystemPlanet {
 export interface ImportedSystem {
   readonly system: string;
   readonly planets: ReadonlyArray<ImportedSystemPlanet>;
+  /** ESI security_status; wormhole (J-space) systems are flagged separately
+   * because their ESI security (-0.99) would otherwise read as null-sec. */
+  readonly security: number;
+  readonly wormhole: boolean;
 }
 
 /**
@@ -113,7 +117,7 @@ export interface ImportedSystem {
  */
 export async function importSystem(esi: EsiJson, systemId: number): Promise<ImportedSystem> {
   const sys = (await esi(`${ESI_BASE_URL}/universe/systems/${systemId}/?datasource=tranquility`)) as {
-    name: string; planets?: Array<{ planet_id: number }>;
+    name: string; security_status?: number; planets?: Array<{ planet_id: number }>;
   };
   const planetIds = (sys.planets ?? []).map((p) => p.planet_id);
   const planets: ImportedSystemPlanet[] = [];
@@ -133,5 +137,6 @@ export async function importSystem(esi: EsiJson, systemId: number): Promise<Impo
     planets.push(...results);
   }
   planets.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  return { system: sys.name, planets };
+  // J-space (wormhole) system ids live in the 31xxxxxx block.
+  return { system: sys.name, planets, security: sys.security_status ?? 0, wormhole: systemId >= 31000000 && systemId < 32000000 };
 }

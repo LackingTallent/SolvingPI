@@ -16,7 +16,7 @@ const dist = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
 
 const server = createServer((req, res) => {
-  const path = join(dist, req.url === '/' ? 'index.html' : req.url);
+  const path = join(dist, req.url === '/' ? 'index.html' : req.url.split('?')[0]);
   if (!existsSync(path)) { res.writeHead(404); res.end('nope'); return; }
   res.writeHead(200, { 'Content-Type': types[extname(path)] ?? 'application/octet-stream' });
   res.end(readFileSync(path));
@@ -93,17 +93,18 @@ const checks = [
   // dropdown and no sourcing controls render on a fresh visit.
   ['no goal pre-selected — the user must choose (owner 2026-09-02)',
     !/name="v9mode"[^>]*checked/.test(dom) && dom.includes('Select a Goal')],
-  // Owner spec: ZERO starter planets; the 70% default applies to ADDED
-  // planets (covered in ui-edge/ui-matrix by pressing + Add planet).
-  ['starter world is empty; explainer still teaches the 70% default',
-    !dom.includes('v9-planet"') && dom.includes('Planetary Resource Density is set to 70%')],
+  // Owner spec: ZERO starter planets, and NO default density any more —
+  // the explainer must teach that the space type defines densities
+  // (blank until picked; covered in ui-edge/ui-matrix by pressing + Add planet).
+  ['starter world is empty; explainer teaches the no-default/space-type rule',
+    !dom.includes('v9-planet"') && dom.includes('NO density until you pick your type of space')],
   ['systems panel headings are caps, explainer removed',
     dom.includes('ADD A SOLAR SYSTEM') && dom.includes('SELECT SPACE TYPE PRESET FLAT RATE')
     && !dom.includes('what ESI does <b>not</b> publish')],
   ['Complete & Collapse checkbox + per-system collapse-all rendered',
     /Complete (&amp;|&) Collapse/.test(dom) && /Complete (&amp;|&) Collapse All/.test(dom)],
   ['security-band density buttons present', dom.includes('data-band="nullsec"')],
-  ['cost presets + confirm-own-rates rendered', dom.includes('These are my real rates')],
+  ['"Where do you operate?" presets render in section 2 (confirm button retired)', dom.includes('Where do you operate?') && !dom.includes('These are my real rates')],
   ['price fetch can resolve type ids beyond the partial registry (legacy fallback)', dom.includes('data-typeids="pass"')],
   ['no uncaught page errors in console', jsErrors.length === 0],
 ];

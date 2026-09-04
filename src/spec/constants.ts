@@ -102,9 +102,11 @@ export interface FacilitySpec {
 }
 
 export const FACILITY: Readonly<Record<FacilityKind, FacilitySpec>> = {
-  // CC provides CPU/PG (see CC_LEVELS); its own consumption is 0. Purchase price
-  // ~90k ISK is UNVERIFIED (library 11) — null until confirmed.
-  commandCenter: { cpuTf: 0, pgMw: 0, priceIsk: null, capacityM3: 500, cycleSeconds: null },
+  // CC provides CPU/PG (see CC_LEVELS); its own consumption is 0. Purchase
+  // price 81,000 ISK — NPC-seeded, VERIFIED 2026-09-03 against EVE
+  // University "Setting up a planetary colony" ("NPCs sell them for only
+  // 81,000 ISK"). Market listings can drift a few percent above seed.
+  commandCenter: { cpuTf: 0, pgMw: 0, priceIsk: 81000, capacityM3: 500, cycleSeconds: null },
   ecu: { cpuTf: 400, pgMw: 2600, priceIsk: 45000, capacityM3: null, cycleSeconds: null },
   extractorHead: { cpuTf: 110, pgMw: 550, priceIsk: 0, capacityM3: null, cycleSeconds: null },
   basic: { cpuTf: 200, pgMw: 800, priceIsk: 75000, capacityM3: null, cycleSeconds: 1800 },
@@ -125,6 +127,13 @@ export const CC_LEVELS: ReadonlyArray<{ cpuTf: number; pgMw: number; upgradeCost
 ];
 
 /** Links. SOURCE: UniWiki Planetary Industry. cost(l km) = base + perKm × l. */
+/** Conservative planning assumption for inter-facility link length (owner
+ * approved 2026-09-03, truth audit T-06). Real layouts have nonzero link
+ * distances; pricing links at 0 km let archetypes "fit" at 97%+ of CC5's
+ * power grid — unbuildable in game once laid out. 700 km per link is a
+ * mid-range compact-colony figure; every layout the allocator builds is
+ * priced with it, and the archetype caps are re-derived from what fits. */
+export const DEFAULT_LINK_KM = 700;
 export const LINK_BASE_CPU_TF = 15;
 export const LINK_CPU_TF_PER_KM = 0.2;
 export const LINK_BASE_PG_MW = 10;

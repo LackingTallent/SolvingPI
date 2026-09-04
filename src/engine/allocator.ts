@@ -18,9 +18,9 @@ import { P1_FROM_P0, SCHEMATICS, tierOf, type PlanetType } from '../spec/schemat
 import { canBuildHighTech, spawnsOn } from '../world/planets.js';
 import { fitsCommandCenter, layout, type Layout } from '../world/facilities.js';
 import { operation, type Operation } from '../world/characters.js';
-import { perHourRate, type ExtractionOptions } from '../world/extraction.js';
+import { cycleSecondsForProgram, programCycles, type ExtractionOptions } from '../world/extraction.js';
 import { oreOf } from './chain.js';
-import { CC_LEVELS } from '../spec/constants.js';
+import { CC_LEVELS, DEFAULT_LINK_KM, FACILITY, TIER_VOLUME_M3 } from '../spec/constants.js';
 import { HOURS_PER_WEEK } from './flow.js';
 
 export interface PlanetInfo {
@@ -35,18 +35,28 @@ export interface SolveWorld {
   readonly planets: ReadonlyArray<PlanetInfo>;
   readonly programHours: number;
   readonly extraction?: ExtractionOptions;
+  /**
+   * Contested-deposit haircut (truth audit T-08, owner approved 2026-09-03):
+   * each ADDITIONAL colony extracting the same P0 on the same planet yields
+   * (1 - penalty) of the previous one. The game has head-overlap and
+   * depletion mechanics CCP never published; 0 (the engine default) is the
+   * optimistic end. The UI passes its own configurable default.
+   */
+  readonly stackingPenalty?: number;
 }
 
-const WORLD_KEYS = ['operation', 'planets', 'programHours', 'extraction'] as const;
+const WORLD_KEYS = ['operation', 'planets', 'programHours', 'extraction', 'stackingPenalty'] as const;
+
+function stackPenaltyOf(world: SolveWorld): number {
+  const v = world.stackingPenalty ?? 0;
+  if (!Number.isFinite(v) || v < 0 || v > 0.9) throw new Error(`stackingPenalty must be 0..0.9, got ${v}`);
+  return v;
+}
 
 export const P0_PER_BASIC_PER_HOUR = 3000 * 2; // 30-min cycles
 export const P1_PER_BASIC_PER_WEEK = 20 * 2 * HOURS_PER_WEEK; // 6,720
-export const MAX_BASICS_PER_EXTRACTION_COLONY = 12; // CPU/PG-verified (Gate 1)
-export const REFINERY_BASICS = 8;
-export const ADV_PER_COLONY = 24;
-export const HT_PER_COLONY = 16;
 
-const links = (n: number) => Array.from({ length: n }, () => ({ lengthKm: 0, level: 0 }));
+const links = (n: number) => Array.from({ length: n }, () => ({ lengthKm: DEFAULT_LINK_KM, level: 0 }));
 
 export function minCcLevel(l: Layout): number {
   for (let lvl = 0; lvl < CC_LEVELS.length; lvl++) {
@@ -58,6 +68,20 @@ export function minCcLevel(l: Layout): number {
 function extractionLayout(basics: number): Layout {
   return layout({ ecus: 1, headsPerEcu: [10], basic: basics, advanced: 0, hightech: 0, storage: 0, launchpads: 1, links: links(basics + 2) });
 }
+/** Largest facility count whose layout fits a maxed CC with DEFAULT_LINK_KM
+ * links (truth audit T-06): caps are DERIVED from the fit check, never
+ * asserted. At 0-km links the old constants (12/24) sat at 97%+ of CC5's
+ * power grid — unbuildable once real link distances are paid for. */
+function maxThatFits(build: (n: number) => Layout, hardMax: number): number {
+  for (let n = hardMax; n >= 1; n--) {
+    if (fitsCommandCenter(build(n), CC_LEVELS.length - 1).fits) return n;
+  }
+  throw new Error('no facility count fits a maxed command center — link assumption broken');
+}
+export const MAX_BASICS_PER_EXTRACTION_COLONY = maxThatFits(extractionLayout, 12);
+export const REFINERY_BASICS = maxThatFits((n) => layout({ ecus: 0, headsPerEcu: [], basic: n, advanced: 0, hightech: 0, storage: 1, launchpads: 1, links: links(n + 2) }), 8);
+export const ADV_PER_COLONY = maxThatFits((n) => layout({ ecus: 0, headsPerEcu: [], basic: 0, advanced: n, hightech: 0, storage: 1, launchpads: 1, links: links(n + 2) }), 24);
+export const HT_PER_COLONY = maxThatFits((n) => layout({ ecus: 0, headsPerEcu: [], basic: 0, advanced: 0, hightech: n, storage: 1, launchpads: 1, links: links(n + 2) }), 16);
 const REFINERY_LAYOUT: Layout = layout({ ecus: 0, headsPerEcu: [], basic: REFINERY_BASICS, advanced: 0, hightech: 0, storage: 1, launchpads: 1, links: links(REFINERY_BASICS + 2) });
 const ADV_LAYOUT: Layout = layout({ ecus: 0, headsPerEcu: [], basic: 0, advanced: ADV_PER_COLONY, hightech: 0, storage: 1, launchpads: 1, links: links(ADV_PER_COLONY + 2) });
 const HT_LAYOUT: Layout = layout({ ecus: 0, headsPerEcu: [], basic: 0, advanced: 0, hightech: HT_PER_COLONY, storage: 1, launchpads: 1, links: links(HT_PER_COLONY + 2) });
@@ -72,12 +96,56 @@ export interface ExtractionOption {
   readonly p1PerWeek: number;
 }
 
+/**
+ * Buffer-aware extraction sizing (truth audit T-07, owner approved
+ * 2026-09-03). Extraction is front-loaded — the first cycles of a 336h
+ * program run ~6x the average rate — so sizing basics to the AVERAGE and
+ * crediting the whole supply overstated long programs: the early burst
+ * overflows what the basics + the launchpad buffer can absorb, and the
+ * game loses that P0. This simulates the real cycle series (two programs
+ * back-to-back, backlog carried, steady state read from the second)
+ * against the launchpad's buffer, charges the overflow, and picks the
+ * basics count that maximizes DELIVERED P1 — often MORE basics than the
+ * old average-rate ceil, sometimes an honest haircut instead.
+ */
+const extractionCache = new Map<string, { basics: number; p1PerWeek: number }>();
+function bufferAwareExtraction(w: number, programHours: number, opts: ExtractionOptions): { basics: number; p1PerWeek: number } {
+  const key = `${w}|${programHours}|${opts.truncatePerCycle ?? false}|${opts.cycleSecondsOverride ?? 0}`;
+  const hit = extractionCache.get(key);
+  if (hit !== undefined) return hit;
+  const cycles = programCycles(w, programHours, opts);
+  const override = opts.cycleSecondsOverride ?? 0;
+  const cycleSeconds = override !== 0 ? override : cycleSecondsForProgram(programHours);
+  const cycleHours = cycleSeconds / 3600;
+  // The extraction archetype buffers in its single launchpad (no storage).
+  const bufferUnits = (FACILITY.launchpad.capacityM3 ?? 10000) / TIER_VOLUME_M3[0]!;
+  let best = { basics: 1, p1PerWeek: 0 };
+  for (let b = 1; b <= MAX_BASICS_PER_EXTRACTION_COLONY; b++) {
+    const absorbPerCycle = b * P0_PER_BASIC_PER_HOUR * cycleHours;
+    let backlog = 0;
+    let processed = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      processed = 0;
+      for (const yld of cycles) {
+        backlog += yld;
+        const take = Math.min(backlog, absorbPerCycle);
+        processed += take;
+        backlog -= take;
+        if (backlog > bufferUnits) backlog = bufferUnits; // overflow is LOST
+      }
+    }
+    const effPerHour = processed / programHours;
+    const p1 = Math.min(b * P1_PER_BASIC_PER_WEEK, (effPerHour / P0_PER_P1) * HOURS_PER_WEEK);
+    if (p1 > best.p1PerWeek + 1e-9) best = { basics: b, p1PerWeek: p1 };
+  }
+  extractionCache.set(key, best);
+  return best;
+}
+
 export function extractionOption(planet: PlanetInfo, p0: string, world: SolveWorld): ExtractionOption {
   const w = planet.resources[p0];
   if (w === undefined) throw new Error(`${planet.name} does not carry ${p0}`);
-  const supply = perHourRate(w, world.programHours, world.extraction ?? {});
-  const basics = Math.min(MAX_BASICS_PER_EXTRACTION_COLONY, Math.max(1, Math.ceil(supply / P0_PER_BASIC_PER_HOUR)));
-  const p1PerWeek = Math.min(basics * P1_PER_BASIC_PER_WEEK, (supply / P0_PER_P1) * HOURS_PER_WEEK);
+  const { basics, p1PerWeek } = bufferAwareExtraction(w, world.programHours, world.extraction ?? {});
   return { planet, p0, p1: P1_FROM_P0[p0]!, w, basics, p1PerWeek };
 }
 
@@ -193,6 +261,7 @@ function place(
   world: SolveWorld,
   counts: RoleCounts,
   spread: boolean,
+  reverse = false,
 ): Placed & { error?: never } | { error: string } {
   const capacity = new Map<string, number>(); // planet -> remaining colonies
   for (const p of world.planets) capacity.set(p.name, world.operation.characters.length);
@@ -208,8 +277,13 @@ function place(
   }
 
   const extractPicks: ExtractionOption[] = [];
+  // Tiebreak matches countsFor so sizing and placement walk the same order.
+  // The reverse variant flips input priority on contended planets — the
+  // fixed order was a search blind spot (truth audit T-12): the same input
+  // always claimed a shared best planet, whatever the counts tried.
   const scarcestFirst = Object.entries(counts.extract)
-    .sort((a, b) => (options.get(a[0])!.length - options.get(b[0])!.length));
+    .sort((a, b) => (options.get(a[0])!.length - options.get(b[0])!.length) || a[0].localeCompare(b[0]));
+  if (reverse) scarcestFirst.reverse();
   for (const [p1, n] of scarcestFirst) {
     let placed = 0;
     const opts = options.get(p1)!;
@@ -292,26 +366,48 @@ function facilityNeeds(unit: ChainNeeds, x: number): {
   return { adv, ht, perSchem };
 }
 
-/** Role counts needed to hit rate X (all-ceil), using best-first extraction. */
+/**
+ * Role counts needed to hit rate X (all-ceil), sized against a SHARED planet
+ * capacity ledger in the same order place() allocates (scarcest extracted
+ * input first, best planet first, per-planet cap = #characters).
+ *
+ * User-reported defect (2026-09-03): the old sizing priced every P1 against
+ * the best planets INDEPENDENTLY, so when two inputs wanted the same planet,
+ * placement starved the loser and the binary search declared rates
+ * infeasible that a contention-aware sizing reaches — greedy answers
+ * bottomed out at ~36% of the fractional bound on multi-input chains.
+ * Sizing and placement now walk the same ledger, so what this function
+ * says fits is what place() actually builds.
+ */
 function countsFor(world: SolveWorld, unit: ChainNeeds, x: number): RoleCounts | { error: string } {
-  const extract: Record<string, number> = {};
-  for (const [p1, perUnit] of Object.entries(unit.extractP1PerWeek)) {
-    const needed = perUnit * x;
+  const chars = world.operation.characters.length;
+  const capacity = new Map<string, number>();
+  for (const p of world.planets) capacity.set(p.name, chars);
+
+  const optionsByP1 = new Map<string, ExtractionOption[]>();
+  for (const [p1] of Object.entries(unit.extractP1PerWeek)) {
     const p0 = oreOf(p1);
     const opts = world.planets
       .filter((p) => p.resources[p0] !== undefined)
       .map((p) => extractionOption(p, p0, world))
       .sort((a, b) => b.p1PerWeek - a.p1PerWeek);
     if (opts.length === 0) return { error: `no-planet-for: ${p1} (${p0}) — no accessible planet carries it` };
-    // Colonies best-first until cumulative capacity covers the need (planet
-    // reuse up to #chars handled in place()).
+    optionsByP1.set(p1, opts);
+  }
+  const extract: Record<string, number> = {};
+  const penalty = stackPenaltyOf(world);
+  const scarcestFirst = Object.entries(unit.extractP1PerWeek)
+    .sort((a, b) => (optionsByP1.get(a[0])!.length - optionsByP1.get(b[0])!.length) || a[0].localeCompare(b[0]));
+  for (const [p1, perUnit] of scarcestFirst) {
+    const needed = perUnit * x;
     let cum = 0;
     let n = 0;
-    const maxColonies = world.planets.length * world.operation.characters.length + 1;
-    while (cum < needed && n < maxColonies) {
-      const opt = opts[Math.min(Math.floor(n / world.operation.characters.length), opts.length - 1)]!;
-      cum += opt.p1PerWeek;
-      n++;
+    for (const opt of optionsByP1.get(p1)!) {
+      let cap = capacity.get(opt.planet.name) ?? 0;
+      let stackYield = opt.p1PerWeek; // T-08: each extra colony on the same deposit yields less
+      while (cap > 0 && cum < needed) { cum += stackYield; stackYield *= 1 - penalty; cap--; n++; }
+      capacity.set(opt.planet.name, cap);
+      if (cum >= needed) break;
     }
     if (cum < needed) return { error: `no-capacity-for: ${p1}` };
     extract[p1] = n;
@@ -322,12 +418,21 @@ function countsFor(world: SolveWorld, unit: ChainNeeds, x: number): RoleCounts |
   }
   // Size factory colonies from INTEGER per-schematic needs (see facilityNeeds).
   const needs = facilityNeeds(unit, x);
-  return {
-    extract,
-    refine,
-    advanced: Math.ceil(needs.adv / ADV_PER_COLONY - 1e-9),
-    ht: Math.ceil(needs.ht / HT_PER_COLONY - 1e-9),
-  };
+  const advanced = Math.ceil(needs.adv / ADV_PER_COLONY - 1e-9);
+  const ht = Math.ceil(needs.ht / HT_PER_COLONY - 1e-9);
+  // Factory sites draw from the SAME ledger — refuse rates whose sites
+  // cannot fit the capacity extraction left over (mirrors place()).
+  const refineTotal = Object.values(refine).reduce((a, b) => a + b, 0);
+  let remaining = 0;
+  let remainingHt = 0;
+  for (const p of world.planets) {
+    const c = capacity.get(p.name) ?? 0;
+    remaining += c;
+    if (canBuildHighTech(p.type)) remainingHt += c;
+  }
+  if (ht > remainingHt) return { error: 'place-ht: no Barren/Temperate planet capacity for a high-tech colony' };
+  if (refineTotal + advanced + ht > remaining) return { error: 'no-capacity-for: factory sites (planet capacity exhausted by extraction)' };
+  return { extract, refine, advanced, ht };
 }
 
 function totalColonies(c: RoleCounts): number {
@@ -336,43 +441,167 @@ function totalColonies(c: RoleCounts): number {
     + c.advanced + c.ht;
 }
 
-/** Fractional relaxation upper bound (integrality AND planet contention relaxed). */
+/**
+ * Fractional relaxation upper bound (integrality relaxed) with a JOINT
+ * planet-contention tightening (T-13, owner 2026-09-03).
+ *
+ * Base relaxation (Round-2 fix, still the λ=0 backbone): per input, pool
+ * every colony's penalized yield ACROSS planets and take them globally
+ * best-first — per-planet series are decreasing, so the global top-n is
+ * prefix-closed and dominates every integer placement. Never re-introduce a
+ * per-planet drain walk here.
+ *
+ * T-13 tightening — LAGRANGIAN DUAL on the per-planet command-center caps
+ * (capacity = chars per planet, mirroring place()'s ledger). For ANY
+ * multipliers λ_p ≥ 0, price a colony on planet p at (1+λ_p) and let the
+ * relaxed problem place freely; then
+ *   L(λ, x) = minCost(λ, x) − Σ_p λ_p·chars
+ * is a valid LOWER bound on the colonies any real plan at rate x must use:
+ * a real plan has per-planet counts c_p ≤ chars, so its λ-priced cost is
+ * N + Σ λ_p c_p ≤ N + Σ λ_p chars, and minCost is ≤ that. Hence
+ * L(λ, x) > slots proves rate x infeasible — for EVERY λ ≥ 0, so any λ the
+ * subgradient search visits yields a VALID (possibly loose, never wrong)
+ * cut; λ = 0 recovers the Round-2 bound exactly. The dual is only searched
+ * when the λ=0 optimum actually oversubscribes some planet (otherwise it
+ * provably cannot improve), so uncontended worlds pay nothing.
+ */
 export function upperBound(world: SolveWorld, product: string, sourcing: Readonly<Record<string, Sourcing>>): number {
   const unit = unitNeeds(product, sourcing);
   const slots = world.operation.characters.reduce((a, c) => a + 1 + c.icLevel, 0);
   const chars = world.operation.characters.length;
-  const feasible = (x: number): boolean => {
-    let used = 0;
-    for (const [p1, perUnit] of Object.entries(unit.extractP1PerWeek)) {
-      const p0 = oreOf(p1);
-      const opts = world.planets
-        .filter((p) => p.resources[p0] !== undefined)
-        .map((p) => extractionOption(p, p0, world))
-        .sort((a, b) => b.p1PerWeek - a.p1PerWeek);
-      let needed = perUnit * x;
-      for (const opt of opts) {
-        if (needed <= 0) break;
-        const take = Math.min(needed / opt.p1PerWeek, chars); // fractional colonies, per-planet cap relaxed per-pool
-        used += take;
-        needed -= take * opt.p1PerWeek;
+  const penalty = stackPenaltyOf(world);
+  const nP = world.planets.length;
+  const capTotal = nP * chars;
+  const btIdx: number[] = [];
+  world.planets.forEach((p, i) => { if (canBuildHighTech(p.type)) btIdx.push(i); });
+  const htCap = btIdx.length * chars;
+
+  // Per input: per-planet decayed yield series, plus a λ=0 presorted flat
+  // pool (the common fast path — identical to the Round-2 greedy).
+  interface InputSrc { readonly perUnit: number; readonly entries: ReadonlyArray<{ y: number; p: number }>; readonly zeroOrder: ReadonlyArray<{ y: number; p: number }> }
+  const inputs: InputSrc[] = [];
+  for (const [p1, perUnit] of Object.entries(unit.extractP1PerWeek)) {
+    const p0 = oreOf(p1);
+    const entries: Array<{ y: number; p: number }> = [];
+    world.planets.forEach((p, pi) => {
+      if (p.resources[p0] === undefined) return;
+      let y = extractionOption(p, p0, world).p1PerWeek;
+      for (let k = 0; k < chars; k++) {
+        if (y > 0) entries.push({ y, p: pi });
+        y *= 1 - penalty; // (1-penalty)^k for the k-th colony on this deposit (T-08)
       }
-      if (needed > 1e-9) return false;
-    }
-    for (const [, perUnit] of Object.entries(unit.refineP1PerWeek)) {
-      used += (perUnit * x) / (REFINERY_BASICS * P1_PER_BASIC_PER_WEEK);
-    }
-    used += (unit.advancedFacilities * x) / ADV_PER_COLONY;
-    used += (unit.htFacilities * x) / HT_PER_COLONY;
-    return used <= slots + 1e-9;
-  };
-  if (!feasible(1e-9)) return 0;
-  let lo = 0, hi = 1;
-  while (feasible(hi)) hi *= 2;
-  for (let i = 0; i < 60; i++) {
-    const mid = (lo + hi) / 2;
-    if (feasible(mid)) lo = mid; else hi = mid;
+    });
+    inputs.push({ perUnit, entries, zeroOrder: [...entries].sort((a, b) => b.y - a.y) });
   }
-  return lo;
+  const refinePerX = Object.values(unit.refineP1PerWeek).reduce((a, b) => a + b, 0) / (REFINERY_BASICS * P1_PER_BASIC_PER_WEEK);
+  const advPerX = unit.advancedFacilities / ADV_PER_COLONY;
+  const htPerX = unit.htFacilities / HT_PER_COLONY;
+
+  /** Exact min λ-cost of the relaxed problem at rate x (separable greedy:
+   * per input, cheapest cost-per-unit first; factories at the cheapest
+   * eligible planet). ok:false = demand unmeetable even fractionally. */
+  const evalAlloc = (x: number, lam: Float64Array | null): { ok: boolean; cost: number; colonies: number; perPlanet: Float64Array; htColonies: number } => {
+    const perPlanet = new Float64Array(nP);
+    let cost = 0;
+    let colonies = 0;
+    for (const inp of inputs) {
+      let needed = inp.perUnit * x;
+      if (needed <= 1e-9) continue;
+      const ordered = lam === null
+        ? inp.zeroOrder
+        : [...inp.entries].sort((a, b) => (1 + lam[a.p]!) / a.y - (1 + lam[b.p]!) / b.y);
+      for (const e of ordered) {
+        if (needed <= 1e-9) break;
+        const take = Math.min(needed / e.y, 1);
+        const cc = 1 + (lam === null ? 0 : lam[e.p]!);
+        cost += take * cc;
+        colonies += take;
+        perPlanet[e.p]! += take;
+        needed -= take * e.y;
+      }
+      if (needed > 1e-9) return { ok: false, cost: Infinity, colonies, perPlanet, htColonies: 0 };
+    }
+    const facColonies = (refinePerX + advPerX) * x;
+    const htColonies = htPerX * x;
+    if (facColonies > 1e-12) {
+      let minL = Infinity, argmin = 0;
+      for (let p = 0; p < nP; p++) { const l = lam === null ? 0 : lam[p]!; if (l < minL) { minL = l; argmin = p; } }
+      if (nP === 0) return { ok: false, cost: Infinity, colonies, perPlanet, htColonies };
+      cost += facColonies * (1 + minL);
+      colonies += facColonies;
+      perPlanet[argmin]! += facColonies;
+    }
+    if (htColonies > 1e-12) {
+      if (btIdx.length === 0) return { ok: false, cost: Infinity, colonies, perPlanet, htColonies };
+      let minL = Infinity, argmin = btIdx[0]!;
+      for (const p of btIdx) { const l = lam === null ? 0 : lam[p]!; if (l < minL) { minL = l; argmin = p; } }
+      cost += htColonies * (1 + minL);
+      colonies += htColonies;
+      perPlanet[argmin]! += htColonies;
+    }
+    return { ok: true, cost, colonies, perPlanet, htColonies };
+  };
+
+  const lambdas: Float64Array[] = [];
+  const lamSums: number[] = [];
+  const eps = 1e-9;
+  const feasible = (x: number): boolean => {
+    const base = evalAlloc(x, null); // λ=0: cost === colonies
+    if (!base.ok) return false;
+    if (base.colonies > slots + eps || base.colonies > capTotal + eps || base.htColonies > htCap + eps) return false;
+    for (let i = 0; i < lambdas.length; i++) {
+      const r = evalAlloc(x, lambdas[i]!);
+      if (!r.ok) return false;
+      if (r.cost - lamSums[i]! > slots + eps) return false;
+    }
+    return true;
+  };
+
+  if (!feasible(1e-9)) return 0;
+  const bisect = (hiKnownInfeasible: number): number => {
+    let lo = 0, hi = hiKnownInfeasible;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (feasible(mid)) lo = mid; else hi = mid;
+    }
+    return lo;
+  };
+  let hi = 1;
+  while (feasible(hi)) hi *= 2;
+  let x = bisect(hi);
+
+  for (let round = 0; round < 2 && x > 0; round++) {
+    // The dual can only cut when the λ=0 optimum oversubscribes a planet.
+    const at = evalAlloc(x, null);
+    if (!at.ok) break;
+    let over = false;
+    for (let p = 0; p < nP; p++) if (at.perPlanet[p]! > chars + 1e-6) { over = true; break; }
+    if (!over) break;
+    // Subgradient ascent on λ at fixed x; every iterate's L is a valid
+    // bound, so only the BEST is kept and looseness is the worst case.
+    const lam = new Float64Array(nP);
+    let best: { L: number; lam: Float64Array } | null = null;
+    for (let t = 0; t < 30; t++) {
+      const r = evalAlloc(x, lam);
+      if (!r.ok) break;
+      let sub = 0;
+      for (let p = 0; p < nP; p++) sub += lam[p]! * chars;
+      const L = r.cost - sub;
+      if (best === null || L > best.L) best = { L, lam: lam.slice() };
+      let gnorm = 0;
+      for (let p = 0; p < nP; p++) { const g = r.perPlanet[p]! - chars; gnorm += g * g; }
+      if (gnorm < 1e-12) break;
+      const step = (0.35 / Math.sqrt(t + 1)) * (Math.max(1, r.colonies) / gnorm) ** 0.5 / Math.max(1, chars) ** 0.5;
+      for (let p = 0; p < nP; p++) lam[p] = Math.max(0, lam[p]! + step * (r.perPlanet[p]! - chars));
+    }
+    if (best === null || best.L <= slots + eps) break; // no provable cut at this x
+    lambdas.push(best.lam);
+    lamSums.push(best.lam.reduce((a, b) => a + b, 0) * chars);
+    const x2 = bisect(x);
+    if (x - x2 <= x * 1e-4) { x = x2; break; }
+    x = x2;
+  }
+  return x;
 }
 
 /** Build the concrete OperationPlan for placed roles at realized rate X'. */
@@ -520,19 +749,47 @@ function buildPlan(
   return { plan, slotsUsed: colonies.length, realized };
 }
 
+/** Penalized built P1/week from a pick list: the k-th colony on the same
+ * (planet, P1) deposit yields (1-penalty)^k of the base (truth audit T-08). */
+function builtExtractFrom(picks: ReadonlyArray<ExtractionOption>, penalty: number): Record<string, number> {
+  const seen = new Map<string, number>();
+  const out: Record<string, number> = {};
+  for (const pick of picks) {
+    const key = `${pick.planet.name}|${pick.p1}`;
+    const k = seen.get(key) ?? 0;
+    seen.set(key, k + 1);
+    out[pick.p1] = (out[pick.p1] ?? 0) + pick.p1PerWeek * Math.pow(1 - penalty, k);
+  }
+  return out;
+}
+
+interface PlacementPick { placed: Placed; builtExtract: Record<string, number>; realized: number }
+
 /**
- * Placement that is guaranteed DEALABLE: tries max-yield stacking first, then
- * the spread variant — a stacked pair on one planet needs two free characters
- * there, and only the dealer (exact matching) can certify that.
+ * Best DEALABLE placement (truth audit T-12): tries stacked/spread AND, when
+ * more than one input is extracted, both input-priority orders — the fixed
+ * order let the same input always claim a contended planet. Candidates are
+ * ranked by realized rate first; the dealer (exact matching) certifies the
+ * best one that is actually assignable.
  */
-function placeDealable(world: SolveWorld, counts: RoleCounts): Placed | { error: string } {
+function bestPlacement(world: SolveWorld, counts: RoleCounts, unit: ChainNeeds): PlacementPick | { error: string } {
+  const penalty = stackPenaltyOf(world);
+  const reverses = Object.keys(counts.extract).length > 1 ? [false, true] : [false];
+  const cands: PlacementPick[] = [];
   let lastError = 'unplaceable';
-  for (const spread of [false, true]) {
-    const placed = place(world, counts, spread);
-    if ('error' in placed) { lastError = placed.error; continue; }
-    const dealt = deal(world.operation, assignablesFor(counts, placed));
-    if ('error' in dealt) { lastError = dealt.error; continue; }
-    return placed;
+  for (const reverse of reverses) {
+    for (const spread of [false, true]) {
+      const placed = place(world, counts, spread, reverse);
+      if ('error' in placed) { lastError = placed.error; continue; }
+      const builtExtract = builtExtractFrom(placed.extractPicks, penalty);
+      cands.push({ placed, builtExtract, realized: realizedRate(unit, builtExtract, counts.refine, counts.advanced, counts.ht) });
+    }
+  }
+  cands.sort((a, b) => b.realized - a.realized);
+  for (const c of cands) {
+    const dealt = deal(world.operation, assignablesFor(counts, c.placed));
+    if (!('error' in dealt)) return c;
+    lastError = dealt.error;
   }
   return { error: lastError };
 }
@@ -560,11 +817,8 @@ export function solveMax(
 
   const evalCounts = (counts: RoleCounts): number => {
     if (totalColonies(counts) > slots) return -1;
-    const placed = placeDealable(world, counts);
-    if ('error' in placed) return -1;
-    const builtExtract: Record<string, number> = {};
-    for (const pick of placed.extractPicks) builtExtract[pick.p1] = (builtExtract[pick.p1] ?? 0) + pick.p1PerWeek;
-    return realizedRate(unit, builtExtract, counts.refine, counts.advanced, counts.ht);
+    const bp = bestPlacement(world, counts, unit);
+    return 'error' in bp ? -1 : bp.realized;
   };
 
   // Exhaustive over role-count tuples when the space is small.
@@ -632,17 +886,59 @@ export function solveMax(
     const counts = countsFor(world, unit, lo);
     if ('error' in counts) return { error: counts.error };
     best = { counts, rate: evalCounts(counts) };
-    notes.push('greedy: best planet first, scarcest extracted input first, ceil-built colonies');
+    // Local improvement (user-reported defect 2026-09-03): the binary search
+    // sizes all roles to ONE rate, so integer rounding can leave slots idle
+    // while a single +1 colony on the binding role lifts the whole chain.
+    // Hill-climb +1 perturbations until no single addition helps.
+    type RoleKey = { kind: 'extract' | 'refine'; p1: string } | { kind: 'advanced'; p1?: never } | { kind: 'ht'; p1?: never };
+    const valueOf = (c: RoleCounts, k: RoleKey): number =>
+      k.kind === 'extract' ? (c.extract[k.p1] ?? 0)
+        : k.kind === 'refine' ? (c.refine[k.p1] ?? 0)
+          : k.kind === 'advanced' ? c.advanced : c.ht;
+    const withDelta = (c: RoleCounts, k: RoleKey, d: number): RoleCounts =>
+      k.kind === 'extract' ? { ...c, extract: { ...c.extract, [k.p1]: (c.extract[k.p1] ?? 0) + d } }
+        : k.kind === 'refine' ? { ...c, refine: { ...c.refine, [k.p1]: (c.refine[k.p1] ?? 0) + d } }
+          : k.kind === 'advanced' ? { ...c, advanced: c.advanced + d } : { ...c, ht: c.ht + d };
+    for (let round = 0; round < 25; round++) {
+      let improved = false;
+      const bc = best.counts;
+      const roleKeys: RoleKey[] = [
+        ...Object.keys(bc.extract).map((p1) => ({ kind: 'extract' as const, p1 })),
+        ...Object.keys(bc.refine).map((p1) => ({ kind: 'refine' as const, p1 })),
+        { kind: 'advanced' }, { kind: 'ht' },
+      ];
+      // +1 moves close integrality gaps; -1/+1 SWAPS (truth audit T-12) keep
+      // improving when slots are already full — trading a colony from the
+      // over-supplied role to the bottleneck, which +1 alone can never do.
+      // Round-2 ordering fix: when every slot is taken, +1 moves are dead on
+      // arrival (no character can host the colony) — skip them so the round
+      // goes straight to the swaps that can still help.
+      const variants: RoleCounts[] = totalColonies(bc) < slots
+        ? roleKeys.map((k) => withDelta(bc, k, +1))
+        : [];
+      for (const minus of roleKeys) {
+        if (valueOf(bc, minus) <= 0) continue;
+        for (const plus of roleKeys) {
+          if (plus === minus) continue;
+          variants.push(withDelta(withDelta(bc, minus, -1), plus, +1));
+        }
+      }
+      for (const v of variants) {
+        const r = evalCounts(v);
+        if (r > best.rate * (1 + 1e-9)) { best = { counts: v, rate: r }; improved = true; break; }
+      }
+      if (!improved) break;
+    }
+    notes.push('greedy: best planet first, scarcest extracted input first, ceil-built colonies, +1/swap hill-climb');
   }
 
   if (best === null || best.rate <= 0) return { error: `infeasible: ${product} cannot be produced from this world` };
   const chosen: { counts: RoleCounts; rate: number } = best;
 
-  const placed = placeDealable(world, chosen.counts);
-  if ('error' in placed) return { error: placed.error };
-  const builtExtract: Record<string, number> = {};
-  for (const pick of placed.extractPicks) builtExtract[pick.p1] = (builtExtract[pick.p1] ?? 0) + pick.p1PerWeek;
-  const built = buildPlan(world, unit, chosen.counts, placed, chosen.rate);
+  const bp = bestPlacement(world, chosen.counts, unit);
+  if ('error' in bp) return { error: bp.error };
+  const builtExtract = bp.builtExtract;
+  const built = buildPlan(world, unit, chosen.counts, bp.placed, chosen.rate);
   if ('error' in built) return { error: built.error };
   const verdict = validatePlan(built.plan);
   if (!verdict.legal) {
@@ -670,36 +966,65 @@ export function solveQuota(
   if (!Number.isFinite(targetPerWeek) || targetPerWeek <= 0)
     return { error: `quota-invalid: targetPerWeek must be > 0, got ${targetPerWeek}` };
   const unit = unitNeeds(product, sourcing);
-  const counts = countsFor(world, unit, targetPerWeek);
   const max = solveMax(world, product, sourcing);
-  if ('error' in counts) {
-    return { error: `quota-unreachable: ${counts.error}`, ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }) };
-  }
   const slots = world.operation.characters.reduce((a, c) => a + 1 + c.icLevel, 0);
-  if (totalColonies(counts) > slots) {
-    return {
-      error: `quota-unreachable: needs ${totalColonies(counts)} colonies, operation has ${slots} slots`,
-      ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }),
-    };
+
+  // One sizing attempt at rate y: counts → placement → realized rate.
+  interface Attempt { counts: RoleCounts; placed: Placed; builtExtract: Record<string, number>; realized: number }
+  const attempt = (y: number): Attempt | { error: string } => {
+    const counts = countsFor(world, unit, y);
+    if ('error' in counts) return counts;
+    if (totalColonies(counts) > slots) return { error: `needs ${totalColonies(counts)} colonies, operation has ${slots} slots` };
+    const bp = bestPlacement(world, counts, unit);
+    if ('error' in bp) return { error: bp.error };
+    return { counts, placed: bp.placed, builtExtract: bp.builtExtract, realized: bp.realized };
+  };
+  const ok = (a: Attempt | { error: string }): a is Attempt => !('error' in a);
+  const hits = (a: Attempt | { error: string }): a is Attempt => ok(a) && a.realized >= targetPerWeek * (1 - 1e-9);
+
+  // Size at the target first; when ceil-building exactly at the target lands
+  // short (integer colonies, shared-planet contention), ESCALATE the sizing
+  // rate and search the smallest one whose built plan actually reaches the
+  // target — refusing outright here was a user-reported defect (2026-09-03):
+  // quotas at 75–90% of the solver's own max were bounced as unreachable.
+  let chosen = attempt(targetPerWeek);
+  if (!hits(chosen)) {
+    let hi = targetPerWeek;
+    let found: Attempt | null = null;
+    for (let i = 0; i < 12 && found === null; i++) {
+      hi *= 1.5;
+      const t = attempt(hi);
+      if (hits(t)) found = t;
+    }
+    if (found !== null) {
+      let lo = targetPerWeek;
+      let hiY = hi;
+      for (let i = 0; i < 40; i++) {
+        const mid = (lo + hiY) / 2;
+        const t = attempt(mid);
+        if (hits(t)) { hiY = mid; found = t; } else { lo = mid; }
+      }
+      chosen = found;
+    }
   }
-  const placed = placeDealable(world, counts);
-  if ('error' in placed) {
-    // Edge-matrix finding: EVERY refusal names what IS achievable when a max
-    // solve exists — not just the too-many-colonies branch.
-    return { error: `quota-unreachable: ${placed.error}`, ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }) };
+  if (!ok(chosen) || chosen.realized < targetPerWeek * (1 - 1e-9)) {
+    // Final fallback: the hill-climbed max solve can reach allocations the
+    // rate-sizing path cannot express (swap moves). If ITS build covers the
+    // target, hitting the quota with that plan beats refusing — the surplus
+    // is disclosed, and "achievable" and "reachable" stay one truth.
+    if (!('error' in max) && max.realizedPerWeek >= targetPerWeek * (1 - 1e-9)) {
+      return {
+        ...max,
+        realizedPerWeek: Math.min(max.realizedPerWeek, targetPerWeek),
+        notes: [...max.notes, `quota: met by the max-rate build (${Math.floor(max.realizedPerWeek)}/wk capacity; target-sized builds fell short) — surplus capacity is yours`],
+      };
+    }
+    const why = !ok(chosen)
+      ? chosen.error
+      : `the buildable plan realizes ${Math.floor(chosen.realized)}/wk, short of ${targetPerWeek}/wk`;
+    return { error: `quota-unreachable: ${why}`, ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }) };
   }
-  const builtExtract: Record<string, number> = {};
-  for (const pick of placed.extractPicks) builtExtract[pick.p1] = (builtExtract[pick.p1] ?? 0) + pick.p1PerWeek;
-  const realized = realizedRate(unit, builtExtract, counts.refine, counts.advanced, counts.ht);
-  if (realized < targetPerWeek * (1 - 1e-9)) {
-    // Edge-matrix finding: the ceil-built colonies exist but their realized
-    // rate lands short of the target (placement/supply granularity). Refuse
-    // honestly instead of returning a plan that silently misses the quota.
-    return {
-      error: `quota-unreachable: the buildable plan realizes ${Math.floor(realized)}/wk, short of ${targetPerWeek}/wk`,
-      ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }),
-    };
-  }
+  const { counts, placed, builtExtract, realized } = chosen;
   const built = buildPlan(world, unit, counts, placed, Math.min(realized, targetPerWeek * (1 + 1e-9)));
   if ('error' in built) return { error: built.error, ...('error' in max ? {} : { achievablePerWeek: max.realizedPerWeek }) };
   const verdict = validatePlan(built.plan);

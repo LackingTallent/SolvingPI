@@ -43,6 +43,9 @@ export interface PriceServiceConfig {
   /** Restrict best-of-book to one station/structure (default Jita 4-4). null = whole region. */
   readonly locationId?: number | null;
   readonly now: () => string; // ISO clock, injected for determinism
+  /** Fetch daily-volume history per type (default true). Infrastructure
+   * price checks skip it — capital cost needs the ask, not the flow. */
+  readonly history?: boolean;
 }
 
 const DEFAULT_BASE = 'https://esi.evetech.net/latest';
@@ -69,10 +72,25 @@ export async function fetchPrices(names: ReadonlyArray<string>, cfg: PriceServic
       continue;
     }
     try {
-      const { body } = await cfg.fetchJson(`${base}/markets/${regionId}/orders/?type_id=${typeId}&order_type=all`);
-      const orders = (body as EsiOrder[]).filter((o) => locationId === null || o.location_id === locationId);
-      const bids = orders.filter((o) => o.is_buy_order).map((o) => o.price);
-      const asks = orders.filter((o) => !o.is_buy_order).map((o) => o.price);
+      // T-18 fix: ESI order books are PAGED (x-pages header); reading only
+      // page 1 silently dropped orders on busy types. Fetch every page
+      // (capped at 20 — a single-type regional book never legitimately
+      // exceeds that; the cap is a runaway guard, and hitting it is noted).
+      const allOrders: EsiOrder[] = [];
+      let pages = 1;
+      for (let page = 1; page <= pages; page++) {
+        const { body, headers } = await cfg.fetchJson(`${base}/markets/${regionId}/orders/?type_id=${typeId}&order_type=all&page=${page}`);
+        if (page === 1) {
+          const xp = Number(headers['x-pages'] ?? headers['X-Pages'] ?? '1');
+          if (Number.isFinite(xp) && xp > 1) pages = Math.min(Math.floor(xp), 20);
+        }
+        allOrders.push(...(body as EsiOrder[]));
+      }
+      const orders = allOrders.filter((o) => locationId === null || o.location_id === locationId);
+      const bidOrders = orders.filter((o) => o.is_buy_order);
+      const askOrders = orders.filter((o) => !o.is_buy_order);
+      const bids = bidOrders.map((o) => o.price);
+      const asks = askOrders.map((o) => o.price);
       if (bids.length === 0 && asks.length === 0) {
         unpriced.push({ name, reason: `no orders at location ${locationId ?? 'region-wide'}` });
         continue;
@@ -84,13 +102,50 @@ export async function fetchPrices(names: ReadonlyArray<string>, cfg: PriceServic
 
       let dailyVolume: number | undefined;
       try {
+        if (cfg.history === false) throw new Error('skipped');
         const { body: hist } = await cfg.fetchJson(`${base}/markets/${regionId}/history/?type_id=${typeId}`);
         const days = hist as Array<{ volume: number }>;
         const recent = days.slice(-7);
-        if (recent.length > 0) dailyVolume = recent.reduce((a, d) => a + d.volume, 0) / recent.length;
+        if (recent.length > 0) {
+          dailyVolume = recent.reduce((a, d) => a + d.volume, 0) / recent.length;
+          // T-18 fix (venue consistency): prices come from ONE station, but
+          // ESI history is region-wide — dividing station sales into region
+          // volume understated the user's market share, firing the
+          // saturation warning too late. ESI publishes no station-level
+          // history, so the best public estimator is the station's share of
+          // the region's STANDING book (both sides, all pages — fetched
+          // above): scale the regional daily volume by that share. At Jita
+          // 4-4 the share is typically ≥0.9, so the correction is small but
+          // in the honest direction; a floor of 5% guards against a freak
+          // empty-book snapshot zeroing the volume.
+          if (locationId !== null) {
+            const vol = (list: EsiOrder[]): number => list.reduce((a, o) => a + o.volume_remain, 0);
+            const regionBook = vol(allOrders);
+            const stationBook = vol(orders);
+            if (regionBook > 0 && stationBook > 0) {
+              dailyVolume *= Math.min(1, Math.max(0.05, stationBook / regionBook));
+            }
+          }
+        }
       } catch { /* history is optional; saturation analytics will say so */ }
 
-      prices[name] = dailyVolume !== undefined ? { bid, ask, dailyVolume } : { bid, ask };
+      // Order-book depth (truth audit T-09): aggregate by price, best-first,
+      // top 15 levels each side — economics walks these for the week's whole
+      // quantity so one thin top order cannot price the entire output.
+      const depth = (list: EsiOrder[], desc: boolean): Array<{ price: number; qty: number }> => {
+        const byPrice = new Map<number, number>();
+        for (const o of list) byPrice.set(o.price, (byPrice.get(o.price) ?? 0) + o.volume_remain);
+        return [...byPrice.entries()]
+          .sort((a, b) => (desc ? b[0] - a[0] : a[0] - b[0]))
+          .slice(0, 15)
+          .map(([price, q]) => ({ price, qty: q }));
+      };
+      prices[name] = {
+        bid, ask,
+        ...(dailyVolume !== undefined ? { dailyVolume } : {}),
+        bids: depth(bidOrders, true),
+        asks: depth(askOrders, false),
+      };
     } catch (e) {
       unpriced.push({ name, reason: `fetch failed: ${(e as Error).message}` });
     }

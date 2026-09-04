@@ -81,7 +81,7 @@ test('refined: scan requirements stay hard (no stand-ins)', () => {
   assert.match(r.missing.join(' '), /Scan value needed/);
 });
 
-test('exact: default/preset costs block with the confirm path named; user rates pass', () => {
+test('exact: default/preset costs block with the edit path named; user rates pass', () => {
   const base = {
     planets: [scannedStorm], product: 'Coolant',
     sourcing: { Water: 'extract', Electrolytes: 'extract' } as const, mode: 'max' as const, prices: {},

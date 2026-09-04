@@ -11,25 +11,30 @@ import { PLANET_TYPES, SCHEMATICS, tierOf, type PlanetType } from '../spec/schem
 import { resourcesOf } from '../world/planets.js';
 import { character, operation } from '../world/characters.js';
 import { densityPctFromW, wFromDensityPct, DENSITY_REFERENCE_W } from '../world/density.js';
+import { salesTaxRate, npcBrokerRate } from '../world/tax.js';
 import { solveMax, solveQuota, type SolveResult, type SolveWorld } from '../engine/allocator.js';
-import { comparative, defaultSourcing, economics, qolSolve, type MarketContext } from '../engine/modes.js';
+import { allProducts, comparative, defaultSourcing, economics, qolSolve, sweepRankedRow, type MarketContext } from '../engine/modes.js';
+import type { RankedOption } from '../engine/modes.js';
 import { solveMixMax, solveMixQuota, type MixEntry, type MixResult } from '../engine/mix.js';
 import { chainIntermediates, oreOf, p1InputsOf, type Sourcing } from '../engine/chain.js';
 import { analyze, bottleneckReport, optimalityInsight, runwayInsight, type Insight } from '../engine/analytics.js';
+import { capitalCost } from '../engine/capital.js';
+import { COMMAND_CENTER_NAMES, commandCenterName, infraTypeIdOf } from '../data/infra.js';
 import { idRegistry } from '../data/ids.js';
 import { fetchPrices } from '../data/prices.js';
 import { defaultEsiJson, importSystem, loadSystemIndex, searchSystems, type SystemIndex } from './esi-universe.js';
 import { solveReadiness, type Readiness } from './readiness.js';
 import { initChainsViz, refreshChainsViz } from './chains-viz.js';
+import { initRecipe, refreshRecipe } from './recipe.js';
 import { suggestSourcing, type SourcingSuggestion } from '../engine/suggest.js';
-import { scoutSystems, planetTypeCounts, type ScoutSystemInfo } from '../engine/scout.js';
+import { scoutSystem, sortScoutRows, planetTypeCounts, type ScoutRow, type ScoutSystemInfo } from '../engine/scout.js';
 import {
   activityBadge, crawlRegion, isWormholeRegionId, loadActivity, loadBakedMap, loadRegionList,
   type MapRegion, type MapSystem, type SystemActivity, type UniverseMap,
 } from '../data/universe-map.js';
 import {
   BAND_LABELS, PRESETS_ARE_APPROXIMATIONS, QUICK_DENSITY_DISCLOSURE, QUICK_DENSITY_PCT,
-  SPACE_BANDS, SPACE_COST_PRESETS, type SpaceBand,
+  QUICK_DENSITY_RANGE_PCT, SPACE_BANDS, SPACE_COST_PRESETS, bandOfSecurity, densityPctOfSecurity, type SpaceBand,
 } from './presets.js';
 import type { IdRegistry } from '../data/ids.js';
 
@@ -87,10 +92,22 @@ let revealMix = false;
 let planetEditing: string | null = null;
 // UI-review #3: the empty-roster quick-add remembers its count across rerenders.
 let quickAddCount = 1;
+// Round-4 race guards: async solve completions (worker/chunked compare and
+// profit) may land after the world changed under them. `solveRun` makes a
+// SUPERSEDED solve (newer Solve pressed, or mode switched and re-solved)
+// paint nothing; `inputRev` makes a completion whose INPUTS changed mid-run
+// render WITH the stale banner instead of silently posing as current.
+let solveRun = 0;
+let inputRev = 0;
 function persist(): void {
-  saveState(state);
+  inputRev++;
+  const saved = saveState(state);
   const a = document.getElementById('autosaveStatus');
-  if (a) a.textContent = 'Autosaved to this browser just now.';
+  // Round-2 honesty fix: never claim "Autosaved" when the write failed
+  // (private browsing, storage quota) — say so, so work isn't lost silently.
+  if (a) a.textContent = saved
+    ? 'Autosaved to this browser just now.'
+    : 'Autosave FAILED — this browser is blocking storage, so your setup will not survive a reload.';
   markResultsStale();
   // Any input change (re-)schedules the debounced Jita auto-refresh, so the
   // market section keeps itself populated as the user works (product
@@ -111,15 +128,15 @@ function markResultsStale(): void {
 
 /** How many density values the Quick level would assume right now (0 outside quick). */
 function assumedDensityCount(s: UiState): number {
-  if (s.detailLevel !== 'quick' || s.spaceBand === null) return 0;
-  return s.planets.reduce((n, p) => n + p.resources.filter((r) => !(r.w > 0)).length, 0);
+  return s.planets.reduce((n, p) => n + p.resources.filter((r) => r.assumed === true || !(r.w > 0)).length, 0);
 }
 
-function toWorld(s: UiState): SolveWorld {
+function toWorld(s: UiState, assumedScale = 1): SolveWorld {
   // Accuracy ladder, quick rung: unscanned densities are stood in by the
   // chosen band's typical value. NEVER touches saved state — the substitution
   // lives only in the world handed to the engine, and every result built on
-  // it is labeled an estimate.
+  // it is labeled an estimate. `assumedScale` scales ONLY assumed/stood-in
+  // densities (uncertainty bracket solves) — typed scans never move.
   const quickW = s.detailLevel === 'quick' && s.spaceBand !== null
     ? wFromDensityPct(QUICK_DENSITY_PCT[s.spaceBand]) : null;
   return {
@@ -128,10 +145,13 @@ function toWorld(s: UiState): SolveWorld {
       name: p.name,
       type: p.type,
       resources: Object.fromEntries(p.resources
-        .map((r) => [r.p0, r.w > 0 ? r.w : (quickW ?? 0)] as const)
+        .map((r) => [r.p0, r.w > 0
+          ? (r.assumed === true ? r.w * assumedScale : r.w)
+          : (quickW ?? 0) * assumedScale] as const)
         .filter(([, w]) => w > 0)),
     })),
     programHours: s.programHours,
+    stackingPenalty: (s.stackPenaltyPct ?? 10) / 100,
   };
 }
 
@@ -218,7 +238,7 @@ function inferDetailLevel(s: UiState): DetailLevel {
   if (probe.missing.some((m) => m.startsWith('Scan value needed'))) return 'quick';
   if (s.mode === 'compare' || s.mode === 'profit') {
     // Compare touches every product: any unscanned resource anywhere → quick.
-    const anyUnscanned = s.planets.some((pl) => pl.resources.some((r) => !(r.w > 0)));
+    const anyUnscanned = s.planets.some((pl) => pl.resources.some((r) => r.assumed === true || !(r.w > 0)));
     if (anyUnscanned) return 'quick';
   }
   return s.costsSource === 'user' ? 'exact' : 'refined';
@@ -509,11 +529,16 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
         change: (ev) => {
           const v = Number((ev.target as HTMLInputElement).value);
           r.w = Number.isFinite(v) && v > 0 ? wFromDensityPct(v) : 0;
+          r.assumed = false; // a typed value is the user's scan
           persist(); rerender();
         },
       }),
-      el('span', { class: r.w > 0 ? 'v9-muted' : 'v9-scan-tag' },
-        r.w > 0 ? `% = ${fmt(r.w)} per cycle` : '% — awaiting scan; excluded from plans until set'),
+      el('span', { class: r.w > 0 && r.assumed !== true ? 'v9-muted' : 'v9-scan-tag' },
+        r.w > 0
+          ? (r.assumed === true ? `~ band assumption (${fmt(r.w)} per cycle) — type your scan to replace it` : `% = ${fmt(r.w)} per cycle`)
+          : (r.assumed === true
+            ? '% — no density yet: pick your space type under “Where do you operate?”, or type your scan'
+            : '% — awaiting scan; excluded from plans until set')),
       el('button', { class: 'btn small', click: () => { p.resources.splice(ri, 1); persist(); rerender(); } }, '✕'),
     ),
   );
@@ -545,12 +570,16 @@ function planetRow(p: UiPlanet, i: number): HTMLElement {
   // UI-review #6 follow-up: planets render as ONE-LINE chip cards; the full
   // editor opens for one planet at a time (✎ Edit / clicking a chip).
   if (p.minimized !== true && planetEditing !== p.name) {
-    const chip = (r: { p0: string; w: number }): HTMLElement =>
+    const chip = (r: { p0: string; w: number; assumed?: boolean }): HTMLElement =>
       el('button', {
-        class: r.w > 0 ? 'v9-reschip' : 'v9-reschip v9-reschip-warn',
-        title: r.w > 0 ? `${r.p0} — click to edit` : `${r.p0} — awaiting scan; click to enter it`,
+        class: r.w > 0 ? (r.assumed === true ? 'v9-reschip v9-reschip-assumed' : 'v9-reschip') : 'v9-reschip v9-reschip-warn',
+        title: r.w > 0
+          ? (r.assumed === true ? `${r.p0} — band-typical assumption, not your scan; click to enter the real %` : `${r.p0} — click to edit`)
+          : (r.assumed === true
+            ? `${r.p0} — no density yet: tap "Where do you operate?" below for your space type's typical, or click to type your scan`
+            : `${r.p0} — awaiting scan; click to enter it`),
         click: () => { planetEditing = p.name; rerender(); },
-      }, r.w > 0 ? `${r.p0} ${fmt1(densityPctFromW(r.w))}%` : `${r.p0} — scan?`);
+      }, r.w > 0 ? `${r.p0} ${r.assumed === true ? '~' : ''}${fmt1(densityPctFromW(r.w))}%` : `${r.p0} ${r.assumed === true ? '?' : '— scan?'}`);
     return el('div', { class: 'v9-planet' },
       el('div', { class: 'v9-row' },
         el('b', {}, p.name),
@@ -673,17 +702,55 @@ function renderPlanets(): void {
   }
   mount.replaceChildren(
     el('p', { class: 'section-sub' },
-      'Planetary Resource Density is set to 70%. Provide your planets’ real data for the most accurate numbers.'),
+      state.spaceBand === null
+        ? 'New planets have NO density until you pick your type of space — tap “Where do you operate?” below and every unscanned resource takes that band’s typical (marked ~). Type your real scans for exact numbers.'
+        : `New planets arrive at the ${BAND_LABELS[state.spaceBand]} typical density (marked ~) — type your real scans for exact numbers.`),
     ...groupBlocks,
-    el('button', {
-      class: 'btn',
-      click: () => {
-        const name = `Planet ${state.planets.length + 1}`;
-        state.planets.push({ name, type: 'Barren', resources: defaultResources('Barren'), minimized: false });
-        planetEditing = name; // a new planet opens straight into its editor
-        persist(); rerender();
-      },
-    }, '+ Add planet'),
+    el('div', { class: 'v9-row' },
+      el('button', {
+        class: 'btn',
+        click: () => {
+          const name = `Planet ${state.planets.length + 1}`;
+          state.planets.push({ name, type: 'Barren', resources: defaultResources('Barren', state.spaceBand), minimized: false });
+          planetEditing = name; // a new planet opens straight into its editor
+          persist(); rerender();
+        },
+      }, '+ Add planet'),
+      // Screenshot import gets its own visible door in BOTH modes (owner
+      // 2026-09-04) — it was buried inside Advanced-only More tools and
+      // users were hand-typing densities the OCR reads for them.
+      (() => {
+        const b = el('button', {
+          class: 'btn',
+          id: 'openBatchImport',
+          title: 'Read densities straight from planet screenshots (up to 20 images or a .zip) — everything stays in your browser',
+          click: () => {
+            const wrap = document.getElementById('batchWrap');
+            if (wrap) wrap.hidden = false;
+            wrap?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            document.getElementById('batchInput')?.click();
+          },
+        });
+        b.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:7px" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13.5" r="3.4"></circle></svg>Import scans from screenshots';
+        return b;
+      })(),
+    ),
+    // Owner 2026-09-03: "Where do you operate?" moved here from Market — one
+    // tap sets taxes, shipping AND re-bands every assumed density to the
+    // security band's typical %. Typed scans are never touched.
+    el('h3', {}, 'Where do you operate?'),
+    el('div', { class: 'v9-row fin-presets' },
+      ...SPACE_BANDS.map((b) => el('button', {
+        class: `btn small preset-btn${state.costsSource === `preset-${b}` ? ' active' : ''}`,
+        type: 'button',
+        title: `${SPACE_COST_PRESETS[b].rationale} Also sets assumed densities to ${QUICK_DENSITY_PCT[b]}% (typed scans are kept).`,
+        click: () => { applyCostPreset(b); persist(); rerender(); },
+      }, BAND_LABELS[b])),
+    ),
+    el('p', { class: 'v9-muted fin-preset-note' },
+      state.spaceBand !== null
+        ? `${BAND_LABELS[state.spaceBand]}: taxes and shipping set; assumed densities at ${QUICK_DENSITY_PCT[state.spaceBand]}% (marked ~). Type a real scan on any chip to lock it in.`
+        : 'One tap sets your taxes, shipping and the typical density for every planet you haven’t scanned yet.'),
   );
   mount.append(nextStepBtn('sec1', 'sec2'));
 }
@@ -709,14 +776,40 @@ function applyCostPreset(band: SpaceBand): void {
   const p = SPACE_COST_PRESETS[band];
   state.fees.customsPct = p.customsPct;
   state.fees.hisecNpc = p.hisecNpc;
-  state.fees.salesTaxPct = p.salesTaxPct;
-  state.fees.brokerPct = p.brokerPct;
+  // Truth audit T-10 (owner approved 2026-09-03): sales tax and broker come
+  // from the ROSTER'S best Accounting / Broker Relations — you sell from
+  // your best-skilled character. Presets only fill in with no roster.
+  if (state.characters.length > 0) {
+    const acct = Math.max(...state.characters.map((c) => c.accountingLevel));
+    const brok = Math.max(...state.characters.map((c) => c.brokerRelationsLevel));
+    state.fees.salesTaxPct = Math.round(salesTaxRate(acct) * 100000) / 1000;
+    state.fees.brokerPct = Math.round(npcBrokerRate({ brokerRelationsLevel: brok, factionStanding: 0, corpStanding: 0 }) * 100000) / 1000;
+  } else {
+    state.fees.salesTaxPct = p.salesTaxPct;
+    state.fees.brokerPct = p.brokerPct;
+  }
   state.freight.outPerM3 = p.freightPerM3;
   state.freight.inPerM3 = p.freightPerM3;
   state.costsSource = `preset-${band}`;
   // One question, one place (streamline #3): "where do you operate?" also
   // records the density band that Quick estimates assume.
   state.spaceBand = band;
+  // Owner 2026-09-03: the SAME tap re-bands every ASSUMED density to the
+  // band's typical %. Densities the user typed themselves are never touched.
+  applyBandDensities(band);
+}
+
+/** Owner 2026-09-03 ("the type of space means a lot"): selecting a space type
+ * aligns every ASSUMED — or still-blank — density with that band's typical.
+ * There is no site-wide default any more; until a band is chosen, new planets
+ * hold no density at all. Typed scans never move. */
+function applyBandDensities(band: SpaceBand): void {
+  const wBand = wFromDensityPct(QUICK_DENSITY_PCT[band]);
+  for (const pl of state.planets) {
+    for (const r of pl.resources) {
+      if (r.assumed === true || !(r.w > 0)) { r.w = wBand; r.assumed = true; }
+    }
+  }
 }
 
 function costsSourceLabel(): string {
@@ -753,20 +846,61 @@ function refreshJitaPrices(onProgress?: (t: string) => void, opts?: { fillOnly?:
   // are written, so nothing the user typed is ever overwritten unasked.
   const fillTargets = opts?.fillOnly === true ? new Set(names.filter((n) => !priced(n))) : null;
   let fetched = 0;
+  // Round-2 robustness fix (re-scoped in Round 4): a hung request used to
+  // wedge priceFetchInFlight forever — refresh was dead until a reload. The
+  // watchdog is PER REQUEST (20s each): a full fetch is ~2 sequential
+  // requests per commodity, so one whole-sequence timer would spuriously
+  // abort perfectly healthy long fetches (68 commodities ≈ 20s+ at ordinary
+  // latency — measured in the Round-4 audit). A stuck request still dies in
+  // 20s and the flag clears on BOTH exits.
+  let watchdog: ReturnType<typeof setTimeout> | null = null;
+  const clearWatchdog = (): void => { if (watchdog !== null) { clearTimeout(watchdog); watchdog = null; } };
   return fetchPrices(names, {
     ids: mergedIds(),
     now: () => new Date().toISOString(),
     fetchJson: async (url) => {
-      const res = await fetch(url);
+      const abort = new AbortController();
+      clearWatchdog();
+      watchdog = setTimeout(() => abort.abort(), 20_000);
+      let res: Response;
+      try {
+        res = await fetch(url, { signal: abort.signal });
+      } finally {
+        clearWatchdog();
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status} from ESI`);
       fetched++;
       onProgress?.(`Fetching Jita order books… (${Math.min(Math.ceil(fetched / 2), names.length)}/${names.length})`);
-      return { body: await res.json(), headers: {} };
+      // T-18: the price service pages order books via the x-pages header —
+      // it must actually receive it (this used to return {}).
+      const xPages = res.headers.get('x-pages');
+      return { body: await res.json(), headers: xPages !== null ? { 'x-pages': xPages } : {} };
     },
-  }).then((snap) => {
+  }).then(async (snap) => {
     for (const [name, quote] of Object.entries(snap.prices)) {
       if (fillTargets === null || fillTargets.has(name)) state.prices[name] = { ...quote };
     }
+    // Owner 2026-09-03: Command Center prices pulled straight from ESI —
+    // fetched with every refresh through the same order-book path (no
+    // history; the Jita ask is what you actually pay). A failure here is
+    // tolerated: the capital card falls back to the 81k NPC seed and says so.
+    try {
+      const stub = (): never => { throw new Error('infra registry: lookup not supported'); };
+      const infra = await fetchPrices([...COMMAND_CENTER_NAMES], {
+        ids: { typeIdOf: infraTypeIdOf, nameOf: stub, schematicName: stub, pinKind: stub, meta: idRegistry().meta },
+        now: () => new Date().toISOString(),
+        history: false,
+        fetchJson: async (url) => {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status} from ESI`);
+          const xPages = res.headers.get('x-pages');
+          return { body: await res.json(), headers: xPages !== null ? { 'x-pages': xPages } : {} };
+        },
+      });
+      for (const [name, quote] of Object.entries(infra.prices)) {
+        state.infraPrices[name] = { bid: quote.bid, ask: quote.ask };
+      }
+    } catch { /* capital card falls back to the NPC seed */ }
     // Audit B2: developer error text ("run tools/gen-sde.mjs") means nothing
     // to a site visitor — translate it at the display boundary.
     const friendly = (reason: string): string =>
@@ -776,13 +910,16 @@ function refreshJitaPrices(onProgress?: (t: string) => void, opts?: { fillOnly?:
     state.priceNote = `Live: ${snap.source} at ${snap.fetchedAt}. Auto-refreshes as your inputs change.` +
       (snap.unpriced.length > 0 ? ` UNPRICED: ${snap.unpriced.map((u) => `${u.name} (${friendly(u.reason)})`).join('; ')}` : '');
     lastLiveFetchMs = Date.now();
+    clearWatchdog();
     priceFetchInFlight = false;
     applyingPrices = true;
     try { persist(); rerender(); } finally { applyingPrices = false; }
     return true;
   }).catch((e: Error) => {
-    state.priceNote = `Live fetch failed: ${e.message} — enter quotes manually. If this section looks stuck, press its ⟲ Reset and try again.`;
+    const msg = e.name === 'AbortError' ? 'a request timed out after 20s (EVE’s market API did not answer)' : e.message;
+    state.priceNote = `Live fetch failed: ${msg} — enter quotes manually, or just try Fetch again.`;
     lastAutoFailMs = Date.now();
+    clearWatchdog();
     priceFetchInFlight = false;
     applyingPrices = true;
     try { persist(); rerender(); } finally { applyingPrices = false; }
@@ -822,7 +959,15 @@ function renderMarket(): void {
     const upd = (field: 'bid' | 'ask' | 'dailyVolume') => (ev: Event) => {
       const v = Number((ev.target as HTMLInputElement).value);
       const cur = state.prices[name] ?? { bid: 0, ask: 0 };
-      state.prices[name] = { ...cur, [field]: v };
+      const next = { ...cur, [field]: v };
+      // Round-4 audit fix: the fetched order-book depth belongs to the
+      // FETCHED quote — 'immediate' pricing walks it in preference to the
+      // top-of-book number, so keeping it made hand-editing bid/ask a
+      // silent NO-OP (measured: editing bid 50→500 changed net by exactly
+      // 0). A hand-set price drops the stale depth; the next live refresh
+      // brings fresh depth back with fresh top prices.
+      if (field === 'bid' || field === 'ask') { delete next.bids; delete next.asks; }
+      state.prices[name] = next;
       persist();
     };
     return el('tr', {},
@@ -859,24 +1004,7 @@ function renderMarket(): void {
   fetchBtn.className = 'btn small';
   body.replaceChildren(
     statusCard,
-    el('div', { class: 'v9-row fin-presets' },
-      el('span', { class: 'fin-preset-label' }, 'Where do you operate?'),
-      ...SPACE_BANDS.map((b) => {
-        const btn = el('button', {
-          class: `btn small preset-btn${state.costsSource === `preset-${b}` ? ' active' : ''}`,
-          type: 'button',
-          title: SPACE_COST_PRESETS[b].rationale,
-          click: () => { applyCostPreset(b); persist(); rerender(); },
-        }, BAND_LABELS[b]);
-        return btn;
-      }),
-      el('button', {
-        class: 'btn small', type: 'button',
-        title: 'Marks the current fee and freight numbers as your real rates (required for Exact detail level).',
-        click: () => { state.costsSource = 'user'; persist(); rerender(); },
-      }, 'These are my real rates'),
-    ),
-    el('p', { class: 'v9-muted fin-preset-note' }, costsSourceLabel()),
+    el('p', { class: 'v9-muted fin-preset-note' }, costsSourceLabel() + ' Change your space type under “Where do you operate?” in section 2.'),
     el('details', { class: 'v9-more-tools' },
     el('summary', {}, '✎ Edit prices & costs by hand'),
     el('p', { class: 'section-sub v9-muted' }, state.priceNote),
@@ -1354,7 +1482,6 @@ function insightCard(i: Insight): HTMLElement {
 
 function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HTMLElement {
   const box = el('div', {});
-  const bound = r.upperBoundPerWeek > 0 ? (r.realizedPerWeek / r.upperBoundPerWeek) * 100 : 100;
 
   let eco: ReturnType<typeof economics> | null = null;
   let ecoErr: string | null = null;
@@ -1439,6 +1566,41 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
       el('div', { class: 'v9-card' }, el('h4', {}, 'Per session'), el('p', {}, `${fmt(eco.netPerSession)} ISK × ${fmt1(eco.sessionsPerWeek)} sessions/wk`)),
       el('div', { class: 'v9-card' }, el('h4', {}, 'Gross'), el('p', {}, `${fmt(eco.grossPerWeek)} ISK/wk`)),
     ));
+    // Round-2 design fix: economics() computes honesty notes (order-book
+    // slippage past 0.5%, surplus P1 sold, per-colony customs detail) that
+    // were never rendered anywhere — the one place money is explained is here.
+    if (eco.notes.length > 0) {
+      panes.money.append(el('p', { class: 'v9-muted' }, eco.notes.join(' · ')));
+    }
+    // T-14 (owner 2026-09-03): the one-time setup capital and its payback,
+    // computed from the ACTUAL built colonies — the ledger stays steady-state
+    // (a rate); this is the stock it deliberately excludes, now visible.
+    {
+      const cap = capitalCost(r.plan, (type) => {
+        const q = state.infraPrices[commandCenterName(type)];
+        return q !== undefined && q.ask > 0 ? q.ask : null;
+      });
+      const payback = eco.netPerWeek > 0 ? (cap.totalIsk / eco.netPerWeek) * 7 : null;
+      panes.money.append(el('div', { class: 'v9-card v9-capital' },
+        el('h4', {}, 'Setup capital (one-time)'),
+        el('p', { class: 'v9-big' }, `${fmt(cap.totalIsk)} ISK to build ${cap.colonies} colon${cap.colonies === 1 ? 'y' : 'ies'}`),
+        el('p', { class: 'v9-muted' }, payback !== null
+          ? `Pays for itself in ${payback < 1 ? 'under a day' : `~${fmt1(payback)} day${payback >= 1.5 ? 's' : ''}`} at this net, then the weekly net above is all yours.`
+          : 'This plan never pays its setup back at the current net — the weekly ledger runs at a loss.'),
+        el('details', {},
+          el('summary', {}, 'What the setup buys'),
+          el('table', { class: 'v9-table' },
+            ...cap.lines.map((l) => el('tr', {}, el('td', {}, `${l.count}× ${l.label}`), el('td', {}, fmt(l.isk)))),
+            el('tr', { class: 'v9-total' }, el('td', {}, 'TOTAL'), el('td', {}, fmt(cap.totalIsk))),
+          ),
+          el('p', { class: 'v9-muted' },
+            (cap.ccLivePriced > 0
+              ? 'Command centers priced from the LIVE Jita order book (fetched with your market refresh); '
+              : 'Command centers at the 81,000 ISK NPC seed — fetch prices in section 3 for live quotes; ')
+            + 'facility and upgrade charges are the game’s fixed build costs (not market items — no endpoint prices them). Links and extractor heads cost no ISK.'),
+        ),
+      ));
+    }
     panes.money.append(el('details', { class: 'v9-ledger' },
       el('summary', {}, `Ledger (${eco.ledger.lines.length} lines — reconciles exactly to net)`),
       el('table', { class: 'v9-table' },
@@ -1450,10 +1612,9 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
     panes.money.append(el('div', { class: 'v9-warn' }, `Output solved, ISK not shown: ${ecoErr ?? 'prices missing'}`));
   }
 
-  // WHY — quality, insights, deep analytics.
-  panes.why.append(el('div', { class: 'v9-cards' },
-    el('div', { class: 'v9-card' }, el('h4', {}, 'Answer quality'), el('p', {}, `${r.method}${r.method === 'exhaustive' ? ' (exact for this world)' : ''} — ${bound.toFixed(1)}% of the relaxation bound`)),
-  ));
+  // WHY — insights and deep analytics. (Round-2 design fix: the bare
+  // "Answer quality" card repeated the same % as the "How good is this
+  // answer?" insight below it, minus all of its context — deleted.)
   const quick = [optimalityInsight(r), ...bottleneckReport(r), runwayInsight(r)];
   panes.why.append(el('h3', {}, 'Insights'), el('div', { class: 'v9-cards' }, ...quick.map(insightCard)));
 
@@ -1496,11 +1657,48 @@ function renderResult(r: SolveResult, s: UiState, extra: HTMLElement[] = []): HT
 /** The accuracy ladder's honesty end: every number built on a stand-in is
  * labeled with EXACTLY which stand-ins are in play. Returns null when nothing
  * was assumed (the Exact promise). */
+/** Round-3 uncertainty bracket (owner approved 2026-09-03): band-typical
+ * densities are one point in a wide real spread, so an answer built on them
+ * shows its LOW–HIGH range — two extra greedy solves with only the assumed
+ * densities scaled to the band's low/high anchors. Typed scans never move;
+ * real scans everywhere collapse the range to nothing. */
+function uncertaintyLine(product: string, sourcing: Readonly<Record<string, Sourcing>>): HTMLElement | null {
+  if (state.spaceBand === null || assumedDensityCount(state) === 0) return null;
+  const band = state.spaceBand;
+  const [loPct, hiPct] = QUICK_DENSITY_RANGE_PCT[band];
+  const typical = QUICK_DENSITY_PCT[band];
+  const solveAt = (pct: number): SolveResult | null => {
+    try {
+      const r = solveMax(toWorld(state, pct / typical), product, sourcing, { method: 'greedy' });
+      return 'error' in r ? null : r;
+    } catch { return null; }
+  };
+  const lo = solveAt(loPct);
+  const hi = solveAt(hiPct);
+  if (lo === null || hi === null) return null;
+  const iskAt = (r: SolveResult): number | null => {
+    try { return economics(r, toMarket(state), state.programHours).netPerWeek; } catch { return null; }
+  };
+  const loIsk = iskAt(lo);
+  const hiIsk = iskAt(hi);
+  return el('p', { class: 'v9-muted v9-uncertainty' },
+    `Range on this estimate: ${BAND_LABELS[band]} planets really spread ~${loPct}–${hiPct}% density, so this plan lands between `
+    + `${fmt(lo.realizedPerWeek)} and ${fmt(hi.realizedPerWeek)} units/wk`
+    + (loIsk !== null && hiIsk !== null ? ` (${fmt(loIsk)} to ${fmt(hiIsk)} ISK/wk net)` : '')
+    + '. Type your real scans to collapse the range.');
+}
+
 function estimateBanner(): HTMLElement | null {
   const assumptions: string[] = [];
   const assumed = assumedDensityCount(state);
   if (assumed > 0 && state.spaceBand !== null) {
     assumptions.push(`${assumed} density value${assumed === 1 ? '' : 's'} assumed at ${QUICK_DENSITY_PCT[state.spaceBand]}% (${BAND_LABELS[state.spaceBand]} typical) — scan your planets for real numbers.`);
+  } else if (assumed > 0) {
+    // Round-4 audit: a legacy save can carry assumed (~) densities with no
+    // band chosen and still solve at the refined rung on its real scans —
+    // the leftover assumptions must be disclosed here too, not only when a
+    // band exists to name.
+    assumptions.push(`${assumed} density value${assumed === 1 ? ' is an' : 's are'} unconfirmed stand-in${assumed === 1 ? '' : 's'} (marked ~) — pick your space type under “Where do you operate?” or type the real scans.`);
   }
   // The costs assumption only matters when ISK is actually on screen —
   // an unpriced solve shows output, not net.
@@ -1508,6 +1706,12 @@ function estimateBanner(): HTMLElement | null {
     assumptions.push(`${costsSourceLabel()} Edit or confirm them in section 3.`);
   }
   if (assumptions.length === 0) return null;
+  // Round-2 design fix: two model assumptions that shape every number were
+  // invisible in Simple mode — say them where the estimate is framed.
+  if ((state.stackPenaltyPct ?? 10) > 0) {
+    assumptions.push(`Extra colonies on the SAME planet's deposit are assumed to interfere: each yields ${100 - (state.stackPenaltyPct ?? 10)}% of the one before (dial under More tools; 0% restores the old no-interference model).`);
+  }
+  assumptions.push('Colony links are costed at a conservative 700 km default length — real links are usually shorter, so actual CPU/power headroom is a little better.');
   return el('div', { class: 'v9-warn v9-estimate' },
     el('b', {}, 'ESTIMATE — these numbers stand in for details you have not provided yet:'),
     ...assumptions.map((a) => el('div', {}, `• ${a}`)));
@@ -1611,6 +1815,103 @@ function refusalBox(raw: string, opts?: { achievable?: number | undefined; onSet
   return el('div', { class: 'v9-warn' }, ...kids);
 }
 
+/** Round-3 (owner approved): the compare/profit ranking runs in a WEB WORKER
+ * — fully off the main thread, zero frozen frames at any roster size. The
+ * Round-2 chunked main-thread loop below remains as the fallback for
+ * environments without module-worker support; both paths produce identical
+ * results in identical order. */
+type CompareOut = { ranked: RankedOption[]; excluded: Array<{ product: string; reason: string }> };
+let solveWorker: Worker | 'unavailable' | null = null;
+let solveWorkerReqId = 0;
+const solveWorkerJobs = new Map<number, {
+  resolve: (r: CompareOut | null) => void;
+  onProgress: (t: string) => void;
+}>();
+
+function getSolveWorker(): Worker | null {
+  if (solveWorker === 'unavailable') return null;
+  if (solveWorker !== null) return solveWorker;
+  try {
+    const w = new Worker(new URL('./solve-worker.js', import.meta.url), { type: 'module' });
+    w.addEventListener('message', (ev) => {
+      const m = (ev as MessageEvent).data as { id: number; progress?: number; refine?: number; total?: number; done?: boolean; error?: string; ranked?: RankedOption[]; excluded?: CompareOut['excluded'] };
+      const job = solveWorkerJobs.get(m.id);
+      if (job === undefined) return;
+      if (m.done === true) { solveWorkerJobs.delete(m.id); job.resolve({ ranked: m.ranked!, excluded: m.excluded! }); return; }
+      if (m.error !== undefined) { solveWorkerJobs.delete(m.id); job.resolve(null); return; }
+      if (m.progress !== undefined) job.onProgress(`Ranking products… (${m.progress}/${m.total})`);
+      if (m.refine !== undefined) job.onProgress(`Ranking products… refining the top candidates (${m.refine}/${m.total})`);
+    });
+    // A load failure (or any worker-level crash) fails open: pending jobs
+    // fall back to the main-thread path and the worker is not retried.
+    w.addEventListener('error', () => {
+      solveWorker = 'unavailable';
+      for (const [id, job] of solveWorkerJobs) { solveWorkerJobs.delete(id); job.resolve(null); }
+      try { w.terminate(); } catch { /* already dead */ }
+    });
+    solveWorker = w;
+    return w;
+  } catch {
+    solveWorker = 'unavailable';
+    return null;
+  }
+}
+
+function comparativeViaWorker(
+  world: SolveWorld,
+  market: MarketContext,
+  overrides: Readonly<Record<string, Sourcing>>,
+  onProgress: (t: string) => void,
+): Promise<CompareOut | null> {
+  const w = getSolveWorker();
+  if (w === null) return Promise.resolve(null);
+  const id = ++solveWorkerReqId;
+  return new Promise((resolve) => {
+    solveWorkerJobs.set(id, { resolve, onProgress });
+    try {
+      w.postMessage({ id, world, market, overrides });
+    } catch {
+      // Something in the payload didn't clone — fall back.
+      solveWorkerJobs.delete(id);
+      resolve(null);
+    }
+  });
+}
+
+/** Round-2 responsiveness fix (now the worker fallback): solve a few
+ * candidates per tick, paint progress, and yield between chunks so the tab
+ * stays alive; the merged result is sorted exactly as comparative() sorts. */
+async function comparativeChunked(
+  world: SolveWorld,
+  market: MarketContext,
+  overrides: Readonly<Record<string, Sourcing>>,
+  onProgress: (t: string) => void,
+): Promise<CompareOut> {
+  const offThread = await comparativeViaWorker(world, market, overrides, onProgress);
+  if (offThread !== null) return offThread;
+  const names = allProducts();
+  const ranked: RankedOption[] = [];
+  const excluded: Array<{ product: string; reason: string }> = [];
+  const CHUNK = 6;
+  // Mirror of the worker's two phases — chunked ≡ whole-run comparative().
+  for (let i = 0; i < names.length; i += CHUNK) {
+    const part = comparative(world, market, names.slice(i, i + CHUNK), overrides, { sweepTop: 0 });
+    ranked.push(...part.ranked);
+    excluded.push(...part.excluded);
+    onProgress(`Ranking products… (${Math.min(i + CHUNK, names.length)}/${names.length})`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  ranked.sort((a, b) => b.economics.netPerWeek - a.economics.netPerWeek);
+  const K = Math.min(20, ranked.length);
+  for (let i = 0; i < K; i++) {
+    ranked[i] = sweepRankedRow(world, market, ranked[i]!, overrides);
+    onProgress(`Ranking products… refining the top candidates (${i + 1}/${K})`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  ranked.sort((a, b) => b.economics.netPerWeek - a.economics.netPerWeek);
+  return { ranked, excluded };
+}
+
 function runSolve(): void {
   const resultsBox = byId('resultsPanel');
   const gate = currentReadiness();
@@ -1625,12 +1926,19 @@ function runSolve(): void {
   if (sec4) sec4.classList.remove('collapsed');
   resultsBox.replaceChildren(el('p', {}, 'Solving…'));
   const summary = document.getElementById('sec4Summary');
+  const run = ++solveRun;
+  const revAtStart = inputRev;
   setTimeout(() => {
+    if (run !== solveRun) return; // superseded before it even started
     try {
       const world = toWorld(state);
       const banner = estimateBanner();
       if (state.mode === 'compare') {
-        const { ranked, excluded } = comparative(world, toMarket(state), undefined, state.sourcingOverrides);
+        void comparativeChunked(world, toMarket(state), state.sourcingOverrides,
+          (t) => { if (run === solveRun) resultsBox.replaceChildren(el('p', {}, t)); },
+        ).then(({ ranked, excluded }) => {
+        if (run !== solveRun) return; // a newer solve owns the panel
+        try {
         if (summary) summary.textContent = `${ranked.length} viable products ranked${banner !== null ? ' (estimate)' : ''}`;
         announce(`Comparison complete: ${ranked.length} viable products ranked.`);
         // Rank order first; the user picks/confirms a product, THEN gets the
@@ -1701,6 +2009,12 @@ function runSolve(): void {
             el('summary', {}, `${otherExcluded.length} product${otherExcluded.length === 1 ? '' : 's'} excluded — each with its reason${otherExcluded.length > 40 ? ' (first 40 shown)' : ''}`),
             el('ul', {}, ...otherExcluded.slice(0, 40).map((x) => el('li', {}, `${x.product}: ${friendlyRefusal(x.reason)}`))))] : []),
         );
+        if (revAtStart !== inputRev) markResultsStale();
+        } catch (e) {
+          resultsBox.replaceChildren(refusalBox((e as Error).message));
+          announce('Solve failed — see the results section for the reason.');
+        }
+        });
         return;
       }
       if (state.mode === 'profit') {
@@ -1708,7 +2022,11 @@ function runSolve(): void {
         // automatically — rank everything with the user's pins applied, then
         // give the winner the full treatment (price-compared suggested
         // sourcing that may buy intermediates, exact final solve).
-        const { ranked, excluded } = comparative(world, toMarket(state), undefined, state.sourcingOverrides);
+        void comparativeChunked(world, toMarket(state), state.sourcingOverrides,
+          (t) => { if (run === solveRun) resultsBox.replaceChildren(el('p', {}, t)); },
+        ).then(({ ranked, excluded }) => {
+        if (run !== solveRun) return; // a newer solve owns the panel
+        try {
         if (ranked.length === 0) {
           resultsBox.replaceChildren(refusalBox(`no-viable-product: all candidates excluded (${excluded.length} reasons recorded)`));
           return;
@@ -1732,10 +2050,19 @@ function runSolve(): void {
         );
         if (summary) summary.textContent = `${best.product} · ${fmt(bestResult.realizedPerWeek)}/wk · maximize profits${banner !== null ? ' (estimate)' : ''}`;
         announce(`Pick for me chose ${best.product}: ${fmt(bestEco)} ISK per week.`);
-        const rendered = renderResult(bestResult, state, [suggestionCard(bestSuggestion)]);
+        const profitExtras: HTMLElement[] = [suggestionCard(bestSuggestion)];
+        const profitBracket = uncertaintyLine(best.product, bestSuggestion.sourcing);
+        if (profitBracket !== null) profitExtras.push(profitBracket);
+        const rendered = renderResult(bestResult, state, profitExtras);
         rendered.prepend(headline);
         if (banner !== null) rendered.prepend(banner);
         resultsBox.replaceChildren(rendered);
+        if (revAtStart !== inputRev) markResultsStale();
+        } catch (e) {
+          resultsBox.replaceChildren(refusalBox((e as Error).message));
+          announce('Solve failed — see the results section for the reason.');
+        }
+        });
         return;
       }
       if (mixIsActive(state)) {
@@ -1841,6 +2168,8 @@ function runSolve(): void {
       }
       if (summary) summary.textContent = `${fmt(result.realizedPerWeek)} ${result.product}/wk · ${result.method}${banner !== null ? ' (estimate)' : ''}`;
       announce(`Solved: ${fmt(result.realizedPerWeek)} ${result.product} per week using ${result.slotsUsed} colonies.`);
+      const bracket = uncertaintyLine(state.product, sourcing);
+      if (bracket !== null) extra.push(bracket);
       const rendered = renderResult(result, state, extra);
       if (banner !== null) rendered.prepend(banner);
       resultsBox.replaceChildren(rendered);
@@ -2009,12 +2338,25 @@ function wireShell(): void {
     document.getElementById('main')?.scrollIntoView({ behavior: 'smooth' });
   });
 
+  // Contested-deposit haircut (T-08): Advanced dial, persisted with the save.
+  {
+    const sp = document.getElementById('stackPenalty') as HTMLInputElement | null;
+    if (sp !== null) {
+      sp.value = String(state.stackPenaltyPct ?? 10);
+      sp.addEventListener('change', () => {
+        const v = Number(sp.value);
+        state.stackPenaltyPct = Number.isFinite(v) ? Math.min(90, Math.max(0, v)) : 10;
+        sp.value = String(state.stackPenaltyPct);
+        persist(); rerender();
+      });
+    }
+  }
   document.getElementById('applyFlatRate')?.addEventListener('click', () => {
     const pct = Number((document.getElementById('flatRate') as HTMLInputElement | null)?.value ?? 65);
     if (!Number.isFinite(pct) || pct <= 0) return;
     flatRateUndo = structuredClone(state.planets);
     const w = wFromDensityPct(pct);
-    for (const p of state.planets) for (const r of p.resources) r.w = w;
+    for (const p of state.planets) for (const r of p.resources) { r.w = w; r.assumed = true; }
     const st = document.getElementById('flatRateStatus');
     if (st) st.textContent = `Applied ${pct}% (w=${fmt1(w)}) to every resource on every planet — an estimate, not your real numbers.`;
     persist(); rerender();
@@ -2029,11 +2371,14 @@ function wireShell(): void {
       if (input) input.value = String(QUICK_DENSITY_PCT[band]);
       // Recording the band here also feeds the Quick-estimate detail level
       // (and its cost prefill) — this box is the single space-type control.
+      // Owner 2026-09-03: picking a space type ALWAYS aligns assumed/blank
+      // densities to the band (user-owned cost rates stay untouched).
       state.spaceBand = band;
+      applyBandDensities(band);
       if (state.costsSource !== 'user') applyCostPreset(band);
       persist(); rerender();
       const st = document.getElementById('flatRateStatus');
-      if (st) st.textContent = `${BAND_LABELS[band]} recorded (typical ${QUICK_DENSITY_PCT[band]}%). Press “Apply to all planets” to write it into every resource — or leave your scans alone; Quick estimate uses the band only where you haven't scanned.`;
+      if (st) st.textContent = `${BAND_LABELS[band]} recorded — every unscanned resource is now at its typical ${QUICK_DENSITY_PCT[band]}% (marked ~); your typed scans are untouched. “Apply to all planets” would overwrite scans too.`;
     });
   }
 
@@ -2098,6 +2443,13 @@ function wireSystemSearch(): void {
     if (status) status.textContent = `Loading planets of ${entry.name}…`;
     try {
       const imported = await importSystem(defaultEsiJson(), entry.id);
+      // Owner 2026-09-03: the system's OWN space defines its density band —
+      // its real security status comes with the import, so use it, and let
+      // the first imported system define "where do you operate" when the
+      // user hasn't said yet.
+      const band = bandOfSecurity(imported.security, imported.wormhole);
+      const bandWasUnset = state.spaceBand === null;
+      if (bandWasUnset) applyCostPreset(band);
       let added = 0, skipped = 0;
       for (const p of imported.planets) {
         if (state.planets.some((x) => x.name.toLowerCase() === p.name.toLowerCase())) { skipped++; continue; }
@@ -2106,8 +2458,8 @@ function wireSystemSearch(): void {
           type: p.type,
           system: imported.system,
           // Game truth (library 11): the resource SET is fixed by planet type.
-          // Densities load at the 70% site default until the user changes them.
-          resources: defaultResources(p.type),
+          // Densities load at the system's own band typical, marked assumed.
+          resources: defaultResources(p.type, band),
           minimized: state.planets.length > 0,
         });
         added++;
@@ -2118,7 +2470,8 @@ function wireSystemSearch(): void {
       if (status) {
         status.textContent = `${imported.system}: ${added} planet${added === 1 ? '' : 's'} added` +
           (skipped > 0 ? `, ${skipped} already present` : '') +
-          '. Names and types are ESI facts; densities loaded at the 70% default — replace them with your scans (or use the batch import).';
+          `. Names and types are ESI facts; densities assumed at the ${BAND_LABELS[band]} typical (${QUICK_DENSITY_PCT[band]}%, marked ~) — replace them with your scans` +
+          (bandWasUnset ? `. Your space type is now set to ${BAND_LABELS[band]} (taxes and shipping too — adjust under "Where do you operate?").` : '.');
       }
       announce(`${imported.system}: ${added} planets loaded from ESI.`);
       input.value = '';
@@ -2230,6 +2583,7 @@ function rerender(): void {
       renderGoal();
       updateSolveGate();
       refreshChainsViz(); // keep node price/m³ tags in step with the Market section
+      refreshRecipe(); // recipe costs track the same quotes
     } while (renderQueued);
   } finally {
     rendering = false;
@@ -2547,33 +2901,56 @@ function initRegionScout(): void {
       const { systems, skipped, live } = await systemsFor(regionId);
       status.textContent = `Ranking ${systems.length} systems for your goal…`;
       const act = await ensureActivity();
+      // T-17 fix: densities interpolate from each system's EXACT security
+      // status (continuous, anchored on the band typicals) — same-type
+      // systems at different security no longer tie exactly.
       const infos: ScoutSystemInfo[] = systems.map((s) => ({
         id: s.id, name: s.name, security: s.security, planets: s.planets,
-        assumedW: wFromDensityPct(QUICK_DENSITY_PCT[secBandOf(s.security, wormhole)]),
+        assumedW: wFromDensityPct(densityPctOfSecurity(s.security, wormhole)),
       }));
       const mixActive = mixIsActive(state) && state.mode !== 'compare' && state.mode !== 'profit';
-      const rows = scoutSystems(
-        infos,
-        operation(state.characters.map((c) => character({ ...c }))),
-        state.programHours,
-        toMarket(state),
-        {
-          mode: state.mode, product: state.product,
-          ...(state.mode === 'quota' ? { quotaPerWeek: state.quotaPerWeek } : {}),
-          ...(mixActive ? { mix: state.mix.map((m) => ({ product: m.product, pct: m.pct })) } : {}),
-          overrides: state.sourcingOverrides,
-        },
-      );
+      const goal = {
+        mode: state.mode, product: state.product,
+        ...(state.mode === 'quota' ? { quotaPerWeek: state.quotaPerWeek } : {}),
+        ...(mixActive ? { mix: state.mix.map((m) => ({ product: m.product, pct: m.pct })) } : {}),
+        overrides: state.sourcingOverrides,
+      };
+      // One system per tick with a live counter (ranking-truth fix
+      // 2026-09-03): a whole-region compare scout is seconds of solver work
+      // per system — scored synchronously it froze the page with no feedback
+      // and read as a timeout. Yielding keeps the page alive and the counter
+      // honest; the ranking is identical.
+      const op = operation(state.characters.map((c) => character({ ...c })));
+      const mkt = toMarket(state);
+      const penalty = (state.stackPenaltyPct ?? 10) / 100;
+      const rows: ScoutRow[] = [];
+      for (let i = 0; i < infos.length; i++) {
+        status.textContent = `Scoring ${infos[i]!.name} (${i + 1}/${infos.length})…`;
+        await new Promise((r) => setTimeout(r, 0));
+        rows.push(scoutSystem(infos[i]!, op, state.programHours, mkt, goal, penalty));
+      }
+      sortScoutRows(rows);
       const feasible = rows.filter((r) => r.feasible);
       const shown = rows.slice(0, 15);
       const regionName = regions.find((r) => r.id === regionId)?.name ?? 'this region';
       const loadPlanets = (row: (typeof rows)[number]): void => {
+        // Owner 2026-09-03: the scouted system's OWN space defines its band —
+        // its planets land at that band's typical density, and picking a home
+        // here IS picking your type of space when none was set yet.
+        const band = bandOfSecurity(row.system.security, wormhole);
+        const bandWasUnset = state.spaceBand === null;
+        if (bandWasUnset) applyCostPreset(band);
+        // T-17: load at the SAME continuous security-interpolated density the
+        // scout scored with, so the planner's numbers match the ranking's.
+        const pct = Math.round(densityPctOfSecurity(row.system.security, wormhole) * 10) / 10;
+        const wLoad = Math.round(wFromDensityPct(pct) * 10) / 10;
         let added = 0;
         for (const p of row.system.planets) {
           if (state.planets.some((x) => x.name.toLowerCase() === p.name.toLowerCase())) continue;
           state.planets.push({
             name: p.name, type: p.type, system: row.system.name,
-            resources: defaultResources(p.type), minimized: state.planets.length > 0,
+            resources: resourcesOf(p.type).map((p0) => ({ p0, w: wLoad, assumed: true })),
+            minimized: state.planets.length > 0,
           });
           added++;
         }
@@ -2581,18 +2958,19 @@ function initRegionScout(): void {
         document.getElementById('sec1')?.classList.remove('collapsed');
         showScout(false);
         const st = document.getElementById('flatRateStatus');
-        if (st) st.textContent = `${row.system.name}: ${added} planet${added === 1 ? '' : 's'} loaded at the 70% default — replace with your scans.`;
+        if (st) st.textContent = `${row.system.name}: ${added} planet${added === 1 ? '' : 's'} loaded at its security's typical density (${pct}%, marked ~) — replace with your scans.`
+          + (bandWasUnset ? ` Your space type is now ${BAND_LABELS[band]}.` : '');
         announce(`${row.system.name} planets loaded into the planner.`);
       };
       results.replaceChildren(
         el('div', { class: 'v9-estimate' },
           el('b', {}, 'ESTIMATE — '),
-          `densities assumed at band typicals (${QUICK_DENSITY_PCT.highsec}/${QUICK_DENSITY_PCT.lowsec}/${QUICK_DENSITY_PCT.nullsec}/${QUICK_DENSITY_PCT.wormhole}% high/low/null/WH) — scan values only exist in game.`
+          `densities assumed from each system's exact security status (interpolated between the ${QUICK_DENSITY_PCT.highsec}/${QUICK_DENSITY_PCT.lowsec}/${QUICK_DENSITY_PCT.nullsec}/${QUICK_DENSITY_PCT.wormhole}% high/low/null/WH typicals) — scan values only exist in game.`
           + (skipped > 0 ? ` ${skipped} unsupported planet${skipped === 1 ? '' : 's'} left out.` : '')),
         el('p', { class: 'v9-muted' },
           `${regionName}: ${feasible.length} of ${rows.length} systems fit your goal. Traffic is live (last hour), shown beside the ISK — never inside it.`),
         el('table', { class: 'v9-table' },
-          el('tr', {}, ...['#', 'System', 'Sec', 'Planets', 'Est. net ISK/wk', 'Plan', 'Traffic (1h)', ''].map((h) => el('th', {}, h))),
+          el('tr', {}, ...['#', 'System', 'Sec', 'Planets', 'Est. net ISK/wk', 'Headroom/wk', 'Plan', 'Traffic (1h)', ''].map((h) => el('th', {}, h))),
           ...shown.map((r, i) => {
             const badge = activityBadge(act?.get(r.system.id));
             const a = act?.get(r.system.id);
@@ -2602,6 +2980,12 @@ function initRegionScout(): void {
               el('td', {}, wormhole ? 'WH' : r.system.security.toFixed(1)),
               el('td', {}, planetTypeCounts(r.system.planets).map(([t, n]) => `${n}× ${t}`).join(' · ') || 'none'),
               el('td', {}, r.feasible ? fmt(r.netPerWeek) : '—'),
+              // Round-2 design fix: the tie-breaking "more/better ground"
+              // metric was invisible — equal-net rows looked arbitrarily
+              // ordered. Headroom is the growth ceiling: what this ground
+              // could carry with a bigger roster.
+              el('td', { title: 'Growth ceiling — what this system’s ground could support with more characters. Breaks ties between equal-net systems.' },
+                r.feasible ? fmt(r.headroomPerWeek) : '—'),
               el('td', { title: r.note }, r.feasible ? r.product : friendlyRefusal(r.note)),
               el('td', {}, el('span', { class: `v9-scout-badge v9-scout-${badge.tone}`,
                 title: act === null ? 'Live traffic unavailable right now' : `Last hour: ${a?.jumps ?? 0} jumps, ${(a?.shipKills ?? 0) + (a?.podKills ?? 0)} player kills, ${a?.npcKills ?? 0} NPC kills` },
@@ -2612,6 +2996,10 @@ function initRegionScout(): void {
             );
           }),
         ),
+        ...(shown.some((r, i) => i > 0 && r.feasible && shown[i - 1]!.feasible && Math.abs(r.netPerWeek - shown[i - 1]!.netPerWeek) < 1)
+          ? [el('p', { class: 'v9-muted' },
+            'Systems with identical planet line-ups genuinely tie under band-typical densities — ties are ordered by Headroom (more/better ground), then planet count. Your real scans would separate them.')]
+          : []),
         ...(rows.length > 15 ? [el('p', { class: 'v9-muted' }, `${rows.length - 15} more systems ranked below the top 15.`)] : []),
       );
       status.textContent = live && baked === null
@@ -2637,5 +3025,6 @@ rerender();
 // always works).
 if (unpricedNeeded().length > 0) void refreshJitaPrices(undefined, { fillOnly: true });
 initChainsViz((name) => state.prices[name]);
+initRecipe((name) => state.prices[name]);
 selfTest();
 document.body.dataset['smoke'] = 'ok';

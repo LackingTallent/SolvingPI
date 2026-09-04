@@ -130,7 +130,7 @@ const solveAndWait = async () => {
   await page.click('#stickyCalcBtn');
   await page.waitForFunction(() => {
     const p = document.getElementById('resultsPanel');
-    return p && p.childElementCount > 0 && !/^Solving/.test(p.textContent ?? '');
+    return p && p.childElementCount > 0 && !/^(Solving|Ranking products)/.test(p.textContent ?? '');
   }, { timeout: 120000 });
 };
 const panelText = () => page.locator('#resultsPanel').textContent();
@@ -186,7 +186,7 @@ await row.locator('button', { hasText: 'Plan this' }).click();
 await page.waitForFunction((product) => {
   const p = document.getElementById('resultsPanel');
   const t = p?.textContent ?? '';
-  return p && p.childElementCount > 0 && !/^Solving/.test(t) && !t.startsWith('Comparison');
+  return p && p.childElementCount > 0 && !/^(Solving|Ranking products)/.test(t) && !t.startsWith('Comparison');
 }, cutRow.product, { timeout: 120000 });
 const pickText = await panelText();
 check('COMPARE pick (cut-ranked product): full plan, no dead end',

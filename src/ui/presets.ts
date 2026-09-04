@@ -72,7 +72,7 @@ export const SPACE_COST_PRESETS: Readonly<Record<SpaceBand, SpaceCostPreset>> = 
 };
 
 export const PRESETS_ARE_APPROXIMATIONS =
-  'Preset rates are typical values, not yours. Edit any field — or confirm them — to make them your real rates.';
+  'Preset rates are typical values, not yours. Edit any field to make them your real rates.';
 
 /**
  * Quick-estimate density assumption per security band, in the UI's %
@@ -85,6 +85,64 @@ export const QUICK_DENSITY_PCT: Readonly<Record<SpaceBand, number>> = {
   nullsec: 90,
   wormhole: 100,
 };
+
+/**
+ * Low/high density anchors per band, bracketing the typical above — real
+ * planets inside one band genuinely spread this much (the same community
+ * yield reports the typicals anchor on). Estimates by construction; they
+ * exist so assumed-density answers can show an honest RANGE instead of one
+ * falsely precise number (Round-3, owner approved 2026-09-03).
+ */
+export const QUICK_DENSITY_RANGE_PCT: Readonly<Record<SpaceBand, readonly [number, number]>> = {
+  highsec: [20, 45],
+  lowsec: [40, 85],
+  nullsec: [60, 125],
+  wormhole: [70, 140],
+};
+
+/** Security status → band (owner 2026-09-03: an imported or scouted system's
+ * OWN space defines its density band). Wormhole systems must be flagged by
+ * the caller — their ESI security (-0.99) would otherwise read as null-sec. */
+export function bandOfSecurity(security: number, wormhole = false): SpaceBand {
+  if (wormhole) return 'wormhole';
+  if (security >= 0.45) return 'highsec';
+  if (security > 0) return 'lowsec';
+  return 'nullsec';
+}
+
+/**
+ * CONTINUOUS density model (T-17 fix, owner 2026-09-03 "fix it so it does
+ * what it is supposed to"): the scout used four flat band buckets, so every
+ * same-planet-mix system inside a band tied EXACTLY and the ranking could
+ * not tell a 0.5 system from a 0.9 one. In game, resource richness scales
+ * with true security; this interpolates the SAME community-anchored band
+ * typicals (QUICK_DENSITY_PCT) piecewise-linearly across the exact security
+ * status, so systems only tie when their knowable data is truly identical
+ * (same planet types AND same security). Still an estimate by construction —
+ * no new "truth" is invented, only the four existing anchors are joined.
+ * Anchor placement: each band's typical sits at the band's representative
+ * security (high 0.7, low 0.25, null −0.5), band boundaries take midpoints.
+ * Wormholes stay flat at the WH typical (J-space class is not in the map).
+ */
+export function densityPctOfSecurity(security: number, wormhole = false): number {
+  if (wormhole) return QUICK_DENSITY_PCT.wormhole;
+  const pts: ReadonlyArray<readonly [number, number]> = [
+    [1.0, 22],
+    [0.7, QUICK_DENSITY_PCT.highsec],   // 30
+    [0.45, 45],                          // high/low boundary midpoint
+    [0.25, QUICK_DENSITY_PCT.lowsec],    // 60
+    [0.0, 75],                           // low/null boundary midpoint
+    [-0.5, QUICK_DENSITY_PCT.nullsec],   // 90
+    [-1.0, 100],
+  ];
+  const s = Math.max(-1, Math.min(1, security));
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [sHi, dHi] = pts[i]!;
+    const [sLo, dLo] = pts[i + 1]!;
+    if (s <= sHi && s >= sLo) return dLo + ((s - sLo) / (sHi - sLo)) * (dHi - dLo);
+  }
+  return s > 0 ? 22 : 100; // unreachable after clamping; belt and braces
+}
 
 export const BAND_LABELS: Readonly<Record<SpaceBand, string>> = {
   highsec: 'High sec', lowsec: 'Low sec', nullsec: 'Null sec', wormhole: 'Wormhole',

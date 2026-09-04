@@ -175,10 +175,26 @@ cell('mix sanitize: loaded shares always normalize to exactly 100', () => {
   const st3 = stateMod.sanitizeState({ mix: [{ product: 'Water', pct: 40 }] });
   assert(st3.mix.length === 0, 'a one-line mix should collapse to single-product mode');
 });
+cell('sanitize drops malformed order-book depth, keeps valid depth (Round-4)', () => {
+  const st = stateMod.sanitizeState({
+    prices: {
+      Junk1: { bid: 100, ask: 120, bids: 'not-an-array', asks: 42 },
+      Junk2: { bid: 100, ask: 120, bids: [{ price: -5, qty: 10 }], asks: [{ price: 1, qty: 0 }] },
+      Wrong: { bid: 100, ask: 120, bids: [{ price: 90, qty: 5 }, { price: 95, qty: 5 }] }, // bids must DESCEND
+      Good: { bid: 100, ask: 120, bids: [{ price: 100, qty: 5 }, { price: 95, qty: 5 }], asks: [{ price: 120, qty: 3 }, { price: 125, qty: 3 }] },
+      Broken: { bid: Number.NaN, ask: 120 },
+    } as never,
+  });
+  assert(st.prices['Junk1'] !== undefined && st.prices['Junk1'].bids === undefined && st.prices['Junk1'].asks === undefined, 'non-array depth must be dropped');
+  assert(st.prices['Junk2']!.bids === undefined && st.prices['Junk2']!.asks === undefined, 'non-positive levels must be dropped');
+  assert(st.prices['Wrong']!.bids === undefined, 'mis-ordered bids must be dropped');
+  assert(st.prices['Good']!.bids !== undefined && st.prices['Good']!.asks !== undefined, 'valid depth must survive');
+  assert(st.prices['Broken'] === undefined, 'a NaN quote must be dropped whole');
+});
 cell('save/load round trip is lossless for a real state', () => {
   const d = stateMod.defaultState();
   const baseCount = d.planets.length;
-  d.planets.push({ name: 'Extra', type: 'Gas', resources: stateMod.defaultResources('Gas'), minimized: true, system: 'Jita' });
+  d.planets.push({ name: 'Extra', type: 'Gas', resources: stateMod.defaultResources('Gas', 'highsec'), minimized: true, system: 'Jita' });
   d.prices['Coolant'] = { bid: 11000, ask: 12500 };
   stateMod.saveState(d);
   const back = stateMod.loadState();
@@ -195,9 +211,13 @@ cell('default state: compare pre-selected, mine-it pins, ZERO planets, all-V mai
   assert(d.mode === 'compare' && d.modeChosen === false, 'no goal may be pre-selected (owner 2026-09-02)');
   assert(Object.values(d.sourcingOverrides).every((v) => v === 'extract'), 'pins not mine-it');
   assert(d.planets.length === 0, 'starter world must be empty (owner spec)');
-  // Added planets still get the 70% default on every resource.
-  const added = defaultResources('Barren');
-  assert(added.length === 5 && added.every((r) => r.w > 0), 'added planet not 70% x5');
+  // Owner 2026-09-03: NO default density — band null means blank resources
+  // (w=0, assumed) until the user picks their type of space; with a band,
+  // resources arrive at that band's typical.
+  const blank = defaultResources('Barren', null);
+  assert(blank.length === 5 && blank.every((r) => r.w === 0 && r.assumed === true), 'band-less planet must arrive blank');
+  const banded = defaultResources('Barren', 'nullsec');
+  assert(banded.length === 5 && banded.every((r) => r.w > 0 && r.assumed === true), 'banded planet must take the band typical');
   // Owner spec 2026-09-01: the roster starts EMPTY and unconfirmed.
   assert(d.characters.length === 0 && d.charactersDone === false, 'roster must start empty and unconfirmed');
 });

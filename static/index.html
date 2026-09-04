@@ -219,7 +219,10 @@
         <li><b>Add what you have</b> (section 2): your characters, then your planets &mdash;
           press <b>I know my system</b> to type its name, or <b>Find me a home</b> and
           the tool scouts a region for you.</li>
-        <li><b>Tap where you operate</b> (section 3). Live Jita prices load themselves.</li>
+        <li><b>Tap where you operate</b> (bottom of section 2). Your type of space matters
+          &mdash; one tap sets your taxes, shipping and every unscanned planet&rsquo;s
+          typical density (there is no default until you do); live Jita prices load
+          themselves.</li>
         <li><b>Press the gold SOLVE button</b> at the bottom. Your plan appears in
           section 4.</li>
       </ol>
@@ -296,7 +299,7 @@
 
 
     <details class="v9-more-tools" id="moreTools">
-      <summary>&#9881; More tools — space presets &amp; screenshot import</summary>
+      <summary>&#9881; More tools — space presets &amp; dials</summary>
     <div class="quickrate-panel">
       <div class="qr-head">
         <b>&#9889; SELECT SPACE TYPE PRESET FLAT RATE</b>
@@ -317,12 +320,26 @@
         <button class="btn small" id="clearFlatRate" type="button" title="Restore the densities you had before applying a flat rate">Undo</button>
       </div>
       <div class="qr-status" id="flatRateStatus"></div>
+      <div class="qr-row">
+        <label for="stackPenalty">Contested-deposit haircut</label>
+        <span class="val-field"><input type="number" id="stackPenalty" min="0" max="90" step="1" value="10"
+               aria-label="Yield haircut percent per extra colony on the same deposit"><span class="val-unit">%</span></span>
+        <span class="qr-sub">Each extra colony mining the same resource on the same planet is
+          assumed to yield this much less than the one before it. 0% restores the old
+          no-interference model.</span>
+      </div>
     </div>
 
+    </details>
+
+    <!-- Screenshot import stands on its own (owner 2026-09-04): it was buried
+         inside Advanced-only More tools after the streamline; the planets list
+         now carries a visible button in BOTH modes that opens this panel. -->
+    <div id="batchWrap" hidden>
     <div class="batch-panel">
       <div class="batch-head">
-        <b>Batch import</b>
-        <span class="batch-sub">Up to 20 planet screenshots or a .zip &mdash; read in your browser, never uploaded.</span>
+        <b>Screenshot import</b>
+        <span class="batch-sub">Up to 20 planet screenshots or a .zip &mdash; read in your browser, never uploaded. Check every density before you rely on it.</span>
       </div>
       <div class="batch-row">
         <label class="upload-label" for="batchInput">&#128193; Choose screenshots or .zip</label>
@@ -332,7 +349,7 @@
       <div class="batch-status" id="batchStatus"></div>
       <div id="batchResults"></div>
     </div>
-    </details>
+    </div>
 
     <div id="v9PlanetList"></div>
     </div>
@@ -384,6 +401,16 @@
   <div class="sec-body" id="secChainsBody">
     <p class="section-sub">Pick any commodity and see its whole production chain drawn &mdash; the planets it needs, per-unit size and live Jita price on every node, units and cargo volume on every edge. Four layouts; click a node to re-root.</p>
     <div id="chainsViz"></div>
+  </div>
+</section>
+
+<section class="card reference collapsed" id="secRecipe">
+  <div class="section-head-row">
+    <h2 class="section-title"><span class="st-label">Recipe Calculator</span><span class="sec-summary">Batch inputs &middot; costs &middot; m&sup3; &middot; build time</span></h2>
+    <button class="btn collapse-btn" data-target="secRecipe" title="Collapse or expand this section">&#9660;</button>
+  </div>
+  <div class="sec-body" id="secRecipeBody">
+    <div id="recipePanel"></div>
   </div>
 </section>
 
@@ -508,8 +535,10 @@
           maxed roster &mdash; fix any skills that aren&rsquo;t, then <b>&#10003; Done</b>),
           and your planets &mdash; press <b>I know my system</b> to type its name, or
           <b>Find me a home</b> to scout a region.</li>
-        <li><b>Tap where you operate</b> in section 3 (High/Low/Null/Wormhole). Live Jita
-          prices load and refresh themselves.</li>
+        <li><b>Tap where you operate</b> at the bottom of section 2 (High/Low/Null/
+          Wormhole). One tap sets your taxes and shipping AND gives every planet you
+          haven&rsquo;t scanned its security band&rsquo;s typical density (marked ~).
+          Live Jita prices load and refresh themselves in section 3.</li>
         <li><b>Press the gold SOLVE button</b> at the bottom. Your plan appears in
           section 4.</li>
       </ol>
@@ -549,11 +578,30 @@
       <p>Automatic. No scans yet &rarr; quick estimates from your space type, clearly
         labeled. Real scans &rarr; your numbers. Costs confirmed &rarr; nothing assumed at
         all. (Advanced can force a level.)</p>
+      <p>Three model assumptions apply to every plan, all deliberately conservative:
+        colony <b>links are costed at 700&nbsp;km</b> (real links are usually shorter, so
+        your CPU/power headroom is a touch better than shown); extra colonies on the
+        <b>same planet&rsquo;s deposit interfere</b> (each yields 10% less than the one
+        before &mdash; dial it under More tools, 0% turns it off); and extractor programs
+        are <b>sized against the launchpad buffer</b>, so a plan never counts material a
+        colony could not actually store between pickups. When you sell more than the
+        visible Jita order book can absorb, the overflow is priced on the book&rsquo;s own
+        downward trend &mdash; never at the best price.</p>
 
       <h3>Your planets</h3>
+      <p>Too many planets to type? Press <b>Import scans from screenshots</b> next to
+        <b>+ Add planet</b>: drop up to 20 planet screenshots (or one .zip) and the reader
+        pulls the densities out for you, entirely in your browser &mdash; check each value
+        before you rely on it.</p>
       <p>Each planet shows its resources as chips &mdash; click one (or <b>&#9998; Edit</b>)
-        to enter your scan&rsquo;s <b>density %</b>. New planets start at 70% until you do;
-        over 100% is real. Tick <b>Complete</b> to fold a finished planet away &mdash; each
+        to enter your scan&rsquo;s <b>density %</b>. There is no default density: a new
+        planet stays blank (its chips show <b>?</b>) until you pick your type of space
+        under <b>Where do you operate?</b> &mdash; then every unscanned resource takes
+        that band&rsquo;s typical value, marked with an assumed density ~ until you type a real scan;
+        over 100% is real. Your space type matters: typical yields differ by roughly
+        2&ndash;5&times; between high sec and wormhole space. Systems you import or load
+        from the scout use their own real security band automatically. Tick
+        <b>Complete</b> to fold a finished planet away &mdash; each
         system header has a <b>Complete &amp; Collapse All</b>.</p>
 
       <h3>Region Scout &mdash; where should I live?</h3>
@@ -566,6 +614,9 @@
       <p>The answer comes first &mdash; one card with your ISK per week &mdash; then three
         tabs: <b>Plan</b> (what to build), <b>Money</b> (the ledger), <b>Why</b> (what&rsquo;s
         limiting you and what was chosen for you).</p>
+      <p>The <b>Money</b> tab also shows your <b>one-time setup capital</b> &mdash; every
+        command center, upgrade and facility the plan builds, priced at the game&rsquo;s
+        fixed costs &mdash; and how many days the plan takes to pay it back.</p>
       <p>The plan shows: your money per week (a loss shows as a loss &mdash; never hidden),
         what each character builds (press <b>Copy template</b> to paste a colony into the
         game &mdash; &#9888;&#65038; means double-check it first), what&rsquo;s slowing you down, and
@@ -590,6 +641,10 @@
         steps back.</p>
       <ul>
         <li><b>All PI Visualized</b> &mdash; any commodity&rsquo;s whole chain, drawn.</li>
+        <li><b>Recipe Calculator</b> &mdash; pick commodities and batch sizes; get exact
+          inputs, their cost, cargo volume, and how long your factories will take. Or
+          paste your materials (the game&rsquo;s inventory copy works) and it lists
+          everything you could build from them.</li>
         <li><b>Market Reference</b> &mdash; live Jita prices for every PI item.</li>
         <li><b>Price History</b> &mdash; the same prices, charted over time.</li>
         <li><b>PI Templates</b> &mdash; ready-made colony layouts. Copy, paste in game, done.</li>

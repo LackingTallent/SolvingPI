@@ -70,11 +70,12 @@ test('bottleneck is NAMED and every other stage reports slack', () => {
   assert.ok(Math.abs((bottleneck[0]!.value ?? 0) - 1) < 1e-6);
 });
 
-test('optimality: exhaustive answers are labeled exact; value is realized/UB', () => {
+test('optimality: exhaustive answers disclose their count-search scope; value is realized/UB', () => {
   const r = solved();
   const i = optimalityInsight(r);
   assert.equal(r.method, 'exhaustive');
-  assert.match(i.detail, /exact for this world/);
+  assert.match(i.detail, /colony-mix COUNTS/);
+  assert.match(i.detail, /placement stays heuristic/);
   assert.ok((i.value ?? 0) > 0 && (i.value ?? 2) <= 1 + 1e-6);
 });
 

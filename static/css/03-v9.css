@@ -332,6 +332,7 @@ body.v9-view-ref #stickyCalc { display: none; }
   cursor: pointer;
 }
 .v9-reschip:hover { border-color: var(--cyan, #22e8ff); }
+.v9-reschip-assumed { color: var(--amber, #ffc233); border-style: dashed; }
 .v9-reschip-warn { border-color: rgba(255, 200, 70, .55); color: var(--amber, #f0b84a); }
 .v9-chiprow { flex-wrap: wrap; gap: 6px; }
 .v9-nextrow { margin-top: 12px; }

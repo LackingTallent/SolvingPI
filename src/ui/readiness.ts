@@ -87,9 +87,9 @@ export function solveReadiness(input: ReadinessInput): Readiness {
       } catch { relevant = null; /* product mid-edit — stay conservative */ }
     }
     const anyUnscanned = input.planets.some((p) => p.resources.some(
-      (r) => !(r.w > 0) && (relevant === null || relevant.has(r.p0))));
+      (r) => (!(r.w > 0) || r.assumed === true) && (relevant === null || relevant.has(r.p0))));
     if (anyUnscanned && (input.spaceBand === null || input.spaceBand === undefined)) {
-      missing.push('Estimates need your space type — tap a preset in section 3 so unscanned densities can assume typical values (or enter scans).');
+      missing.push('Estimates need your space type — tap a preset in section 2 so assumed densities can take typical values (or enter scans).');
     }
   } else {
     // Cut-aware: a P1 whose whole subtree was bought away (an intermediate
@@ -101,7 +101,7 @@ export function solveReadiness(input: ReadinessInput): Readiness {
       if (effective !== null && !effective.has(p1)) continue;
       let ore: string;
       try { ore = oreOf(p1); } catch { continue; }
-      const scanned = input.planets.some((p) => p.resources.some((r) => r.p0 === ore && r.w > 0));
+      const scanned = input.planets.some((p) => p.resources.some((r) => r.p0 === ore && r.w > 0 && r.assumed !== true));
       if (!scanned) {
         missing.push(`Scan value needed for ${ore} (to extract ${p1}) — enter it in section 2, or switch ${p1} to refine/buy in section 1.`);
       }
@@ -109,7 +109,7 @@ export function solveReadiness(input: ReadinessInput): Readiness {
   }
 
   if (level === 'exact' && input.costsSource !== undefined && input.costsSource !== 'user') {
-    missing.push('Exact numbers need your real costs — edit the rates in section 3, or press “These are my real rates” there to confirm them.');
+    missing.push('Exact numbers need your real costs — edit the rates under “Edit prices & costs by hand” in section 3 to make them yours.');
   }
 
   if (input.mode === 'qol') {

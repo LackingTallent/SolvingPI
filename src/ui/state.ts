@@ -6,7 +6,7 @@
 import type { PlanetType } from '../spec/schematics.js';
 import { PLANET_TYPES } from '../spec/schematics.js';
 import { resourcesOf } from '../world/planets.js';
-import { SPACE_BANDS, type SpaceBand } from './presets.js';
+import { QUICK_DENSITY_PCT, SPACE_BANDS, type SpaceBand } from './presets.js';
 import { wFromDensityPct } from '../world/density.js';
 import { chainIntermediates, p1InputsOf } from '../engine/chain.js';
 
@@ -19,7 +19,14 @@ export interface UiCharacter {
   brokerRelationsLevel: number;
 }
 
-export interface UiResource { p0: string; w: number }
+export interface UiResource {
+  p0: string;
+  w: number;
+  /** True while the density is a default/band ASSUMPTION, not the user's own
+   * scan (owner 2026-09-03): the "Where do you operate?" tap re-bands every
+   * assumed resource; typing a density clears the flag. */
+  assumed?: boolean;
+}
 
 export interface UiPlanet {
   name: string;
@@ -34,7 +41,16 @@ export interface UiPlanet {
   scannedAt?: string;
 }
 
-export interface UiQuote { bid: number; ask: number; dailyVolume?: number }
+/** bids/asks: top-of-book depth levels (T-09) — fetched with every live quote,
+ * persisted with it (~100KB for a full set, well inside localStorage), and
+ * declared here so the type tells the truth about what the state carries. */
+export interface UiQuote {
+  bid: number;
+  ask: number;
+  dailyVolume?: number;
+  bids?: ReadonlyArray<{ readonly price: number; readonly qty: number }>;
+  asks?: ReadonlyArray<{ readonly price: number; readonly qty: number }>;
+}
 
 export type UiMode = 'max' | 'quota' | 'qol' | 'compare' | 'profit';
 
@@ -58,7 +74,17 @@ export interface UiState {
    * the "How exact?" question only exists in Advanced. */
   autoDetail: boolean;
   planets: UiPlanet[];
+  /** Contested-deposit haircut % per extra colony on the same (planet,
+   * resource) deposit (truth audit T-08, owner approved 2026-09-03).
+   * Default 10; 0 restores the old optimistic no-interference model. */
+  stackPenaltyPct: number;
   prices: Record<string, UiQuote>;
+  /** Live infrastructure quotes (the 8 Command Centers) — fetched with every
+   * price refresh, used ONLY by the setup-capital card (owner 2026-09-03:
+   * CC prices pulled from ESI, 81k NPC seed as fallback). Kept apart from
+   * `prices` so commodity-only code paths (tierOf labels, chains, sourcing)
+   * never meet a non-commodity name. */
+  infraPrices: Record<string, UiQuote>;
   priceNote: string; // provenance + staleness, always shown
   fees: { salesTaxPct: number; brokerPct: number; customsPct: number; hisecNpc: boolean };
   freight: { outPerM3: number; inPerM3: number };
@@ -85,13 +111,14 @@ export interface UiState {
   mix: Array<{ product: string; pct: number }>;
 }
 
-/** Default density for freshly loaded planets: 70% until the user changes it. */
-export const DEFAULT_DENSITY_PCT = 70;
-export function defaultResourceW(): number {
-  return Math.round(wFromDensityPct(DEFAULT_DENSITY_PCT) * 10) / 10;
-}
-export function defaultResources(type: PlanetType): UiResource[] {
-  return resourcesOf(type).map((p0) => ({ p0, w: defaultResourceW() }));
+/** New planets carry NO density until the user defines their type of space
+ * (owner 2026-09-03, replacing the old blanket 70% default — "the type of
+ * space means a lot"): band already chosen → the band's typical, marked
+ * assumed (~); no band yet → 0, chips show "?", and the solve gate demands
+ * the band (or real scans) before anything computes. */
+export function defaultResources(type: PlanetType, band: SpaceBand | null): UiResource[] {
+  const w = band === null ? 0 : Math.round(wFromDensityPct(QUICK_DENSITY_PCT[band]) * 10) / 10;
+  return resourcesOf(type).map((p0) => ({ p0, w, assumed: true }));
 }
 
 /** Owner default: every input starts on extract ("mine it"); Suggested and
@@ -122,7 +149,9 @@ export function defaultState(): UiState {
     // fresh visit starts with ZERO planets — the user adds their own, and
     // the solve gate names the step ("Add at least one planet, section 3").
     planets: [],
+    stackPenaltyPct: 10,
     prices: {},
+    infraPrices: {},
     priceNote: 'No prices loaded yet — enter quotes below or fetch live Jita data.',
     fees: { salesTaxPct: 3.375, brokerPct: 1.5, customsPct: 10, hisecNpc: false },
     freight: { outPerM3: 400, inPerM3: 400 },
@@ -162,6 +191,7 @@ export function sanitizeState(parsed: Partial<UiState>): UiState {
     if (typeof parsed.autoDetail !== 'boolean') merged.autoDetail = true;
     if (merged.characters.length === 0) merged.charactersDone = false;
     if (!Array.isArray(merged.planets)) merged.planets = base.planets;
+    if (typeof parsed.stackPenaltyPct !== 'number' || !Number.isFinite(merged.stackPenaltyPct) || merged.stackPenaltyPct < 0 || merged.stackPenaltyPct > 90) merged.stackPenaltyPct = 10;
     if (!['max', 'quota', 'qol', 'compare', 'profit'].includes(merged.mode)) merged.mode = base.mode;
     if (!['quick', 'refined', 'exact'].includes(merged.detailLevel)) merged.detailLevel = base.detailLevel;
     for (const [k, v] of Object.entries(merged.sourcingOverrides ?? {})) {
@@ -212,6 +242,40 @@ export function sanitizeState(parsed: Partial<UiState>): UiState {
         return true;
       });
     }
+    // Round-4 audit: order-book depth from a hand-edited or corrupted save
+    // used to reach walkBook unvalidated (a STRING iterated as levels →
+    // NaN net; a number → "not iterable"). Depth must be an array of finite
+    // positive {price, qty} in the right order (bids descending, asks
+    // ascending) or it is dropped — the quote's bid/ask still stand.
+    if (merged.prices === null || typeof merged.prices !== 'object' || Array.isArray(merged.prices)) merged.prices = {};
+    const depthOk = (levels: unknown, ascending: boolean): levels is Array<{ price: number; qty: number }> => {
+      if (!Array.isArray(levels) || levels.length === 0 || levels.length > 50) return false;
+      let prev = ascending ? 0 : Infinity;
+      for (const l of levels) {
+        if (l === null || typeof l !== 'object') return false;
+        const { price, qty } = l as { price?: unknown; qty?: unknown };
+        if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return false;
+        if (typeof qty !== 'number' || !Number.isFinite(qty) || qty <= 0) return false;
+        if (ascending ? price < prev : price > prev) return false;
+        prev = price;
+      }
+      return true;
+    };
+    const sanitizeQuotes = (book: Record<string, UiQuote>): void => {
+      for (const [name, q] of Object.entries(book)) {
+        if (q === null || typeof q !== 'object' || typeof (q as UiQuote).bid !== 'number' || typeof (q as UiQuote).ask !== 'number'
+          || !Number.isFinite((q as UiQuote).bid) || !Number.isFinite((q as UiQuote).ask)) {
+          delete book[name];
+          continue;
+        }
+        const quote = q as UiQuote & { bids?: unknown; asks?: unknown };
+        if (quote.bids !== undefined && !depthOk(quote.bids, false)) delete quote.bids;
+        if (quote.asks !== undefined && !depthOk(quote.asks, true)) delete quote.asks;
+      }
+    };
+    sanitizeQuotes(merged.prices);
+    if (merged.infraPrices === null || typeof merged.infraPrices !== 'object' || Array.isArray(merged.infraPrices)) merged.infraPrices = {};
+    sanitizeQuotes(merged.infraPrices);
     return merged;
 }
 
@@ -225,8 +289,14 @@ export function loadState(): UiState {
   }
 }
 
-export function saveState(s: UiState): void {
+/** Returns whether the save actually landed — the page must still work when
+ * storage is unavailable (private mode, quota), but the UI must not CLAIM
+ * "Autosaved" on a swallowed failure (Round-2 engineering audit). */
+export function saveState(s: UiState): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));
-  } catch { /* storage unavailable — the page must still work */ }
+    return true;
+  } catch {
+    return false;
+  }
 }

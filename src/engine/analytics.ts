@@ -48,7 +48,7 @@ export function optimalityInsight(result: SolveResult): Insight {
     value: ratio,
     unit: 'fraction of the relaxation bound',
     detail: result.method === 'exhaustive'
-      ? `Exhaustive search over colony mixes — exact for this world. Realized ${fmt(result.realizedPerWeek)}/wk vs relaxation bound ${fmt(result.upperBoundPerWeek)}/wk (${(ratio * 100).toFixed(1)}%; the gap is integrality, not search error).`
+      ? `Exhaustive search over colony-mix COUNTS (placement stays heuristic — not a full proof of optimality). Realized ${fmt(result.realizedPerWeek)}/wk vs relaxation bound ${fmt(result.upperBoundPerWeek)}/wk (${(ratio * 100).toFixed(1)}%; the bound itself is loose, so the true gap is smaller than it looks).`
       : `Greedy allocation, certified within ${((1 - ratio) * 100).toFixed(1)}% of the fractional upper bound ${fmt(result.upperBoundPerWeek)}/wk — a per-run measurement, not a projection.`,
     inputs: [`solver method: ${result.method}`, 'fractional relaxation upper bound'],
   };
@@ -123,9 +123,9 @@ export function runwayInsight(result: SolveResult): Insight {
 // Realized-price analytics (principle #4)
 // ---------------------------------------------------------------------------
 
-export function patiencePremium(result: SolveResult, market: MarketContext): Insight {
-  const imm = economics(result, { ...market, sellBasis: 'immediate' }, 6).netPerWeek;
-  const pat = economics(result, { ...market, sellBasis: 'patient' }, 6).netPerWeek;
+export function patiencePremium(result: SolveResult, market: MarketContext, programHours = 6): Insight {
+  const imm = economics(result, { ...market, sellBasis: 'immediate' }, programHours).netPerWeek;
+  const pat = economics(result, { ...market, sellBasis: 'patient' }, programHours).netPerWeek;
   return {
     id: 'patience-premium',
     title: 'Patience premium (list vs instant-sell)',
@@ -138,8 +138,8 @@ export function patiencePremium(result: SolveResult, market: MarketContext): Ins
   };
 }
 
-export function saturationInsights(result: SolveResult, market: MarketContext): Insight[] {
-  const eco = economics(result, market, 6);
+export function saturationInsights(result: SolveResult, market: MarketContext, programHours = 6): Insight[] {
+  const eco = economics(result, market, programHours);
   return eco.sold.map(({ commodity, qtyPerWeek }) => {
     const vol = market.prices[commodity]?.dailyVolume;
     if (vol === undefined || vol <= 0) {
@@ -158,10 +158,16 @@ export function saturationInsights(result: SolveResult, market: MarketContext): 
       title: `Market saturation: ${commodity}`,
       value: share,
       unit: 'share of daily volume',
-      detail: share > 0.1
-        ? `You would supply ${(share * 100).toFixed(1)}% of daily regional volume (${fmt(qtyPerWeek / 7)}/day vs ${fmt(vol)}/day traded). Expect to move the price — diversify or sell patiently.`
-        : `${(share * 100).toFixed(1)}% of daily regional volume — the market absorbs you without noticing.`,
-      inputs: [`${commodity} daily volume ${fmt(vol)}`, 'planned weekly sales'],
+      // Threshold per docs/library/13-market-mechanics.md: price impact starts
+      // at 2-5% of daily volume, not 10% (truth audit 2026-09-03).
+      // T-18: the volume figure is venue-corrected at fetch time (regional
+      // history scaled by the trade hub's share of the standing book), so
+      // the share compares like with like — say "your trade hub", not
+      // "regional".
+      detail: share > 0.03
+        ? `You would supply ${(share * 100).toFixed(1)}% of your trade hub's estimated daily volume (${fmt(qtyPerWeek / 7)}/day vs ~${fmt(vol)}/day traded). Expect to move the price — diversify or sell patiently.`
+        : `${(share * 100).toFixed(1)}% of your trade hub's estimated daily volume — the market absorbs you without noticing.`,
+      inputs: [`${commodity} hub daily volume ~${fmt(vol)}`, 'planned weekly sales'],
     };
   });
 }
@@ -352,8 +358,8 @@ export function analyze(world: SolveWorld, result: SolveResult, market: MarketCo
     optimalityInsight(result),
     ...bottleneckReport(result),
     runwayInsight(result),
-    patiencePremium(result, market),
-    ...saturationInsights(result, market),
+    patiencePremium(result, market, world.programHours),
+    ...saturationInsights(result, market, world.programHours),
     marginalCharacter(world, result, market),
     marginalTraining(world, result, market),
     rawP1Baseline(world, result, market),

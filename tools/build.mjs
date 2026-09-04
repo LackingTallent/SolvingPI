@@ -94,4 +94,33 @@ const walk = (d) => {
   }
 };
 walk(join(dist, 'js'));
+
+// --- cache busting (Round-2 engineering audit) -----------------------------
+// The site deploys as static files with no build-hash filenames, so a browser
+// holding yesterday's app.js next to today's index.html ships a broken mix.
+// Stamp the build sha as a query on every asset URL — index.html's script/CSS
+// tags AND every relative import inside the emitted modules — so each deploy
+// is fetched whole.
+const bust = (spec) => `${spec}?v=${sha}`;
+{
+  const rewrite = (d) => {
+    for (const f of readdirSync(d)) {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) { rewrite(p); continue; }
+      if (!p.endsWith('.js')) continue;
+      const src = readFileSync(p, 'utf8')
+        .replace(/(from\s+['"])(\.[^'"]+\.js)(['"])/g, (_, a, spec, b) => a + bust(spec) + b)
+        .replace(/(import\(\s*['"])(\.[^'"]+\.js)(['"]\s*\))/g, (_, a, spec, b) => a + bust(spec) + b)
+        // Worker entry points (new URL('./x.js', import.meta.url)) must bust too.
+        .replace(/(new URL\(\s*['"])(\.[^'"]+\.js)(['"]\s*,\s*import\.meta\.url\s*\))/g, (_, a, spec, b) => a + bust(spec) + b);
+      writeFileSync(p, src);
+    }
+  };
+  rewrite(join(dist, 'js'));
+  const idx = join(dist, 'index.html');
+  writeFileSync(idx, readFileSync(idx, 'utf8')
+    .replace(/(src="\.\/js\/[^"?]+)"/g, (_, a) => `${a}?v=${sha}"`)
+    .replace(/(href="\.\/css\/[^"?]+)"/g, (_, a) => `${a}?v=${sha}"`));
+  console.log(`cache-bust: asset URLs stamped ?v=${sha}`);
+}
 console.log(`build: ${emitted} modules emitted, ${seen.size} in the page graph. dist/ ready.`);

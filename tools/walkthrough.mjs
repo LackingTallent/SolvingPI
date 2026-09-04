@@ -1,41 +1,62 @@
 #!/usr/bin/env node
 /**
- * WALKTHROUGH — a start-to-finish video tour of the app, built from sequenced
- * screenshots (no screen recording): drive the real dist site in headless
- * Chromium, stamp a caption bar per scene, save numbered frames + a duration
- * list, then assemble with ffmpeg (tools/make-video.sh prints the command).
+ * WALKTHROUGH — a start-to-finish VIDEO tour of the app: real screen
+ * recording of headless Chromium driving the built site, with eased
+ * scrolling, a visible animated cursor, and fading captions.
  *
  * Run: node tools/build.mjs && node tools/walkthrough.mjs
- * Output: ../../frames/f##.png + ../../frames/list.txt
+ * Output: ../../walkthrough.webm + walkthrough.mp4 (ffmpeg)
+ *
+ * Everything on screen is the real app; ESI is mocked (sandbox has no EVE
+ * network) and the baked map is served TRIMMED to a few real systems per
+ * region so the scout finishes in seconds on camera.
  */
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { extname, join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '/home/claude/.npm-global/lib/node_modules/playwright/index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = resolve(here, '..', 'dist');
-const frames = resolve(here, '..', '..', 'frames');
-rmSync(frames, { recursive: true, force: true });
-mkdirSync(frames, { recursive: true });
+const out = resolve(here, '..', '..');
+const vidDir = join(out, 'wt-video');
+rmSync(vidDir, { recursive: true, force: true });
+mkdirSync(vidDir, { recursive: true });
 
 const { resourcesOf } = await import(join(dist, 'js/world/planets.js'));
 const { SCHEMATICS, tierOf } = await import(join(dist, 'js/spec/schematics.js'));
 const { p1InputsOf, oreOf } = await import(join(dist, 'js/engine/chain.js'));
-const { wFromDensityPct } = await import(join(dist, 'js/world/density.js'));
 
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.css': 'text/css' };
+// --- Trimmed baked map: REAL regions and systems, capped so an on-camera
+// scout run finishes fast. -------------------------------------------------
+const fullMap = JSON.parse(readFileSync(join(dist, 'map/universe-map.json'), 'utf8'));
+const keepRegions = ['The Bleak Lands', 'Heimatar', 'Domain', 'Derelik', 'Metropolis']
+  .map((n) => fullMap.regions.find((r) => r.name === n)).filter(Boolean);
+// 4 systems per region: the Round-4 economic ranking solves several sourcing
+// postures per product per system, so a 6-system compare scout would sit on
+// the counter too long for a smooth cut.
+const trimmedMap = JSON.stringify({ ...fullMap, regions: keepRegions.map((r) => ({ ...r, systems: r.systems.slice(0, 4) })) });
+const scoutSystems = keepRegions.flatMap((r) => r.systems.slice(0, 4));
+
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
 const server = createServer((req, res) => {
-  const path = join(dist, req.url === '/' ? 'index.html' : req.url.split('?')[0]);
-  if (!existsSync(path)) { res.writeHead(404); res.end(); return; }
+  const url = req.url.split('?')[0];
+  if (url === '/map/universe-map.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(trimmedMap); return;
+  }
+  const path = join(dist, url === '/' ? 'index.html' : url);
+  if (!existsSync(path)) { res.writeHead(404); res.end('nope'); return; }
   res.writeHead(200, { 'Content-Type': types[extname(path)] ?? 'application/octet-stream' });
   res.end(readFileSync(path));
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-// Same neutral seed as the UI matrix.
+// --- Seed: prices for the whole board (so nothing stalls on camera); the
+// operation itself is built ON CAMERA from an empty start. -----------------
 const hash = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const tierMid = [6, 550, 9500, 72000, 1350000];
 const prices = {};
@@ -48,268 +69,481 @@ for (const name of allNames) {
   const mid = tierMid[tierOf(name)] * (0.75 + (hash(name) % 50) / 100);
   prices[name] = { bid: Math.round(mid * 0.965), ask: Math.round(mid * 1.035), dailyVolume: 200000 + (hash(name) % 90) * 10000 };
 }
-const planet = (name, type, system, pct) => ({
-  name, type, system,
-  resources: resourcesOf(type).map((p0, i) => ({ p0, w: Math.round(wFromDensityPct(pct[i % pct.length])) })),
-  scannedAt: '2026-08-25T18:40:00Z',
-});
 const seed = {
-  characters: [
-    { name: 'Main', icLevel: 5, ccuLevel: 5, customsCodeLevel: 5, accountingLevel: 5, brokerRelationsLevel: 5 },
-    { name: 'Miner Alt', icLevel: 4, ccuLevel: 5, customsCodeLevel: 4, accountingLevel: 4, brokerRelationsLevel: 3 },
-    { name: 'Hauler Alt', icLevel: 3, ccuLevel: 4, customsCodeLevel: 4, accountingLevel: 4, brokerRelationsLevel: 3 },
-  ],
-  planets: [
-    planet('Auviken IV', 'Storm', 'Auviken', [92, 71, 64, 55, 48]),
-    planet('Auviken V', 'Gas', 'Auviken', [83, 77, 58, 51, 45]),
-    planet('Auviken VI', 'Storm', 'Auviken', [68, 61, 57, 49, 41]),
-    planet('Auviken II', 'Barren', 'Auviken', [74, 66, 52, 47, 39]),
-    planet('Vattuolen I', 'Lava', 'Vattuolen', [88, 79, 63, 54, 42]),
-    planet('Vattuolen III', 'Plasma', 'Vattuolen', [81, 72, 60, 50, 44]),
-    planet('Vattuolen VI', 'Gas', 'Vattuolen', [76, 69, 55, 46, 40]),
-    planet('Vattuolen VII', 'Oceanic', 'Vattuolen', [86, 70, 59, 48, 43]),
-  ],
-  prices,
-  priceNote: 'Quotes entered 2026-08-26 (Jita). Refresh before committing ISK.',
+  characters: [], planets: [], prices,
+  priceNote: 'Sample quotes for this walkthrough.',
   fees: { salesTaxPct: 3.375, brokerPct: 1.5, customsPct: 5, hisecNpc: true },
   freight: { outPerM3: 12, inPerM3: 12 },
   sellBasis: 'immediate', buyBasis: 'immediate', programHours: 6,
-  mode: 'max', modeChosen: false, detailLevel: 'quick', spaceBand: null, costsSource: 'default',
+  mode: 'max', modeChosen: false, charactersDone: false,
+  detailLevel: 'quick', autoDetail: true, advancedMode: false,
+  spaceBand: null, costsSource: 'user',
   product: 'Coolant', quotaPerWeek: 5000, qolSessions: 7, sourcingOverrides: {},
 };
 
+// --- Synthetic-but-plausible ESI answers ----------------------------------
+const esiOrders = JSON.stringify([
+  { is_buy_order: true, price: 100, volume_remain: 50000, location_id: 60003760 },
+  { is_buy_order: false, price: 120, volume_remain: 50000, location_id: 60003760 },
+]);
+const historyFor = (seedN) => {
+  const days = [];
+  let p = 800 + (seedN % 900);
+  const t0 = Date.now() - 89 * 864e5;
+  for (let i = 0; i < 90; i++) {
+    p = Math.max(50, p * (1 + Math.sin(i / 9 + seedN) * 0.012 + ((seedN * (i + 3)) % 7 - 3) * 0.004));
+    days.push({
+      date: new Date(t0 + i * 864e5).toISOString().slice(0, 10),
+      average: Math.round(p), highest: Math.round(p * 1.05), lowest: Math.round(p * 0.95),
+      volume: 150000 + ((seedN * (i + 1)) % 90) * 4000, order_count: 900 + (i % 50) * 7,
+    });
+  }
+  return JSON.stringify(days);
+};
+const kills = JSON.stringify(scoutSystems.map((s, i) => ({ system_id: s.id, ship_kills: i % 7 === 0 ? 9 : 0, npc_kills: 40, pod_kills: 0 })));
+const jumps = JSON.stringify(scoutSystems.map((s, i) => ({ system_id: s.id, ship_jumps: 20 + (i * 37) % 320 })));
+
+// --- Recorder --------------------------------------------------------------
+const W = 1280, H = 800;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, permissions: ['clipboard-write'] });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, recordVideo: { dir: vidDir, size: { width: W, height: H } }, permissions: ['clipboard-read', 'clipboard-write'] });
+const t0 = Date.now();
+const page = await ctx.newPage();
 page.on('dialog', (d) => d.accept());
+await page.route('https://images.evetech.net/**', (r) => r.abort());
+await page.route('https://esi.evetech.net/**', (r) => {
+  const u = r.request().url();
+  let body = esiOrders;
+  if (/history/.test(u)) body = historyFor(hash(u) % 1000);
+  else if (/system_kills/.test(u)) body = kills;
+  else if (/system_jumps/.test(u)) body = jumps;
+  else if (/universe\/(ids|names|systems|planets)/.test(u)) body = '{}';
+  r.fulfill({ contentType: 'application/json', body });
+});
 
-let n = 0;
-const list = [];
 const problems = [];
-
-async function caption(text, sub = '') {
-  await page.evaluate(([t, s]) => {
-    let el = document.getElementById('__cap');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = '__cap';
-      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:2147483647;'
-        + 'background:rgba(8,11,16,.94);color:#eef6ff;border:1px solid #37e0ff;border-radius:12px;'
-        + 'padding:12px 26px;font:600 19px/1.4 system-ui,Segoe UI,sans-serif;max-width:78%;text-align:center;'
-        + 'box-shadow:0 8px 30px rgba(0,0,0,.55)';
-      document.body.appendChild(el);
-    }
-    el.innerHTML = t + (s ? `<div style="font-weight:400;font-size:14px;color:#9fb4c6;margin-top:3px">${s}</div>` : '');
-  }, [text, sub]);
-}
-
-async function scrollToSel(sel, offset = 70) {
-  await page.evaluate(([s, off]) => {
-    const el = document.querySelector(s);
-    if (el) {
-      const y = el.getBoundingClientRect().top + window.scrollY - off;
-      window.scrollTo(0, Math.max(0, y));
-    }
-  }, [sel, offset]);
-  await page.waitForTimeout(220);
-}
-
-async function shot(hold, text, sub) {
-  if (text !== undefined) await caption(text, sub);
-  n++;
-  const f = `f${String(n).padStart(2, '0')}.png`;
-  await page.screenshot({ path: join(frames, f) });
-  list.push({ f, hold });
-  console.log(`frame ${f}  (${hold}s)  ${text ?? ''}`);
-}
-
 async function scene(name, fn) {
   try { await fn(); } catch (e) { problems.push(`${name}: ${e.message.split('\n')[0]}`); console.log(`SKIP ${name}: ${e.message.split('\n')[0]}`); }
 }
+const wait = (s) => page.waitForTimeout(s * 1000);
 
-const expand = (id) => page.evaluate((i) => document.getElementById(i)?.classList.remove('collapsed'), id);
-const collapse = (id) => page.evaluate((i) => document.getElementById(i)?.classList.add('collapsed'), id);
+// Cinematic layer: cursor + captions, injected into the live page.
+async function injectChrome() {
+  await page.evaluate(() => {
+    if (document.getElementById('__cur')) return;
+    const cur = document.createElement('div');
+    cur.id = '__cur';
+    cur.style.cssText = 'position:fixed;left:640px;top:400px;width:26px;height:26px;z-index:2147483646;'
+      + 'border:2.5px solid #22e8ff;border-radius:50%;background:rgba(34,232,255,.15);pointer-events:none;'
+      + 'box-shadow:0 0 12px rgba(34,232,255,.5);transform:translate(-50%,-50%);'
+      + 'transition:left .8s cubic-bezier(.22,.61,.36,1),top .8s cubic-bezier(.22,.61,.36,1)';
+    document.body.appendChild(cur);
+    const cap = document.createElement('div');
+    cap.id = '__cap';
+    cap.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:2147483647;'
+      + 'background:rgba(5,6,10,.92);color:#eef6ff;border:1px solid #22e8ff;border-radius:12px;'
+      + 'padding:13px 28px;font:600 20px/1.4 Inter,system-ui,sans-serif;max-width:76%;text-align:center;'
+      + 'box-shadow:0 8px 30px rgba(0,0,0,.6);opacity:0;transition:opacity .4s';
+    document.body.appendChild(cap);
+    const st = document.createElement('style');
+    st.textContent = '@keyframes __pulse{0%{box-shadow:0 0 0 0 rgba(34,232,255,.7)}100%{box-shadow:0 0 0 26px rgba(34,232,255,0)}}';
+    document.head.appendChild(st);
+    // Dip-to-void fader: every hard layout change (section fold, view swap,
+    // tab switch) hides behind a soft fade instead of an on-camera blink.
+    const fade = document.createElement('div');
+    fade.id = '__fade';
+    fade.style.cssText = 'position:fixed;inset:0;background:#05060a;opacity:0;pointer-events:none;'
+      + 'z-index:2147483645;transition:opacity .34s ease';
+    document.body.appendChild(fade);
+  });
+}
+/** Fade to the void, perform the (instant, ugly) layout change, fade back —
+ * the shot-to-shot transition is a glide, never a blink. */
+async function dip(action, { fadeMs = 340, hold = 0.12 } = {}) {
+  await page.evaluate((ms) => {
+    const f = document.getElementById('__fade');
+    if (f) { f.style.transitionDuration = ms + 'ms'; f.style.opacity = '1'; }
+  }, fadeMs);
+  await wait(fadeMs / 1000 + 0.06);
+  await action();
+  await wait(hold);
+  await page.evaluate((ms) => {
+    const f = document.getElementById('__fade');
+    if (f) { f.style.transitionDuration = Math.round(ms * 1.25) + 'ms'; f.style.opacity = '0'; }
+  }, fadeMs);
+  await wait(fadeMs / 1000 * 1.25 + 0.08);
+}
+/** Instant reposition, meant to run behind a dip. */
+async function jumpTo(sel, offset = 80) {
+  await page.evaluate(([s, off]) => {
+    const el = document.querySelector(s);
+    if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - off));
+  }, [sel, offset]);
+}
+async function caption(text, sub = '') {
+  await page.evaluate(([t, s]) => {
+    const el = document.getElementById('__cap');
+    if (!el) return;
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.innerHTML = t + (s ? `<div style="font-weight:400;font-size:15px;color:#9fb4c6;margin-top:4px">${s}</div>` : '');
+      el.style.opacity = '1';
+    }, 380);
+  }, [text, sub]);
+  await wait(0.55);
+}
+async function captionOff() {
+  await page.evaluate(() => { const el = document.getElementById('__cap'); if (el) el.style.opacity = '0'; });
+  await wait(0.4);
+}
+// Eased scroll so the recording glides instead of jumping.
+async function glideTo(sel, offset = 90, ms = 1150) {
+  await page.evaluate(async ([s, off, dur]) => {
+    const el = document.querySelector(s);
+    if (!el) return;
+    const target = Math.max(0, el.getBoundingClientRect().top + window.scrollY - off);
+    const from = window.scrollY;
+    await new Promise((done) => {
+      const t0 = performance.now();
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / dur);
+        const e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        window.scrollTo(0, from + (target - from) * e);
+        if (k < 1) requestAnimationFrame(step); else done();
+      };
+      requestAnimationFrame(step);
+    });
+  }, [sel, offset, ms]);
+  await wait(0.25);
+}
+// Eased RELATIVE pan — for slowly walking down long content (plan cards,
+// the ledger) without retargeting an element.
+async function glideBy(px, ms = 1400) {
+  await page.evaluate(async ([dy, dur]) => {
+    const from = window.scrollY;
+    await new Promise((done) => {
+      const t0 = performance.now();
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / dur);
+        const e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        window.scrollTo(0, from + dy * e);
+        if (k < 1) requestAnimationFrame(step); else done();
+      };
+      requestAnimationFrame(step);
+    });
+  }, [px, ms]);
+  await wait(0.2);
+}
+// Move the visible cursor to an element, pulse, then really click it.
+async function cine(sel, { click = true, nth = 0 } = {}) {
+  const loc = page.locator(sel).nth(nth);
+  await loc.waitFor({ state: 'visible', timeout: 15000 });
+  const box = await loc.boundingBox();
+  if (!box) throw new Error(`no box for ${sel}`);
+  const x = box.x + box.width / 2, y = box.y + Math.min(box.height / 2, 40);
+  await page.evaluate(([px, py]) => {
+    const c = document.getElementById('__cur');
+    if (c) { c.style.left = px + 'px'; c.style.top = py + 'px'; }
+  }, [x, y]);
+  await wait(0.75);
+  if (click) {
+    await page.evaluate(() => {
+      const c = document.getElementById('__cur');
+      if (c) { c.style.animation = 'none'; void c.offsetWidth; c.style.animation = '__pulse .5s ease-out'; }
+    });
+    await wait(0.15);
+    await loc.click();
+  }
+}
 const solveWait = async () => {
-  await page.evaluate(() => document.getElementById('stickyCalcBtn')?.click());
   await page.waitForFunction(() => {
     const p = document.getElementById('resultsPanel');
-    return p && p.childElementCount > 0 && !/^Solving/.test(p.textContent ?? '');
+    return p && p.childElementCount > 0 && !/^(Solving|Ranking products)/.test(p.textContent ?? '');
   }, { timeout: 120000 });
-  await page.waitForTimeout(250);
+  await wait(0.4);
 };
 
+// ---------------------------------------------------------------------------
 await page.goto(base);
 await page.waitForSelector('body[data-smoke="ok"]', { timeout: 60000 });
 await page.evaluate((s) => localStorage.setItem('solving-pi-v9-state', JSON.stringify(s)), seed);
 await page.reload();
 await page.waitForSelector('body[data-smoke="ok"]', { timeout: 60000 });
+// Pre-warm the reference library OFF CAMERA (this stretch is trimmed from the
+// final cut): expanding each section kicks off its lazy data loads, so the
+// on-camera tour later shows charts and trends, not spinners.
+await page.evaluate(() => {
+  document.getElementById('viewReference')?.click();
+  for (const id of ['secChains', 'secMarket', 'secPrices', 'secTemplates']) {
+    const sec = document.getElementById(id);
+    if (sec?.classList.contains('collapsed')) sec.querySelector('.collapse-btn')?.click();
+  }
+});
+await wait(4);
+await page.evaluate(() => {
+  for (const id of ['secChains', 'secMarket', 'secPrices', 'secTemplates']) {
+    const sec = document.getElementById(id);
+    if (sec && !sec.classList.contains('collapsed')) sec.querySelector('.collapse-btn')?.click();
+  }
+  document.getElementById('viewPlanner')?.click();
+  window.scrollTo(0, 0);
+});
+await wait(0.5);
+const cutAt = ((Date.now() - t0) / 1000).toFixed(2);
+await injectChrome();
+await wait(0.6);
 
-// ---- Act 1: the goal comes first -----------------------------------------
+// ---- Act 1 · Welcome ------------------------------------------------------
 await scene('intro', async () => {
-  await shot(3.5, 'Solving PI — the all-in-one EVE Planetary Industry planner',
-    'a start-to-finish tour · build stamped in the top-right corner');
-});
-await scene('goal-empty', async () => {
-  await scrollToSel('#sec3');
-  await shot(3.5, 'Step 1 · one question opens the planner: What do you want?',
-    'no forms, no numbers — the goal decides everything that appears next');
-});
-await scene('goal-picked', async () => {
-  await page.check('input[name="v9mode"][value="max"]');
-  await page.waitForTimeout(250);
-  await scrollToSel('#sec3');
-  await shot(3.2, 'Pick a goal — only now does a product dropdown appear', 'Compare never shows one: it ranks every product itself');
-});
-await scene('detail-ladder', async () => {
-  await scrollToSel('.v9-detail', 140);
-  await shot(3.5, 'The accuracy dial: Quick estimate ⇄ Refined ⇄ Exact',
-    'Quick answers instantly with typical stand-ins — always labeled; Exact carries no assumptions');
-});
-await scene('quick-band', async () => {
-  await page.selectOption('#sec3 select >> nth=1', 'nullsec');
-  await page.waitForTimeout(300);
-  await scrollToSel('.v9-detail', 140);
-  await shot(3.2, 'Quick estimate: choose your space — typical densities and costs prefill', 'every assumption is disclosed, nothing is silent');
-});
-await scene('sourcing', async () => {
-  await page.click('summary:has-text("Adjust sourcing")');
-  await page.waitForTimeout(250);
-  await scrollToSel('details.v9-sourcing', 120);
-  await shot(3.5, 'Sourcing is Suggested by default', 'the tool picks extract / refine / buy per input — pin one only to overrule it');
+  await caption('Solving PI — plan your EVE Planetary Industry empire',
+    'a full tour: build an operation, solve it, read the plan, browse the references');
+  await wait(2.0);
+  await caption('Four steps, top to bottom — the bar at the bottom always names your next one',
+    'no login, no API keys; everything stays in your browser');
+  await wait(2.1);
+  await captionOff();
 });
 
-// ---- Act 2: the operation -------------------------------------------------
-await scene('operation', async () => {
-  await expand('sec0');
-  await scrollToSel('#sec0');
-  await shot(3.2, 'Step 2 · your characters — each one modeled individually', 'own skills, own planet budget; accurate from 1 to 50 characters');
+// ---- Act 2 · Step 1: the goal --------------------------------------------
+await scene('goal', async () => {
+  await glideTo('#sec3', 70);
+  await caption('Step 1 · pick a goal — one card each, plain words',
+    'not sure what to make? Compare ranks every product by profit');
+  await wait(1.0);
+  await cine('label.v9-gcard:has(input[value="compare"])');
+  await wait(1.2);
+  await captionOff();
+  await cine('#sec3 .v9-next');
+  await dip(async () => { await jumpTo('#sec1', 70); });
 });
-await scene('systems', async () => {
-  await collapse('sec0');
-  await expand('sec1');
-  await scrollToSel('#sec1');
-  await shot(3.2, 'Step 3 · your systems & planets', 'search any solar system — names, types and resource sets load from ESI');
+
+// ---- Act 3 · Step 2: characters + planets --------------------------------
+await scene('characters', async () => {
+  await caption('Step 2 · your characters', 'type a number — a full roster appears with maxed skills, each character modeled individually');
+  const num = page.locator('#sec0Body .v9-quickadd input');
+  await num.fill('3');
+  await num.dispatchEvent('change');
+  await wait(0.7);
+  await cine('#sec0Body button:has-text("Create my roster")');
+  await wait(1.4);
+  await caption('Fix any skills that differ, then confirm', 'the roster folds away to one quiet line');
+  await cine('#sec0Body button:has-text("Done adding characters")');
+  await dip(async () => {}, { fadeMs: 240, hold: 0.05 });
+  await wait(0.5);
+  await captionOff();
 });
+
+await scene('scout', async () => {
+  await glideTo('#sec1Choice', 120);
+  await caption('No home yet? The Region Scout finds you one', 'press “Find me a home” and pick any region of New Eden');
+  await cine('#chooseScout');
+  await wait(1.2);
+  await page.selectOption('#scoutPanel select', { label: 'The Bleak Lands' });
+  await wait(0.7);
+  await cine('#scoutPanel button:has-text("Scout this region")');
+  await page.waitForFunction(() => document.querySelectorAll('#scoutPanel table tr').length >= 3, { timeout: 90000 });
+  await caption('Every system ranked for YOUR goal — real planet types, real security',
+    'the traffic column shows last-hour danger; numbers are estimates until you scan');
+  await glideTo('#scoutPanel table', 160);
+  await wait(2.4);
+  await caption('One press moves in', 'the winner’s real planets drop into your planner at their own space type’s typical density (marked ~)');
+  await cine('#scoutPanel table button:has-text("Load planets")');
+  await dip(async () => { await jumpTo('#v9PlanetList', 100); });
+  await captionOff();
+});
+
 await scene('planets', async () => {
-  await scrollToSel('#v9PlanetList', 60);
-  await shot(3.2, 'Scan values are yours to enter — or drop in survey screenshots', 'each planet carries exactly its type’s five real resources, never more');
-});
-await scene('costs', async () => {
-  await collapse('sec1');
-  await expand('sec2');
-  await scrollToSel('#sec2');
-  await shot(3.2, 'Step 4 · costs & market', 'one tap fills typical High / Low / Null / Wormhole rates — typical values, not yours, and it says so');
+  await caption('Your planets, as chip cards', 'click any resource chip and type your scan’s real density % — your numbers drive every calculation');
+  await wait(0.8);
+  await cine('#v9PlanetList .v9-reschip');
+  await wait(2.0);
+  await captionOff();
 });
 
-// ---- Act 3: solve + results ----------------------------------------------
-await scene('solve-quick', async () => {
-  await collapse('sec2');
-  await solveWait();
-  await scrollToSel('#sec4');
-  await shot(4, 'Solve — on Quick, the ESTIMATE banner lists every stand-in', 'assumed densities and preset costs, each with where to replace it');
-});
-await scene('cards', async () => {
-  await scrollToSel('#resultsPanel .v9-cards', 90);
-  await shot(3.5, 'Output, net, and answer quality', 'small worlds get a provably exact answer; big ones carry a measured optimality bound');
-});
-await scene('dashboard', async () => {
-  await page.evaluate(() => {
-    const h = [...document.querySelectorAll('#resultsPanel h3')].find((x) => x.textContent.includes('Plan by character'));
-    if (h) window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 60);
-  });
-  await page.waitForTimeout(200);
-  await shot(4, 'The plan, character by character, planet by planet', 'every colony: extractors, factories, launchpads, imports');
-});
-await scene('template-copy', async () => {
-  await page.evaluate(() => {
-    const b = [...document.querySelectorAll('.v9-tpl button')][0];
-    if (b) { window.scrollTo(0, b.getBoundingClientRect().top + window.scrollY - 300); }
-  });
-  await page.waitForTimeout(200);
-  await shot(3.8, 'Every colony carries a one-click template', 'real community files credited — generated layouts flagged ⚠ verify in game');
-});
-await scene('ledger', async () => {
-  await page.evaluate(() => {
-    const s = document.querySelector('details.v9-ledger');
-    if (s) { s.open = true; window.scrollTo(0, s.getBoundingClientRect().top + window.scrollY - 80); }
-  });
-  await page.waitForTimeout(200);
-  await shot(3.5, 'One ledger — every ISK reconciles exactly to net', 'customs on real base values, freight on real volume, taxes on your skills');
-});
-await scene('insights', async () => {
-  await page.evaluate(() => {
-    const h = [...document.querySelectorAll('#resultsPanel h3')].find((x) => x.textContent === 'Insights');
-    if (h) window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 60);
-  });
-  await page.waitForTimeout(200);
-  await shot(3.5, 'Insights: the bottleneck, your runway, what to fix first', 'plus deep analytics — buy-vs-make, marginal character, ISK/week vs ISK/login');
-});
-await scene('suggestion-card', async () => {
-  await page.evaluate(() => {
-    const c = document.querySelector('.v9-suggest');
-    if (c) window.scrollTo(0, c.getBoundingClientRect().top + window.scrollY - 80);
-  });
-  await page.waitForTimeout(200);
-  await shot(3.8, 'Sourcing — chosen for you, every choice named with its reason', 'price-compared when quotes exist; your pins are never overruled');
+// ---- Act 4 · Step 3: market ----------------------------------------------
+await scene('band', async () => {
+  await glideTo('#sec1 .fin-presets', 200);
+  // Band-first flow: the scout's Load-planets already set the space type
+  // from the system's own security — this scene shows it can be ADJUSTED
+  // any time, and that one tap re-aligns every unscanned density.
+  await caption('“Where do you operate?” — change it any time, one tap does three jobs', 'your taxes, your shipping AND typical densities for every planet you haven’t scanned (marked ~)');
+  await wait(1.1);
+  await cine('#sec1 .fin-presets .preset-btn >> nth=2');
+  await wait(2.0);
+  await captionOff();
+  await glideTo('#sec1 .v9-next', 260, 900);
+  await cine('#sec1 .v9-next');
+  await dip(async () => { await jumpTo('#sec2', 70); });
 });
 
-// ---- Act 4: the other goals ----------------------------------------------
-await scene('quota', async () => {
-  await page.check('input[name="v9mode"][value="quota"]');
-  await page.waitForTimeout(250);
-  await solveWait();
-  await scrollToSel('#sec4');
-  await shot(3.2, 'Quota goal: the fewest colonies that hit your number', 'an impossible quota refuses by name — and tells you what IS achievable');
-});
-await scene('qol', async () => {
-  await page.check('input[name="v9mode"][value="qol"]');
-  await page.waitForTimeout(250);
-  await solveWait();
-  await scrollToSel('#sec4');
-  await shot(3.2, 'Login-budget goal: best net inside your sessions per week', 'the tool picks the extraction cadence that fits your life');
-});
-await scene('compare', async () => {
-  await page.check('input[name="v9mode"][value="compare"]');
-  await page.waitForTimeout(250);
-  await solveWait();
-  await scrollToSel('#sec4');
-  await shot(4, 'Compare: every product your operation could make, ranked', 'excluded products are named with reasons — nothing silently dropped');
-});
-await scene('plan-this', async () => {
-  await page.locator('#resultsPanel button', { hasText: 'Plan this' }).first().click();
-  await page.waitForFunction(() => /Plan by character/.test(document.getElementById('resultsPanel')?.textContent ?? ''), { timeout: 120000 });
-  await page.waitForTimeout(250);
-  await scrollToSel('#sec4');
-  await shot(4, 'Pick a winner → it is re-solved exactly', 'full plan, colonies, build sheet and analytics for the product you chose');
+await scene('market', async () => {
+  await caption('Step 3 · the market runs itself', 'live Jita prices fetch and refresh themselves — quotes you type by hand are never overwritten');
+  await wait(2.0);
+  await captionOff();
+  await cine('#sec2 .v9-next');
+  await dip(async () => { await jumpTo('#sec4', 70); });
 });
 
-// ---- Act 5: reference + close --------------------------------------------
-await scene('market-ref', async () => {
-  await expand('secMarket');
-  await scrollToSel('#secMarket');
-  await page.waitForTimeout(400);
-  await shot(3.2, 'Reference: the market grid — all 101 items, live Jita trends', 'hover any item to see which of your planets carry it');
+// ---- Act 5 · SOLVE + results ---------------------------------------------
+await scene('solve', async () => {
+  await caption('Press the gold SOLVE', 'Compare now ranks every product your operation could make');
+  await cine('#stickyCalcBtn');
+  await solveWait();
+  await glideTo('#sec4', 70);
+  await wait(1.0);
+  await caption('The full ranking — profit per week, per product', 'excluded products are named with reasons; nothing is silently dropped');
+  await glideTo('#resultsPanel table', 150);
+  await wait(2.5);
+  await caption('Pick a winner and it is re-solved exactly', 'press “Plan this →” for the full plan');
+  await cine('#resultsPanel button:has-text("Plan this")');
+  await page.waitForFunction(() => /Plan by character|ISK\/week/.test(document.getElementById('resultsPanel')?.textContent ?? ''), { timeout: 120000 });
+  await dip(async () => { await jumpTo('#sec4', 70); });
+  await captionOff();
 });
-await scene('templates-ref', async () => {
-  await collapse('secMarket');
-  await expand('secTemplates');
-  await scrollToSel('#secTemplates');
-  await page.waitForTimeout(400);
-  await shot(3.2, '199 community PI templates, one click to copy', 'sourced, credited, and importable straight into the game');
+
+await scene('verdict', async () => {
+  await caption('The answer comes first — one verdict card', 'your ISK per week — and on assumed densities, the honest low-to-high range beneath it');
+  await wait(2.6);
+  await captionOff();
 });
+
+// ---- The plan, planet by planet ------------------------------------------
+await scene('plan-tour', async () => {
+  await caption('The plan, planet by planet', 'every character’s colonies dealt for them — extractors, factories, launchpads, imports');
+  await glideTo('.v9-char-grid', 110, 1400);
+  await wait(2.2);
+  await glideBy(360, 1500);
+  await wait(1.7);
+  await captionOff();
+  await caption('Each colony carries a one-click template', 'copy, open the planet in game, press Import — built exactly as planned');
+  const copyBtn = page.locator('.v9-tpl button:has-text("Copy template")').first();
+  const hasTpl = await copyBtn.count() > 0;
+  if (hasTpl) {
+    await copyBtn.scrollIntoViewIfNeeded();
+    await wait(0.5);
+    await cine('.v9-tpl button:has-text("Copy template")');
+    await wait(1.9);
+  }
+  await captionOff();
+  await caption('…and the whole operation as one build sheet', 'paste it into your notes; check colonies off as you build');
+  await glideTo('.v9-template', 150, 1300);
+  await wait(2.2);
+  await captionOff();
+});
+
+// ---- Money: capital, then the ledger open ---------------------------------
+await scene('money-tour', async () => {
+  await dip(async () => {
+    await page.locator('.v9-tab:has-text("Money")').first().click();
+    await jumpTo('.v9-tabbar', 120);
+  }, { fadeMs: 240, hold: 0.06 });
+  await caption('Money — the net, the setup cost, and how fast it pays back', 'steady-state ISK per week up top; the one-time capital beside it');
+  await wait(2.1);
+  await glideTo('.v9-capital', 160, 1200);
+  await wait(1.7);
+  await captionOff();
+  await caption('Open the ledger — every ISK, line by line', 'customs, freight, taxes, broker fees; it reconciles exactly to the net');
+  await cine('.v9-ledger summary');
+  await wait(0.8);
+  await glideTo('.v9-ledger table', 150, 1200);
+  await wait(1.5);
+  await glideBy(420, 1700);
+  await wait(1.3);
+  await glideBy(420, 1700);
+  await wait(0.9);
+  await captionOff();
+});
+
+await scene('why-beat', async () => {
+  await dip(async () => {
+    await page.locator('.v9-tab:has-text("Why")').first().click();
+    await jumpTo('.v9-tabbar', 120);
+  }, { fadeMs: 240, hold: 0.06 });
+  await caption('Why — the bottleneck and every choice, each with its reason', 'the answer carries its own quality certificate; your pins are never overruled');
+  await wait(2.3);
+  await captionOff();
+});
+
+// ---- Act 6 · References ---------------------------------------------------
+await scene('reference', async () => {
+  await glideTo('#viewToggle', 200);
+  await caption('One more lens: REFERENCE', 'the planner steps swap for the reference library — same page, two views');
+  await cine('#viewReference', { click: false });
+  await dip(async () => {
+    await page.locator('#viewReference').click();
+    // Open the first reference shot inside the SAME dip — one glide, not two.
+    await page.evaluate(() => {
+      const c = document.getElementById('secChains');
+      if (c?.classList.contains('collapsed')) c.querySelector('.collapse-btn')?.click();
+    });
+    await jumpTo('#secChains', 70);
+  });
+  await captionOff();
+});
+
+// Each reference section is its own "shot": the previous one folds and the
+// next opens BEHIND a dip, so the cut is a glide — never an on-camera snap.
+const refShot = (prevId, id, title, sub, hold = 3.2) => scene(`ref-${id}`, async () => {
+  if (prevId !== null) {
+    await dip(async () => {
+      await page.evaluate(([prev, cur]) => {
+        const p = document.getElementById(prev);
+        if (p && !p.classList.contains('collapsed')) p.querySelector('.collapse-btn')?.click();
+        const c = document.getElementById(cur);
+        if (c?.classList.contains('collapsed')) c.querySelector('.collapse-btn')?.click();
+      }, [prevId, id]);
+      await jumpTo(`#${id}`, 70);
+    });
+  }
+  await caption(title, sub);
+  await wait(hold);
+  await captionOff();
+});
+
+await refShot(null, 'secChains', 'All PI Visualized — any commodity’s entire chain, drawn', 'pick a product; every input from raw P0 to the final factory, with quantities', 3.0);
+await refShot('secChains', 'secRecipe', 'Recipe Calculator — exact inputs, costs and build time for any batch', 'or paste your hangar and it tells you what you can build from it', 3.0);
+await refShot('secRecipe', 'secMarket', 'Market Reference — live Jita prices for all 101 PI items', 'sortable, searchable, with trend arrows', 2.8);
+await refShot('secMarket', 'secPrices', 'Price History — the same prices, charted over time', 'spot the seasonal swings before you commit ISK', 2.8);
+await refShot('secPrices', 'secTemplates', 'PI Templates — ready-made colony layouts', 'copy one, paste it straight into the game', 2.8);
+
+// ---- Outro ----------------------------------------------------------------
 await scene('outro', async () => {
-  await collapse('secTemplates');
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(250);
-  await shot(4.5, 'solvingpi.com', 'judge-checked plans · one ledger · answers that carry their honesty with them');
+  await dip(async () => {
+    await page.evaluate(() => {
+      const t = document.getElementById('secTemplates');
+      if (t && !t.classList.contains('collapsed')) t.querySelector('.collapse-btn')?.click();
+      document.getElementById('viewPlanner')?.click();
+    });
+  });
+  await page.evaluate(() => {
+    const from = window.scrollY;
+    const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / 1200);
+      const e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      window.scrollTo(0, from * (1 - e));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  await wait(1.6);
+  await caption('solvingpi.com', 'free · no login · your data never leaves your browser — fly safe o7');
+  await wait(2.9);
+  await captionOff();
+  await wait(0.6);
 });
 
-// Frame list for ffmpeg concat.
-const lines = list.map((x) => `file '${x.f}'\nduration ${x.hold}`);
-lines.push(`file '${list[list.length - 1].f}'`); // concat quirk: repeat last frame
-writeFileSync(join(frames, 'list.txt'), lines.join('\n') + '\n');
-
+const video = page.video();
+await ctx.close();
+const webmSrc = await video.path();
 await browser.close();
 server.close();
-console.log(`\n${n} frames written to ${frames}`);
+
+const webm = join(out, 'walkthrough.webm');
+copyFileSync(webmSrc, webm);
+rmSync(vidDir, { recursive: true, force: true });
+const mp4 = join(out, 'walkthrough.mp4');
+execFileSync('ffmpeg', ['-y', '-i', webm, '-ss', String(cutAt), '-c:v', 'libx264', '-preset', 'medium', '-crf', '21',
+  '-vf', 'format=yuv420p', '-movflags', '+faststart', mp4], { stdio: 'inherit' });
+console.log(`\nvideo: ${mp4}`);
 if (problems.length) { console.log('scenes skipped:'); problems.forEach((p) => console.log(' - ' + p)); }
-console.log(`assemble:\n  ffmpeg -y -f concat -safe 0 -i ${frames}/list.txt -vf "format=yuv420p" -movflags +faststart walkthrough.mp4`);

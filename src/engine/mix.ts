@@ -58,7 +58,13 @@ function checkEntries(entries: ReadonlyArray<MixEntry>): { shares: number[]; tot
 }
 
 function subWorld(world: SolveWorld, chars: ReadonlyArray<Character>): SolveWorld {
-  return { operation: operation(chars), planets: world.planets, programHours: world.programHours };
+  // Round-4 audit fix: EVERY world field except the character subset must
+  // carry over — dropping stackingPenalty/extraction here silently solved
+  // mix lines in a rosier world than the caller's (a line "meeting" its
+  // target at penalty 0 could be provably unreachable at the user's real
+  // setting). Spread + override, so a future SolveWorld field can never be
+  // silently dropped again.
+  return { ...world, operation: operation(chars) };
 }
 
 /** Can this character subset carry `target`/wk of `product`? (fast solver). */
@@ -70,16 +76,25 @@ function subsetCarries(world: SolveWorld, chars: ReadonlyArray<Character>, e: Mi
 
 /** Greedy character partition for fixed per-product targets. Products are
  * placed hardest-first (higher tier, then bigger target); each takes the
- * smallest prefix of the remaining characters (largest slot budgets first)
- * that carries its target. Returns assignments or null. */
-function partition(
+ * smallest prefix of the remaining characters that carries its target.
+ *
+ * T-16 fix (owner 2026-09-03): the old single ordering sorted characters by
+ * icLevel ALONE — characters tied on slots but differing in CCU were
+ * interchangeable to the partitioner, so a feasible blend could be refused
+ * when the low-CCU alt was dealt to the line that needed the high-CCU
+ * colonies. The partition now tries several deterministic orderings —
+ * slots-then-CCU, CCU-then-slots, and each with the line order reversed —
+ * and returns the first that carries every line. Every candidate grouping
+ * is still verified by subsetCarries (and later judge-checked), so extra
+ * attempts can only rescue feasible blends, never fake one. */
+function partitionAttempt(
   world: SolveWorld,
   entries: ReadonlyArray<MixEntry>,
   targets: ReadonlyArray<number>,
+  order: ReadonlyArray<number>,
+  charSort: (a: Character, b: Character) => number,
 ): Array<Character[]> | null {
-  const order = entries.map((_, i) => i)
-    .sort((a, b) => tierOf(entries[b]!.product) - tierOf(entries[a]!.product) || targets[b]! - targets[a]!);
-  let remaining = [...world.operation.characters].sort((a, b) => b.icLevel - a.icLevel);
+  let remaining = [...world.operation.characters].sort(charSort);
   const groups: Array<Character[]> = entries.map(() => []);
   for (const i of order) {
     let chosen: Character[] | null = null;
@@ -94,6 +109,27 @@ function partition(
   return groups;
 }
 
+function partition(
+  world: SolveWorld,
+  entries: ReadonlyArray<MixEntry>,
+  targets: ReadonlyArray<number>,
+): Array<Character[]> | null {
+  const hardestFirst = entries.map((_, i) => i)
+    .sort((a, b) => tierOf(entries[b]!.product) - tierOf(entries[a]!.product) || targets[b]! - targets[a]!);
+  const reversed = [...hardestFirst].reverse();
+  const charSorts: ReadonlyArray<(a: Character, b: Character) => number> = [
+    (a, b) => b.icLevel - a.icLevel || b.ccuLevel - a.ccuLevel,
+    (a, b) => b.ccuLevel - a.ccuLevel || b.icLevel - a.icLevel,
+  ];
+  for (const order of [hardestFirst, reversed]) {
+    for (const charSort of charSorts) {
+      const g = partitionAttempt(world, entries, targets, order, charSort);
+      if (g !== null) return g;
+    }
+  }
+  return null;
+}
+
 /** Solve each line exactly on its assigned characters (minimal colonies for
  * its target; greedy fallback keeps the certified-feasible plan). */
 function finalize(
@@ -105,22 +141,30 @@ function finalize(
   note: string,
 ): MixResult | { error: string } {
   const lines: MixLine[] = [];
+  const drifted: string[] = [];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]!;
     const w = subWorld(world, [...groups[i]!]);
     let r: SolveResult | { error: string } = solveQuota(w, e.product, targets[i]!, e.sourcing);
     if ('error' in r) r = solveMax(w, e.product, e.sourcing); // integrality edge: keep the feasible plan
     if ('error' in r) return { error: `mix-line-failed: ${e.product}: ${r.error}` };
+    // Truth audit 2026-09-03: the solveMax fallback keeps a feasible plan but
+    // is NOT capped to the line's share target, so the delivered ratio can
+    // drift from the requested one. That was silent — now it is named.
+    if (Math.abs(r.realizedPerWeek - targets[i]!) > targets[i]! * 0.01 + 1) drifted.push(e.product);
     lines.push({
       product: e.product, sharePct: sharesPct[i]!, targetPerWeek: targets[i]!,
       result: r, characters: groups[i]!.map((c) => c.name),
     });
   }
+  const driftNote = drifted.length > 0
+    ? ` NOTE: ${drifted.join(', ')} deliver${drifted.length === 1 ? 's' : ''} off the requested share (integer colonies) — the realized blend ratio differs from the requested one; see each line's realized rate.`
+    : '';
   return {
     lines,
     bundlePerWeek: lines.reduce((a, l) => a + l.result.realizedPerWeek, 0),
     slotsUsed: lines.reduce((a, l) => a + l.result.slotsUsed, 0),
-    note,
+    note: note + driftNote,
   };
 }
 

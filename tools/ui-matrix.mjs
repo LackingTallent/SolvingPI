@@ -110,9 +110,11 @@ const shoot = async (name, locator) => {
 const openSec = (id) => page.evaluate((i) => document.getElementById(i)?.classList.remove('collapsed'), id);
 const solveAndWait = async () => {
   await page.click('#stickyCalcBtn'); // the ONE solve button (sticky bar)
+  // "Ranking products… (i/n)" is the chunked compare/profit progress paint
+  // (Round-2 responsiveness fix) — still in flight, keep waiting.
   await page.waitForFunction(() => {
     const p = document.getElementById('resultsPanel');
-    return p && p.childElementCount > 0 && !/^Solving/.test(p.textContent ?? '');
+    return p && p.childElementCount > 0 && !/^(Solving|Ranking products)/.test(p.textContent ?? '');
   }, { timeout: 120000 });
 };
 
@@ -127,14 +129,28 @@ check('fresh: no product dropdown in compare', !/Product /.test(await page.locat
 check('fresh: sourcing controls hidden in compare', await page.locator('text=Adjust sourcing (default').count() === 0);
 check('fresh: solve gated — the ONE next step is picking a goal', await page.locator('#stickyCalcBtn[disabled]').count() === 1
   && /Next → Step 1: pick your goal/i.test(await page.locator('#stickyCalcInfo').textContent()));
-check('fresh: ZERO starter planets (owner spec); first added planet is 70%, expanded', await (async () => {
+// Owner 2026-09-04: the screenshot importer must be reachable in SIMPLE mode
+// (it was buried under Advanced-only More tools) — its own button beside
+// + Add planet reveals the batch panel.
+check('simple mode: screenshot import has its own visible door', await (async () => {
+  await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
+  const btn = page.locator('#openBatchImport');
+  if (await btn.count() !== 1) return false;
+  await btn.click();
+  await page.waitForTimeout(150);
+  return await page.evaluate(() =>
+    document.getElementById('batchWrap')?.hidden === false
+    && document.getElementById('batchInput') !== null);
+})());
+
+check('fresh: ZERO starter planets (owner spec); first added planet is BLANK until a space type is picked (owner 2026-09-03)', await (async () => {
   if (await page.locator('.v9-planet').count() !== 0) return false;
   await page.evaluate(() => document.getElementById('sec1')?.classList.remove('collapsed'));
   await page.locator('#sec1 button', { hasText: 'Add planet' }).click();
   await page.waitForTimeout(250);
   const ok = await page.locator('.v9-planet:not(.v9-planet-min)').count() === 1
-    && await page.locator('.v9-planet input[placeholder="density %"]').first().inputValue() === '70'
-    && /% = [\d,]+ per cycle/.test(await page.locator('#v9PlanetList').textContent())
+    && await page.locator('.v9-planet input[placeholder="density %"]').first().inputValue() === ''
+    && /no density yet/.test(await page.locator('#v9PlanetList').textContent())
     && /remove planet/i.test(await page.locator('button[title="Remove this planet"]').first().textContent() ?? '');
   // Owner spec 2026-08-31: the density % the user TYPES is the number the
   // plan runs on — typing 85 must store w = wFromDensityPct(85) exactly.
@@ -394,6 +410,25 @@ check('compare: exclusions honest — no raw missing-price wall, gaps summarized
   return !/refusing to value it silently/.test(t)
     && (/excluded — each with its reason/.test(t) || /not ranked yet — no Jita price/.test(t) || /viable product/.test(t));
 }));
+// Ranking-truth guard (owner report 2026-09-03): the rendered ranking must
+// be strictly by net ISK — never alphabetical, never tied across the board.
+check('compare: rendered ranking is by net ISK, not alphabetical', await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#resultsPanel table tr')].slice(1);
+  const names = [];
+  const nets = [];
+  for (const r of rows) {
+    const cells = [...r.querySelectorAll('td')].map((c) => c.textContent ?? '');
+    if (cells.length < 3) continue;
+    names.push(cells[1]);
+    const n = Number((cells[2] ?? '').replace(/[^\d.-]/g, ''));
+    if (Number.isFinite(n)) nets.push(n);
+  }
+  if (nets.length < 5) return false;
+  const sorted = nets.every((v, i) => i === 0 || v <= nets[i - 1] + 1e-6);
+  const alpha = JSON.stringify(names) === JSON.stringify([...names].sort((a, b) => a.localeCompare(b)));
+  const distinct = new Set(nets.map((n) => Math.round(n))).size > nets.length / 2;
+  return sorted && !alpha && distinct;
+}));
 await shoot('07-compare-ranked', page.locator('#resultsPanel'));
 const topProduct = (await page.locator('#resultsPanel table tr').nth(1).locator('td').nth(1).textContent()).trim();
 await page.locator('#resultsPanel button', { hasText: 'Plan this' }).first().click();
@@ -590,11 +625,12 @@ check('pilot light: section headers carry ✓/→ progress chips', await page.ev
   const chips = [...document.querySelectorAll('.v9-step-chip')];
   return chips.length === 4 && chips.some((c) => c.classList.contains('v9-chip-done') || c.classList.contains('v9-chip-now'));
 }));
-// The band question is answered in MARKET now: "Where do you operate?"
-// sets costs AND the density band in one tap (streamline #3).
+// The band question lives in WHAT YOU HAVE now (owner 2026-09-03): one
+// "Where do you operate?" tap sets costs, the density band AND re-bands
+// every assumed density.
 check('quick: no band dropdown left in the Goal section', !/Your space/.test(await page.locator('#sec3').textContent()));
-await page.evaluate(() => document.getElementById('sec2')?.classList.remove('collapsed'));
-await page.locator('#sec2 .fin-presets .preset-btn', { hasText: 'Null sec' }).click();
+await openSec('sec1');
+await page.locator('#sec1 .fin-presets .preset-btn', { hasText: 'Null sec' }).click();
 await page.waitForTimeout(300);
 check('quick: one "Where do you operate?" tap records band + costs', await page.evaluate(() => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
@@ -612,15 +648,19 @@ check('quick: ESTIMATE banner lists assumptions', await page.locator('.v9-estima
 check('quick: summary tagged (estimate)', /\(estimate\)/.test(await page.locator('#sec4Summary').textContent()));
 await shoot('10-quick-estimate-banner', page.locator('#resultsPanel'));
 
-// 8 ── Costs section: presets row + confirm-own-rates.
-await page.evaluate(() => document.getElementById('sec2')?.classList.remove('collapsed'));
-check('costs: 4 preset buttons + confirm', await page.locator('#sec2 .preset-btn').count() === 4
-  && await page.locator('#sec2 button', { hasText: 'These are my real rates' }).count() === 1);
+// 8 ── "Where do you operate?" lives with the planets (owner 2026-09-03);
+// the confirm button is retired — editing any fee field owns the rates.
+await openSec('sec1');
+check('costs: 4 preset buttons live in section 2', await page.locator('#sec1 .fin-presets .preset-btn').count() === 4
+  && await page.locator('#sec2 button', { hasText: 'These are my real rates' }).count() === 0);
 await openSec('sec2');
-await page.locator('#sec2 button', { hasText: 'These are my real rates' }).click();
+await page.locator('#sec2 details.v9-more-tools').first().evaluate((d) => { d.open = true; });
+const taxIn = page.locator('#sec2 label:has-text("Sales tax %") input');
+await taxIn.fill('4');
+await taxIn.dispatchEvent('change');
 await page.waitForTimeout(200);
-check('costs: confirm marks rates as user\'s own', /your own rates/.test(await page.locator('#sec2').textContent()));
-await shoot('11-costs-presets', page.locator('#sec2'));
+check('costs: editing a fee marks rates as the user\'s own', /your own rates/.test(await page.locator('#sec2').textContent()));
+await shoot('11-costs-presets', page.locator('#sec1 .fin-presets'));
 
 // 9 ── Per-section reset: Goal reset returns to goal-first state.
 await page.locator('button[data-reset="sec3"]').click();
@@ -688,11 +728,11 @@ check('scout: traffic badge is its own column — quiet vs hot', await page.eval
 const beforeLoad = await page.evaluate(() => JSON.parse(localStorage.getItem('solving-pi-v9-state')).planets.length);
 await page.locator('#scoutPanel button', { hasText: 'Load planets' }).first().click();
 await page.waitForTimeout(400);
-check('scout: Load planets seeds section 3 with the system\'s real planets at the 70% default', await page.evaluate((n) => {
+check('scout: Load planets seeds section 3 with the system\'s real planets at its OWN band typical (assumed ~)', await page.evaluate((n) => {
   const s = JSON.parse(localStorage.getItem('solving-pi-v9-state'));
   const added = s.planets.filter((p) => p.system === 'Alpha');
   return s.planets.length === n + 2 && added.length === 2
-    && added.every((p) => p.resources.every((r) => r.w > 0))
+    && added.every((p) => p.resources.every((r) => r.w > 0 && r.assumed === true))
     && added.some((p) => p.name === 'Alpha I' && p.type === 'Storm');
 }, beforeLoad));
 check('scout: Load planets flips back to MY SYSTEMS view', await page.evaluate(() =>
@@ -765,10 +805,72 @@ check('tabs: Plan is default and holds the build', await page.evaluate(() =>
 await page.locator('#resultsPanel .v9-tab', { hasText: 'Money' }).click();
 check('tabs: Money shows the ledger-backed numbers', await page.evaluate(() =>
   /Ledger|ISK not shown/.test(document.querySelector('#resultsPanel .v9-pane:not([hidden])')?.textContent ?? '')));
+// T-14: setup capital + payback must render with the money story (priced solves).
+check('tabs: Money shows one-time setup capital with payback (T-14)', await page.evaluate(() => {
+  const t = document.querySelector('#resultsPanel .v9-pane:not([hidden])')?.textContent ?? '';
+  return /ISK not shown/.test(t) || (/Setup capital \(one-time\)/.test(t) && /(Pays for itself|never pays its setup back)/.test(t));
+}));
 await page.locator('#resultsPanel .v9-tab', { hasText: 'Why this plan' }).click();
 check('tabs: Why holds quality + insights', await page.evaluate(() =>
   /Insights/.test(document.querySelector('#resultsPanel .v9-pane:not([hidden])')?.textContent ?? '')));
 await page.unroute('https://esi.evetech.net/**');
+
+// 12 ── RECIPE CALCULATOR (owner ask 2026-09-03): exact schematic math,
+// costs from live quotes, volume, and the X-factories build-time estimate.
+await page.evaluate(() => document.getElementById('viewReference')?.click());
+await page.evaluate(() => document.getElementById('secRecipe')?.classList.remove('collapsed'));
+await page.waitForSelector('#recipePanel table', { timeout: 10000 });
+check('recipe: default Robotics 1000 shows exact direct inputs (10/3 per unit → 3,334)', await page.evaluate(() => {
+  const t = document.getElementById('recipePanel')?.textContent ?? '';
+  return /Mechanical Parts/.test(t) && /3,334/.test(t) && /Consumer Electronics/.test(t);
+}));
+check('recipe: build time honors X factories (334 cycles / 10 factories → 1d 10h)', await page.evaluate(() => {
+  const t = document.getElementById('recipePanel')?.textContent ?? '';
+  return /334 cycles/.test(t) && /1d 10h/.test(t);
+}));
+check('recipe: totals row carries cost and m³', await page.evaluate(() => {
+  const total = document.querySelector('#recipePanel .v9-total')?.textContent ?? '';
+  return /Total/.test(total) && /\d/.test(total);
+}));
+await page.locator('#recipePanel button', { hasText: 'Everything from raw P0' }).click();
+await page.waitForTimeout(200);
+check('recipe: raw-P0 breakdown reaches P0 and lists intermediates', await page.evaluate(() => {
+  const t = document.getElementById('recipePanel')?.textContent ?? '';
+  return /raw P0/.test(t) && /You make these along the way/.test(t) && /Precious Metals|Base Metals|Heavy Metals|Noble Metals/.test(t);
+}));
+await page.locator('#recipePanel button', { hasText: 'Add commodity' }).click();
+await page.waitForTimeout(200);
+check('recipe: multiple commodities aggregate into one shopping list', await page.evaluate(() => {
+  const rows = document.querySelectorAll('#recipePanel .v9-row select').length;
+  return rows === 2 && /Coolant/.test(document.getElementById('recipePanel')?.textContent ?? '');
+}));
+// Paste-your-materials: EVE clipboard format (tabs + thousand separators),
+// exact craft math, crafting closure through lower tiers, and unknown lines
+// reported by name.
+await page.locator('#recipePanel textarea').fill('Water\t8,000\nElectrolytes\t8000\nTritanium\t500');
+await page.locator('#recipePanel button', { hasText: 'What can I build?' }).click();
+await page.waitForTimeout(200);
+check('recipe paste: direct stock → Coolant max 1,000 (8+8 per unit), unknowns named', await page.evaluate(() => {
+  const t = document.getElementById('recipeStockTable')?.textContent ?? '';
+  const p = document.getElementById('recipePanel')?.textContent ?? '';
+  return /Coolant/.test(t) && /1,000/.test(t) && /Not recognized/.test(p) && /Tritanium/.test(p);
+}));
+await page.locator('#recipePanel textarea').fill('Aqueous Liquids\t1.200.000\nIonic Solutions 1,200,000');
+await page.locator('#recipePanel button', { hasText: 'What can I build?' }).click();
+await page.waitForTimeout(300);
+check('recipe paste: crafting closure — raw P0s alone still build Coolant 1,000 via Water/Electrolytes', await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#recipeStockTable tr')].map((r) => r.textContent ?? '');
+  return rows.some((r) => /Coolant/.test(r) && /1,000/.test(r))
+    && rows.some((r) => /Water/.test(r) && /8,000/.test(r));
+}));
+await page.locator('#recipeStockTable button', { hasText: 'Plan batch' }).first().click();
+await page.waitForTimeout(200);
+check('recipe paste: "Plan batch" loads the pick into the calculator above', await page.evaluate(() => {
+  const sel = document.querySelector('#recipePanel select');
+  return sel !== null && (sel).value !== 'Robotics';
+}));
+await shoot('14-recipe-calculator', page.locator('#secRecipe'));
+await page.evaluate(() => { document.getElementById('secRecipe')?.classList.add('collapsed'); document.getElementById('viewPlanner')?.click(); });
 
 check('no page console errors across the whole flow', consoleErrors.length === 0);
 if (consoleErrors.length) console.error(consoleErrors.slice(0, 6).join('\n'));
